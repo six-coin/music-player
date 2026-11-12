@@ -64,7 +64,13 @@ def _prepare(source: Path, ext: str, clean: bool) -> tuple[Path, str]:
         raise
 
 
-def import_file(source: Path, library: Library, clean: bool = True) -> ImportOutcome:
+def import_file(
+    source: Path,
+    library: Library,
+    clean: bool = True,
+    title: str | None = None,
+    authors: list[str] | None = None,
+) -> ImportOutcome:
     path = Path(source)
     try:
         path = path.resolve()
@@ -77,6 +83,13 @@ def import_file(source: Path, library: Library, clean: bool = True) -> ImportOut
     ext = path.suffix.lower().lstrip(".")
     if ext not in AUDIO_EXTS:
         return ImportOutcome(error=f"不支持的格式：.{ext}")
+
+    parsed_title, parsed_authors = parse_filename(path.stem)
+    final_title = (title or "").strip() or parsed_title or "未命名"
+    if authors is None:
+        author_names = parsed_authors
+    else:
+        author_names = [name.strip() for name in authors if name and name.strip()]
 
     prepared: Path | None = None
     try:
@@ -94,12 +107,11 @@ def import_file(source: Path, library: Library, clean: bool = True) -> ImportOut
                 shutil.move(str(prepared), str(target))
                 prepared = None
 
-        title, author_names = parse_filename(path.stem)
         author_uids = [ensure_author(library, name) for name in author_names]
         now = int(time.time())
         music = Music(
             md5=md5,
-            names=[title or "未命名"],
+            names=[final_title],
             authors=author_uids,
             tags=[],
             ext=ext,

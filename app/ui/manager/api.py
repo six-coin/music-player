@@ -19,6 +19,7 @@ from app import i18n, paths
 from app.core import integrity
 from app.core.importer import ImportOutcome, import_file
 from app.core.library import Library
+from app.core.naming import parse_filename
 from app.core.playlists import PlaylistStore
 from app.core.stats import StatsStore
 from app.models import Author, Music, new_uid
@@ -381,9 +382,13 @@ class ManagerApi:
     def browse_import(self) -> dict[str, Any]:
         if self._window is None:
             return {"paths": []}
+        start_dir = str(
+            paths.resolve_user_path(str(self.settings.get("import", "dir", default="")))
+        )
         try:
             result = self._window.create_file_dialog(
                 webview.OPEN_DIALOG,
+                directory=start_dir,
                 allow_multiple=True,
                 file_types=AUDIO_FILTER,
             )
@@ -396,39 +401,83 @@ class ManagerApi:
             return {"paths": [result]}
         return {"paths": [str(item) for item in result]}
 
-    def start_import(self, paths_list: list[str]) -> dict[str, Any]:
-        items = [str(item) for item in (paths_list or []) if str(item).strip()]
-        if not items:
+    def preview_import(self, paths_list: list[str]) -> dict[str, Any]:
+        """把文件名拆成标题与作者，供批量向导逐条修改。"""
+        items: list[dict[str, Any]] = []
+        for raw in paths_list or []:
+            path = Path(str(raw))
+            title, authors = parse_filename(path.stem)
+            items.append(
+                {
+                    "path": str(path),
+                    "filename": path.name,
+                    "title": title,
+                    "authors": authors,
+                }
+            )
+        return {"items": items}
+
+    def start_import(self, items: list[Any], clean: bool | None = None) -> dict[str, Any]:
+        normalized: list[dict[str, Any]] = []
+        for item in items or []:
+            if isinstance(item, str):
+                normalized.append({"path": item, "title": None, "authors": None})
+            elif isinstance(item, dict) and item.get("path"):
+                authors = item.get("authors")
+                normalized.append(
+                    {
+                        "path": str(item["path"]),
+                        "title": item.get("title"),
+                        "authors": (
+                            [str(name) for name in authors] if isinstance(authors, list) else None
+                        ),
+                    }
+                )
+        if not normalized:
             return {"task_id": ""}
+
         task_id = new_uid()
         with self._lock:
             self._tasks[task_id] = {
                 "state": "running",
                 "done": 0,
-                "total": len(items),
+                "total": len(normalized),
                 "current": "",
                 "imported": [],
                 "errors": [],
+                "clean": clean,
             }
         thread = threading.Thread(
-            target=self._run_import, args=(task_id, items), name="import", daemon=True
+            target=self._run_import, args=(task_id, normalized), name="import", daemon=True
         )
         thread.start()
         return {"task_id": task_id}
 
-    def _run_import(self, task_id: str, items: list[str]) -> None:
-        clean = bool(self.settings.get("import", "clean_audio", default=True))
-        for index, item in enumerate(items, start=1):
-            path = Path(item)
+    def _run_import(self, task_id: str, items: list[dict[str, Any]]) -> None:
+        default_clean = bool(self.settings.get("import", "clean_audio", default=True))
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if task is None:
+                return
+            clean = default_clean if task.get("clean") is None else bool(task["clean"])
+
+        for index, entry in enumerate(items, start=1):
+            path = Path(entry["path"])
             with self._lock:
                 task = self._tasks.get(task_id)
                 if task is None:
                     return
                 task["current"] = path.name
             try:
-                outcome: ImportOutcome = import_file(path, self.library, clean=clean)
+                outcome: ImportOutcome = import_file(
+                    path,
+                    self.library,
+                    clean=clean,
+                    title=entry.get("title"),
+                    authors=entry.get("authors"),
+                )
             except Exception as error:  # 单个文件失败不打断整批
-                logger.exception("导入失败：{}", item)
+                logger.exception("导入失败：{}", entry["path"])
                 outcome = ImportOutcome(error=str(error))
             with self._lock:
                 task = self._tasks.get(task_id)

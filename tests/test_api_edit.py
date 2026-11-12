@@ -133,3 +133,20 @@ def test_integrity_report_shape(api):
 
 def test_poll_unknown_task(api):
     assert api.poll_task("nope")["state"] == "missing"
+
+
+def test_preview_import_parses_filename(api):
+    preview = api.preview_import([r"C:\Music\Song A - Alice, Bob.mp3"])
+
+    item = preview["items"][0]
+    assert item["filename"] == "Song A - Alice, Bob.mp3"
+    assert item["title"] == "Song A"
+    assert item["authors"] == ["Alice", "Bob"]
+
+
+def test_preview_import_without_author(api):
+    preview = api.preview_import([r"C:\Music\Plain Name.m4a"])
+
+    item = preview["items"][0]
+    assert item["title"] == "Plain Name"
+    assert item["authors"] == []

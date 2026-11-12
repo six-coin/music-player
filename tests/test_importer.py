@@ -86,6 +86,28 @@ def test_clean_requires_ffmpeg(tmp_path, library, monkeypatch):
     assert "FFmpeg" in outcome.error
 
 
+def test_title_and_authors_can_be_overridden(tmp_path, library, fake_ffmpeg):
+    source = tmp_path / "raw-name.mp3"
+    source.write_bytes(b"audio-bytes")
+
+    outcome = importer.import_file(
+        source, library, clean=True, title="正式名称", authors=["甲", "乙"]
+    )
+
+    assert outcome.music.names == ["正式名称"]
+    assert [author.name for author in library.authors.values()] == ["甲", "乙"]
+
+
+def test_empty_title_falls_back_to_filename(tmp_path, library, fake_ffmpeg):
+    source = tmp_path / "Fallback.mp3"
+    source.write_bytes(b"audio-bytes")
+
+    outcome = importer.import_file(source, library, clean=True, title="  ", authors=[])
+
+    assert outcome.music.title == "Fallback"
+    assert outcome.music.authors == []
+
+
 def test_existing_target_is_adopted(tmp_path, library, monkeypatch):
     monkeypatch.setattr(importer.ffmpeg, "available", lambda: False)
     source = tmp_path / "Song.mp3"

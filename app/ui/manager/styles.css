@@ -116,6 +116,12 @@ select {
   display: none !important;
 }
 
+/* 作者样式里的 display 会盖掉浏览器对 [hidden] 的默认处理，
+   弹窗、菜单、Toast 都靠这个属性开关，必须显式兜底。 */
+[hidden] {
+  display: none !important;
+}
+
 /* ---------- 骨架 ---------- */
 
 .app {
@@ -1345,6 +1351,47 @@ select {
   font-size: 12.5px;
   line-height: 1.8;
   word-break: break-all;
+}
+
+/* ---------- 批量导入向导 ---------- */
+
+.wizard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46vh;
+  padding-right: 2px;
+  overflow-y: auto;
+}
+
+.wizard-row {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.wizard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.wizard-file {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wizard-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
 }
 
 /* ---------- 轻提示 ---------- */
