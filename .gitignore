@@ -1,2 +1,17 @@
+__pycache__/
+*.py[oc]
+.venv/
 .idea/
-assets/
+.vscode/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+logs/
+config/
+assets/music/
+assets/temp/
+.workbuddy-ai/
+
+# 重构前的参考材料，删除这两个目录后一并删掉这两行
+music-player-manager/
+music-player-simple/

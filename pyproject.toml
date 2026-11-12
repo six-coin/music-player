@@ -1,0 +1,33 @@
+[project]
+name = "music-player"
+version = "0.1.0"
+description = "本地音乐库管理器与播放器。"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "loguru>=0.7",
+    "pywebview>=5.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# 这两个目录只是重构前的参考材料，不参与本项目的静态检查。
+extend-exclude = ["music-player-manager", "music-player-simple"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.ruff.format]
+quote-style = "double"

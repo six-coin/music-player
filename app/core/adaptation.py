@@ -1,0 +1,67 @@
+"""自适应判定。
+
+规则：某首歌在某个歌单里的最近 N 次播放，记录成 0/1 串。记录条数不超过
+``min_plays`` 时永不跳过；超过之后，跳过概率是「基数 × 历史跳过比例」。
+"""
+
+from __future__ import annotations
+
+import random
+from dataclasses import dataclass
+
+from app.models import BASE_MAX, Adaptation
+
+
+@dataclass(frozen=True, slots=True)
+class Params:
+    window: int
+    min_plays: int
+    base: float
+    skip_seconds: int
+
+
+def effective(adaptation: Adaptation, defaults: Params) -> Params:
+    """歌单没覆盖的字段回落到全局默认值。"""
+    return Params(
+        window=adaptation.window if adaptation.window is not None else defaults.window,
+        min_plays=adaptation.min_plays if adaptation.min_plays is not None else defaults.min_plays,
+        base=adaptation.base if adaptation.base is not None else defaults.base,
+        skip_seconds=(
+            adaptation.skip_seconds
+            if adaptation.skip_seconds is not None
+            else defaults.skip_seconds
+        ),
+    )
+
+
+def sanitize(records: str) -> str:
+    """只保留 0/1，防止手改文件带进非法字符。"""
+    return "".join(char for char in records if char in "01")
+
+
+def skip_probability(records: str, params: Params) -> float:
+    total = len(records)
+    if total <= params.min_plays:
+        return 0.0
+    skips = records.count("1")
+    return min(params.base, BASE_MAX) * skips / total
+
+
+def should_skip(records: str, params: Params, rng: random.Random | None = None) -> bool:
+    probability = skip_probability(records, params)
+    if probability <= 0.0:
+        return False
+    return (rng or random).random() < probability
+
+
+def push(records: str, skipped: bool, window: int) -> str:
+    """把这一次的结果压进环形缓冲区，超出窗口时从头部截断。"""
+    updated = sanitize(records) + ("1" if skipped else "0")
+    if window > 0 and len(updated) > window:
+        updated = updated[-window:]
+    return updated
+
+
+def skip_rate(records: str) -> float:
+    total = len(records)
+    return records.count("1") / total if total else 0.0
