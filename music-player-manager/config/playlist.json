@@ -1,0 +1,21 @@
+[
+    {
+        "uid": "0bca7205d5fe1b6750b1e8d3e4ea6c24",
+        "name": "测试歌单",
+        "mode": "conditions",
+        "conditions": [
+            {
+                "mode": "exclude",
+                "filter": "all"
+            },
+            {
+                "mode": "include",
+                "filter": "tag",
+                "list": [
+                    "06560ffa8aa4461d6e8ddd47bbd2a91e",
+                    "f9f44047927cfe76ef238ac028974021"
+                ]
+            }
+        ]
+    }
+]
