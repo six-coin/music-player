@@ -88,6 +88,9 @@
             <h1 data-i18n="overview.title">音乐库</h1>
             <p class="page-sub" id="summary"></p>
           </div>
+          <div class="page-actions">
+            <button class="btn primary" data-action="import" data-i18n="action.import_music">导入音乐</button>
+          </div>
         </header>
 
         <div class="stats" id="stats">
@@ -149,6 +152,60 @@
             <ul class="rows" id="issues"></ul>
           </section>
         </div>
+
+        <div class="quick" id="quick">
+          <button class="btn ghost" data-action="import" data-i18n="action.import_music">导入音乐</button>
+          <button class="btn ghost" data-action="data_dir" data-i18n="action.open_data_dir">打开数据目录</button>
+          <button class="btn ghost" data-action="integrity" data-i18n="action.integrity">完整性检查</button>
+          <button class="btn ghost" data-action="settings" data-i18n="action.settings">设置</button>
+        </div>
+      </section>
+
+      <section class="view view--split is-hidden" data-view="songs">
+        <aside class="list-pane">
+          <header class="pane-head">
+            <div class="pane-title">
+              <h2 data-i18n="nav.songs">歌曲</h2>
+              <p class="pane-sub" id="songs-count"></p>
+            </div>
+            <button class="btn primary" data-action="import" data-i18n="action.import">导入</button>
+          </header>
+
+          <div class="search">
+            <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"/>
+              <path d="m20 20-3.5-3.5"/>
+            </svg>
+            <input id="songs-search" type="search" data-i18n-placeholder="songs.search" autocomplete="off">
+            <button class="search-clear" id="songs-search-clear" type="button" aria-label="清除" hidden>×</button>
+          </div>
+
+          <div class="list-tools">
+            <label class="check">
+              <input type="checkbox" id="songs-select-all">
+              <span data-i18n="action.select_all">全选</span>
+            </label>
+            <select class="select" id="songs-sort" aria-label="排序">
+              <option value="title" data-i18n="songs.sort_title">按名称</option>
+              <option value="created" data-i18n="songs.sort_created">按导入时间</option>
+              <option value="duration" data-i18n="songs.sort_duration">按时长</option>
+              <option value="author" data-i18n="songs.sort_author">按作者</option>
+            </select>
+          </div>
+
+          <ul class="song-list" id="song-list"></ul>
+
+          <div class="selection-bar is-hidden" id="selection-bar">
+            <span class="selection-count" id="selection-count"></span>
+            <div class="selection-actions">
+              <button class="btn soft" data-batch="tags" data-i18n="action.batch_tags">加标签</button>
+              <button class="btn soft" data-batch="playlist" data-i18n="action.batch_playlist">加入歌单</button>
+              <button class="btn ghost" data-batch="clear" data-i18n="action.clear">取消选择</button>
+            </div>
+          </div>
+        </aside>
+
+        <section class="detail-pane" id="song-detail"></section>
       </section>
 
       <section class="view is-hidden" data-view="pending">
@@ -161,6 +218,19 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <div class="menu" id="menu" role="menu" hidden></div>
+
+  <div class="modal" id="modal" hidden>
+    <div class="modal-card" id="modal-card" role="dialog" aria-modal="true" tabindex="-1">
+      <header class="modal-head">
+        <h2 id="modal-title"></h2>
+        <button class="icon-btn" id="modal-close" type="button" aria-label="关闭">×</button>
+      </header>
+      <div class="modal-body" id="modal-body"></div>
+      <footer class="modal-actions" id="modal-actions"></footer>
+    </div>
   </div>
 
   <div class="toast" id="toast" role="status" hidden></div>
