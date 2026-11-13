@@ -6,12 +6,17 @@ const state = {
   tab: "imported",
   sort: "title",
   query: "",
+  playlistQuery: "",
   active: null,
+  activeKind: null,
   serverSelection: null,
+  serverKind: null,
   selection: new Set(),
   anchor: null,
   taskId: null,
   nameTimer: null,
+  playlistNameTimer: null,
+  dragMd5: null,
 };
 
 function qs(selector, root) {
@@ -170,8 +175,9 @@ function applyNav(section) {
   });
   if (section === "overview") showView("overview");
   else if (section === "songs") showView("songs");
+  else if (section === "playlists") showView("playlists");
   else showView("pending");
-  if (section !== "overview" && section !== "songs") {
+  if (section !== "overview" && section !== "songs" && section !== "playlists") {
     qs("#pending-title").textContent = T("nav." + section);
   }
 }
@@ -398,7 +404,7 @@ function renderSelectionBar() {
 
 function renderDetail() {
   const pane = qs("#song-detail");
-  const music = state.active ? musicByMd5(state.active) : null;
+  const music = state.activeKind === "music" && state.active ? musicByMd5(state.active) : null;
 
   if (!music) {
     pane.innerHTML =
@@ -479,7 +485,7 @@ function renderDetail() {
     '<div class="field-body"><div class="chips" id="author-chips">' + authorChips + "</div>" +
     '<button class="btn soft small" id="btn-authors" style="margin-top:8px">' +
     esc(T("action.edit")) + "</button></div></div>" +
-    '<div class="field-row"><span class="field-label">' + esc(T("song.tags")) + "</span>" +
+    '<div class="field-row field-row--top"><span class="field-label">' + esc(T("song.tags")) + "</span>" +
     '<div class="field-body">' + (groups.length ? groups.join("") : '<p class="tag-hint">' +
       esc(T("batch.no_tags")) + "</p>") + "</div></div>" +
     "</section>" +
@@ -510,6 +516,370 @@ function renderSongs() {
   renderDetail();
 }
 
+/* ---------- 自绘下拉框 ---------- */
+
+function selectMarkup(attrs, options, value) {
+  const current = options.find(function (item) {
+    return item.value === value;
+  });
+  const menu = options
+    .map(function (option) {
+      return (
+        '<button class="select-option' + (option.value === value ? " active" : "") +
+        '" type="button" role="option" data-value="' + esc(option.value) + '">' +
+        esc(option.label) + "</button>"
+      );
+    })
+    .join("");
+  return (
+    '<div class="select small" ' + attrs +
+    ' role="combobox" tabindex="0" aria-expanded="false" aria-haspopup="listbox" data-value="' +
+    esc(value) + '"><span class="select-value">' + esc(current ? current.label : "") +
+    '</span><svg class="select-arrow" viewBox="0 0 12 12" aria-hidden="true">' +
+    '<path d="M2.5 4.5L6 8l3.5-3.5"/></svg>' +
+    '<div class="select-menu" role="listbox">' + menu + "</div></div>"
+  );
+}
+
+function setSelectValue(select, value, notify) {
+  select.dataset.value = value;
+  const option = select.querySelector('.select-option[data-value="' + value + '"]');
+  const label = select.querySelector(".select-value");
+  if (label) label.textContent = option ? option.textContent : value;
+  select.querySelectorAll(".select-option").forEach(function (node) {
+    node.classList.toggle("active", node.dataset.value === value);
+  });
+  if (notify) {
+    select.dispatchEvent(
+      new CustomEvent("selectchange", { bubbles: true, detail: { value: value } })
+    );
+  }
+}
+
+function closeSelects(except) {
+  qsa(".select.open").forEach(function (select) {
+    if (select === except) return;
+    select.classList.remove("open");
+    select.setAttribute("aria-expanded", "false");
+  });
+}
+
+function toggleSelect(select) {
+  const open = select.classList.contains("open");
+  closeSelects(select);
+  select.classList.toggle("open", !open);
+  select.setAttribute("aria-expanded", String(!open));
+}
+
+function stepSelect(select, delta) {
+  const options = qsa(".select-option", select);
+  if (!options.length) return;
+  let index = options.findIndex(function (node) {
+    return node.dataset.value === select.dataset.value;
+  });
+  if (index === -1) index = 0;
+  index = Math.min(options.length - 1, Math.max(0, index + delta));
+  setSelectValue(select, options[index].dataset.value, true);
+}
+
+function initSelects() {
+  document.addEventListener("click", function (event) {
+    const option = event.target.closest(".select-option");
+    if (option) {
+      const select = option.closest(".select");
+      setSelectValue(select, option.dataset.value, true);
+      closeSelects();
+      return;
+    }
+    const select = event.target.closest(".select");
+    if (select) {
+      toggleSelect(select);
+      return;
+    }
+    closeSelects();
+  });
+
+  document.addEventListener("keydown", function (event) {
+    const select = event.target.closest(".select");
+    if (!select) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleSelect(select);
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      stepSelect(select, event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === "Escape") {
+      event.stopPropagation();
+      closeSelects();
+      select.blur();
+    }
+  });
+}
+
+function setupSortSelect() {
+  const select = qs("#songs-sort");
+  if (!select) return;
+  select.querySelector(".select-menu").innerHTML = [
+    { value: "title", label: T("songs.sort_title") },
+    { value: "created", label: T("songs.sort_created") },
+    { value: "duration", label: T("songs.sort_duration") },
+    { value: "author", label: T("songs.sort_author") },
+  ]
+    .map(function (option) {
+      return (
+        '<button class="select-option' + (option.value === state.sort ? " active" : "") +
+        '" type="button" role="option" data-value="' + option.value + '">' +
+        esc(option.label) + "</button>"
+      );
+    })
+    .join("");
+  select.dataset.value = state.sort;
+  select.querySelector(".select-value").textContent = T(
+    "songs.sort_" + (state.sort === "created" ? "created" : state.sort)
+  );
+  select.addEventListener("selectchange", function (event) {
+    state.sort = event.detail.value;
+    renderSongList();
+  });
+}
+
+/* ---------- 歌单 ---------- */
+
+function playlistByUid(uid) {
+  return (
+    ((state.data && state.data.playlists) || []).find(function (item) {
+      return item.uid === uid;
+    }) || null
+  );
+}
+
+function visiblePlaylists() {
+  const list = (state.data && state.data.playlists) || [];
+  const query = state.playlistQuery.trim().toLowerCase();
+  if (!query) return list;
+  return list.filter(function (playlist) {
+    return playlist.title.toLowerCase().indexOf(query) !== -1;
+  });
+}
+
+function playlistKindLabel(playlist) {
+  return T(playlist.kind === "manual" ? "playlist.kind_manual" : "playlist.kind_filter");
+}
+
+function renderPlaylistList() {
+  const list = qs("#playlist-list");
+  const total = (state.data.playlists || []).length;
+  const items = visiblePlaylists();
+  qs("#playlists-count").textContent = T("playlist.total", { count: total });
+
+  if (!items.length) {
+    list.innerHTML = '<li class="row-empty">' + esc(T("playlist.empty")) + "</li>";
+    return;
+  }
+
+  list.innerHTML = items
+    .map(function (playlist) {
+      const classes = ["song-row"];
+      if (state.activeKind === "playlist" && state.active === playlist.uid) {
+        classes.push("is-active");
+      }
+      const badge = playlist.builtin
+        ? T("playlist.builtin")
+        : playlistKindLabel(playlist);
+      const count = playlist.error
+        ? T("playlist.resolve_error")
+        : T("playlist.count", { count: playlist.count });
+      return (
+        '<li class="' + classes.join(" ") + '" data-playlist-uid="' + esc(playlist.uid) +
+        '" tabindex="0"><div class="song-body"><span class="song-title">' +
+        esc(playlist.title) + '</span><span class="song-sub">' + esc(badge) + " · " +
+        esc(count) + "</span></div></li>"
+      );
+    })
+    .join("");
+}
+
+function renderPlaylistDetail() {
+  const pane = qs("#playlist-detail");
+  const playlist =
+    state.activeKind === "playlist" && state.active ? playlistByUid(state.active) : null;
+
+  if (!playlist) {
+    pane.innerHTML =
+      '<div class="detail-empty">' +
+      '<svg class="empty-art" viewBox="0 0 24 24" aria-hidden="true">' +
+      '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>' +
+      "<h2>" + esc(T("playlist.no_selection_title")) + "</h2>" +
+      "<p>" + esc(T("playlist.no_selection_hint")) + "</p></div>";
+    return;
+  }
+
+  const count = playlist.error
+    ? T("playlist.resolve_error")
+    : T("playlist.count", { count: playlist.count });
+  const badge = playlist.builtin
+    ? '<span class="badge is-builtin">' + esc(T("playlist.builtin")) + "</span>"
+    : '<span class="badge">' + esc(playlistKindLabel(playlist)) + "</span>";
+
+  const nameRow = playlist.builtin
+    ? '<div class="field-row"><span class="field-label">' + esc(T("playlist.name")) +
+      '</span><div class="field-body"><span>' + esc(playlist.title) +
+      '</span><p class="detail-hint">' + esc(T("playlist.builtin_hint")) + "</p></div></div>"
+    : '<div class="field-row"><span class="field-label">' + esc(T("playlist.name")) +
+      '</span><div class="field-body"><input class="input" id="playlist-name" value="' +
+      esc(playlist.title) + '" maxlength="120"></div></div>';
+
+  const content =
+    playlist.kind === "manual" ? manualPlaylistCard(playlist) : filterPlaylistCard(playlist);
+
+  pane.innerHTML =
+    '<header class="detail-head"><div class="detail-title"><h2>' +
+    esc(playlist.title) + "</h2><div class=\"detail-meta\">" + badge +
+    "<span>·</span><span>" + esc(count) + "</span></div></div>" +
+    '<div class="detail-tools">' +
+    (playlist.builtin
+      ? ""
+      : '<button class="btn ghost" data-menu="playlist">' + esc(T("action.more")) + "</button>") +
+    "</div></header>" +
+    '<section class="card">' + nameRow + "</section>" +
+    content;
+}
+
+function manualPlaylistCard(playlist) {
+  const musics = (playlist.entries || [])
+    .map(function (md5) {
+      return musicByMd5(md5);
+    })
+    .filter(Boolean);
+
+  const rows = musics
+    .map(function (music) {
+      return (
+        '<li class="entry-row" draggable="true" data-entry="' + esc(music.md5) + '">' +
+        '<span class="grip" aria-hidden="true">⋮⋮</span>' +
+        '<div class="entry-body"><span class="entry-title">' + esc(music.title) +
+        '</span><span class="entry-sub">' + esc(music.authors_text || T("song.no_author")) +
+        " · " + formatDuration(music.duration_ms) + "</span></div>" +
+        '<button class="icon-btn" data-entry-remove="' + esc(music.md5) +
+        '" aria-label="' + esc(T("action.remove")) + '">×</button></li>'
+      );
+    })
+    .join("");
+
+  return (
+    '<section class="card"><div class="card-tools"><h3 class="card-title">' +
+    esc(T("playlist.content")) + " · " + esc(T("playlist.count", { count: musics.length })) +
+    '</h3><button class="btn soft small" data-playlist-add="1">' +
+    esc(T("playlist.add_songs")) + "</button></div>" +
+    (rows
+      ? '<ul class="entry-list" id="entry-list">' + rows + "</ul>"
+      : '<p class="row-empty">' + esc(T("playlist.entries_empty")) + "</p>") +
+    "</section>"
+  );
+}
+
+function filterPlaylistCard(playlist) {
+  const rows = (playlist.filters || [])
+    .map(function (condition, index) {
+      return filterRowMarkup(condition, index);
+    })
+    .join("");
+
+  return (
+    '<section class="card"><div class="card-tools"><h3 class="card-title">' +
+    esc(T("playlist.conditions")) + " · " +
+    esc(
+      playlist.error
+        ? T("playlist.resolve_error")
+        : T("playlist.count", { count: playlist.count })
+    ) +
+    '</h3><button class="btn soft small" data-filter-add="1">' +
+    esc(T("playlist.add_condition")) + "</button></div>" +
+    (rows || '<p class="row-empty">' + esc(T("playlist.condition_empty")) + "</p>") +
+    '<div class="card-tools" style="margin-top:10px"><span></span>' +
+    '<button class="btn ghost small" data-playlist-preview="1">' +
+    esc(T("playlist.preview")) + "</button></div>" +
+    (playlist.error ? '<p class="detail-error">' + esc(playlist.error) + "</p>" : "") +
+    "</section>"
+  );
+}
+
+function filterRowMarkup(condition, index) {
+  const modeOptions = [
+    { value: "include", label: T("playlist.filter_include") },
+    { value: "exclude", label: T("playlist.filter_exclude") },
+  ];
+  const targetOptions = [
+    { value: "all", label: T("playlist.target_all") },
+    { value: "music", label: T("playlist.target_music") },
+    { value: "playlist", label: T("playlist.target_playlist") },
+    { value: "tag", label: T("playlist.target_tag") },
+    { value: "author", label: T("playlist.target_author") },
+  ];
+
+  const values =
+    condition.target === "all"
+      ? '<span class="filter-summary">' + esc(T("playlist.target_all")) + "</span>"
+      : '<span class="filter-summary">' + esc(filterSummary(condition)) + "</span>" +
+        '<button class="btn soft small" data-filter-pick="' + index + '">' +
+        esc(T("playlist.filter_pick")) + "</button>";
+
+  return (
+    '<div class="filter-row" data-filter-index="' + index + '">' +
+    selectMarkup('data-filter-mode="' + index + '"', modeOptions, condition.mode) +
+    selectMarkup('data-filter-target="' + index + '"', targetOptions, condition.target) +
+    '<div class="filter-values">' + values + "</div>" +
+    '<div class="filter-tools">' +
+    '<button class="icon-btn" data-filter-up="' + index + '" aria-label="' +
+    esc(T("action.up")) + '">↑</button>' +
+    '<button class="icon-btn" data-filter-down="' + index + '" aria-label="' +
+    esc(T("action.down")) + '">↓</button>' +
+    '<button class="icon-btn" data-filter-remove="' + index + '" aria-label="' +
+    esc(T("action.remove")) + '">×</button>' +
+    "</div></div>"
+  );
+}
+
+function filterSummary(condition) {
+  const values = condition.values || [];
+  if (!values.length) return T("playlist.filter_empty");
+  const names = values
+    .map(function (uid) {
+      return objectName(condition.target, uid);
+    })
+    .filter(Boolean);
+  if (!names.length) return T("playlist.filter_empty");
+  const shown = names.slice(0, 2).join("、");
+  return names.length > 2 ? shown + T("playlist.more", { count: names.length - 2 }) : shown;
+}
+
+function objectName(target, uid) {
+  if (target === "music") {
+    const music = musicByMd5(uid);
+    return music ? music.title : "";
+  }
+  if (target === "playlist") {
+    const playlist = playlistByUid(uid);
+    return playlist ? playlist.title : "";
+  }
+  if (target === "tag") {
+    const tag = tagMap()[uid];
+    return tag ? tag.name : "";
+  }
+  if (target === "author") {
+    const author = authorMap()[uid];
+    return author ? author.name : "";
+  }
+  return "";
+}
+
+function renderPlaylists() {
+  renderPlaylistList();
+  renderPlaylistDetail();
+}
+
 /* ---------- 总渲染 ---------- */
 
 function apply(data) {
@@ -522,16 +892,19 @@ function apply(data) {
 
   // 后端的选择变化（点击最近导入、导入后自动选中）要反映到详情区；
   // 同一份选择重复下发时不能覆盖前端的多选。
-  const incoming =
-    data.selection && data.selection.kind === "music" ? data.selection.uid : null;
-  if (incoming !== state.serverSelection) {
+  const incoming = data.selection ? data.selection.uid : null;
+  const incomingKind = data.selection ? data.selection.kind : null;
+  if (incoming !== state.serverSelection || incomingKind !== state.serverKind) {
     state.active = incoming;
-    if (incoming) state.selection = new Set([incoming]);
+    state.activeKind = incomingKind;
+    if (incoming && incomingKind === "music") state.selection = new Set([incoming]);
   }
   state.serverSelection = incoming;
+  state.serverKind = incomingKind;
 
-  if (!state.active || !musicByMd5(state.active)) {
-    state.active = incoming && musicByMd5(incoming) ? incoming : null;
+  if (!state.active || !itemByKind(state.activeKind, state.active)) {
+    state.active = incoming;
+    state.activeKind = incomingKind;
   }
   state.selection.forEach(function (md5) {
     if (!musicByMd5(md5)) state.selection.delete(md5);
@@ -539,8 +912,16 @@ function apply(data) {
 
   if (data.section === "overview") renderOverview(data);
   else if (data.section === "songs") renderSongs();
+  else if (data.section === "playlists") renderPlaylists();
 
   if (data.message) toast(data.message, data.ok !== false);
+}
+
+function itemByKind(kind, uid) {
+  if (!uid) return null;
+  if (kind === "music") return musicByMd5(uid);
+  if (kind === "playlist") return playlistByUid(uid);
+  return null;
 }
 
 /* ---------- 交互 ---------- */
@@ -560,14 +941,29 @@ async function goSection(section) {
   applyNav(section);
   const data = await call("select_section", section);
   if (data) apply(data);
+
+  // 歌单数量少，进分区时直接落在第一个，省掉一次点击。
+  if (section === "playlists" && state.activeKind !== "playlist") {
+    const first = ((state.data && state.data.playlists) || [])[0];
+    if (first) selectPlaylist(first.uid);
+  }
 }
 
 async function selectMusic(md5) {
   state.active = md5;
+  state.activeKind = "music";
   state.selection = new Set([md5]);
   state.anchor = md5;
   renderSongs();
   const data = await call("select_item", "music", md5);
+  if (data) apply(data);
+}
+
+async function selectPlaylist(uid) {
+  state.active = uid;
+  state.activeKind = "playlist";
+  renderPlaylists();
+  const data = await call("select_item", "playlist", uid);
   if (data) apply(data);
 }
 
@@ -593,6 +989,308 @@ function selectRange(md5) {
   for (let index = start; index <= end; index += 1) state.selection.add(musics[index].md5);
   state.active = md5;
   renderSongs();
+}
+
+/* ---------- 歌单交互 ---------- */
+
+function openCreatePlaylist() {
+  let kind = "manual";
+  openModal({
+    title: T("playlist.create_title"),
+    body:
+      '<div class="field-row"><span class="field-label">' + esc(T("playlist.name")) +
+      '</span><div class="field-body"><input class="input" id="new-playlist-name" placeholder="' +
+      esc(T("playlist.name_placeholder")) + '" maxlength="120"></div></div>' +
+      '<div class="field-row"><span class="field-label">' + esc(T("playlist.kind")) +
+      '</span><div class="field-body"><div class="seg" id="new-playlist-kind">' +
+      '<button class="seg-item is-active" type="button" data-kind="manual">' +
+      esc(T("playlist.kind_manual")) + "</button>" +
+      '<button class="seg-item" type="button" data-kind="filter">' +
+      esc(T("playlist.kind_filter")) + "</button></div></div></div>",
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("playlist.create"),
+        primary: true,
+        onClick: async function () {
+          const input = qs("#new-playlist-name");
+          const name = input.value.trim();
+          if (!name) {
+            input.classList.add("invalid");
+            return;
+          }
+          const data = await call("create_playlist", name, kind);
+          if (data && data.ok) {
+            closeModal();
+            apply(data);
+          } else if (data) {
+            toast(data.message || T("playlist.invalid"), false);
+          }
+        },
+      },
+    ],
+    onMount: function () {
+      qs("#new-playlist-kind").onclick = function (event) {
+        const button = event.target.closest("[data-kind]");
+        if (!button) return;
+        kind = button.dataset.kind;
+        qsa("#new-playlist-kind .seg-item").forEach(function (node) {
+          node.classList.toggle("is-active", node === button);
+        });
+      };
+      qs("#new-playlist-name").focus();
+    },
+  });
+}
+
+function confirmDeletePlaylist(playlist) {
+  openModal({
+    title: T("playlist.delete"),
+    body:
+      '<p class="modal-note">' +
+      esc(T("playlist.delete_confirm", { name: playlist.title })) +
+      "</p>",
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("playlist.delete"),
+        danger: true,
+        onClick: async function () {
+          const data = await call("delete_playlist", playlist.uid);
+          closeModal();
+          if (data) apply(data);
+        },
+      },
+    ],
+  });
+}
+
+function openSongPicker(playlist) {
+  const existing = new Set(playlist.entries || []);
+  const chosen = new Set();
+  const items = (state.data.library.musics || []).filter(function (music) {
+    return !existing.has(music.md5);
+  });
+
+  if (!items.length) {
+    openModal({
+      title: T("playlist.add_songs"),
+      body: '<p class="row-empty">' + esc(T("playlist.pick_songs_empty")) + "</p>",
+      actions: [{ label: T("action.close"), primary: true, onClick: closeModal }],
+    });
+    return;
+  }
+
+  openModal({
+    title: T("playlist.add_songs"),
+    wide: true,
+    body:
+      '<input class="input" id="pick-song-search" placeholder="' + esc(T("songs.search")) +
+      '"><ul class="pick-list" id="pick-song-list" style="margin-top:10px">' +
+      items
+        .map(function (music) {
+          const name = (music.title + " " + (music.authors_text || "")).toLowerCase();
+          return (
+            '<li class="pick-row" data-song-pick="' + esc(music.md5) + '" data-name="' +
+            esc(name) + '"><span class="pick-row-body">' + esc(music.title) +
+            '</span><span class="pick-row-tools">' +
+            esc(music.authors_text || "") + "</span></li>"
+          );
+        })
+        .join("") +
+      "</ul>",
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("action.apply"),
+        primary: true,
+        onClick: async function () {
+          if (!chosen.size) {
+            closeModal();
+            return;
+          }
+          const data = await call("add_playlist_songs", playlist.uid, Array.from(chosen));
+          closeModal();
+          if (data) apply(data);
+        },
+      },
+    ],
+    onMount: function () {
+      qs("#pick-song-search").addEventListener("input", function () {
+        const query = this.value.trim().toLowerCase();
+        qsa("#pick-song-list .pick-row").forEach(function (row) {
+          row.hidden = Boolean(query) && row.dataset.name.indexOf(query) === -1;
+        });
+      });
+      qs("#modal-body").onclick = function (event) {
+        const row = event.target.closest("[data-song-pick]");
+        if (!row) return;
+        const md5 = row.dataset.songPick;
+        if (chosen.has(md5)) chosen.delete(md5);
+        else chosen.add(md5);
+        row.classList.toggle("is-on", chosen.has(md5));
+      };
+    },
+  });
+}
+
+function valueOptions(target, excludeUid) {
+  if (target === "music") {
+    return (state.data.library.musics || []).map(function (music) {
+      return { uid: music.md5, label: music.title, sub: music.authors_text || "" };
+    });
+  }
+  if (target === "playlist") {
+    return (state.data.playlists || [])
+      .filter(function (playlist) {
+        return playlist.uid !== excludeUid;
+      })
+      .map(function (playlist) {
+        return { uid: playlist.uid, label: playlist.title, sub: "" };
+      });
+  }
+  if (target === "tag") {
+    const tags = tagMap();
+    return Object.keys(tags).map(function (uid) {
+      return { uid: uid, label: tags[uid].name, sub: tags[uid].group.name };
+    });
+  }
+  if (target === "author") {
+    return (state.data.library.authors || []).map(function (author) {
+      return { uid: author.uid, label: author.name, sub: "" };
+    });
+  }
+  return [];
+}
+
+function openValuePicker(playlist, index, condition) {
+  const options = valueOptions(condition.target, playlist.uid);
+  const chosen = new Set(condition.values || []);
+
+  if (!options.length) {
+    openModal({
+      title: T("playlist.filter_pick"),
+      body: '<p class="row-empty">' + esc(T("playlist.pick_empty")) + "</p>",
+      actions: [{ label: T("action.close"), primary: true, onClick: closeModal }],
+    });
+    return;
+  }
+
+  openModal({
+    title: T("playlist.filter_pick"),
+    wide: true,
+    body:
+      '<input class="input" id="pick-value-search" placeholder="' + esc(T("playlist.pick_search")) +
+      '"><ul class="pick-list" id="pick-value-list" style="margin-top:10px">' +
+      options
+        .map(function (option) {
+          const active = chosen.has(option.uid);
+          const name = (option.label + " " + option.sub).toLowerCase();
+          return (
+            '<li class="pick-row' + (active ? " is-on" : "") + '" data-value-pick="' +
+            esc(option.uid) + '" data-name="' + esc(name) + '">' +
+            '<span class="pick-row-body">' + esc(option.label) + "</span>" +
+            '<span class="pick-row-tools">' + esc(option.sub) + "</span></li>"
+          );
+        })
+        .join("") +
+      "</ul>",
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("action.apply"),
+        primary: true,
+        onClick: async function () {
+          const data = await call("update_filter", playlist.uid, index, {
+            values: Array.from(chosen),
+          });
+          closeModal();
+          if (data) apply(data);
+        },
+      },
+    ],
+    onMount: function () {
+      qs("#pick-value-search").addEventListener("input", function () {
+        const query = this.value.trim().toLowerCase();
+        qsa("#pick-value-list .pick-row").forEach(function (row) {
+          row.hidden = Boolean(query) && row.dataset.name.indexOf(query) === -1;
+        });
+      });
+      qs("#modal-body").onclick = function (event) {
+        const row = event.target.closest("[data-value-pick]");
+        if (!row) return;
+        const uid = row.dataset.valuePick;
+        if (chosen.has(uid)) chosen.delete(uid);
+        else chosen.add(uid);
+        row.classList.toggle("is-on", chosen.has(uid));
+      };
+    },
+  });
+}
+
+async function openPlaylistPreview(playlist) {
+  const result = await call("get_playlist_songs", playlist.uid);
+  if (!result) return;
+
+  let body;
+  if (!result.ok) {
+    body = '<p class="detail-error">' + esc(result.message) + "</p>";
+  } else if (!result.items.length) {
+    body = '<p class="row-empty">' + esc(T("playlist.preview_empty")) + "</p>";
+  } else {
+    body =
+      '<ul class="report-list">' +
+      result.items
+        .map(function (music) {
+          return (
+            "<li>" + esc(music.title) +
+            (music.authors_text ? " · " + esc(music.authors_text) : "") + "</li>"
+          );
+        })
+        .join("") +
+      "</ul>";
+  }
+
+  openModal({
+    title: T("playlist.preview_title"),
+    body: body,
+    wide: true,
+    actions: [{ label: T("action.close"), primary: true, onClick: closeModal }],
+  });
+}
+
+function schedulePlaylistNameSave(input) {
+  if (!state.active) return;
+  input.classList.remove("invalid");
+  window.clearTimeout(state.playlistNameTimer);
+  const uid = state.active;
+  state.playlistNameTimer = window.setTimeout(function () {
+    state.playlistNameTimer = null;
+    savePlaylistName(uid, input.value);
+  }, 420);
+}
+
+async function savePlaylistName(uid, value) {
+  const result = await call("update_playlist_name", uid, value);
+  const input = qs("#playlist-name");
+  if (!result || !result.ok) {
+    if (input) input.classList.add("invalid");
+    return;
+  }
+  const playlist = playlistByUid(uid);
+  if (playlist) playlist.title = value.trim();
+  const row = qs('.song-row[data-playlist-uid="' + uid + '"] .song-title');
+  if (row) row.textContent = value.trim();
+  const heading = qs("#playlist-detail .detail-title h2");
+  if (heading) heading.textContent = value.trim();
+}
+
+async function flushPlaylistName() {
+  if (!state.playlistNameTimer) return;
+  window.clearTimeout(state.playlistNameTimer);
+  state.playlistNameTimer = null;
+  const input = qs("#playlist-name");
+  if (input && state.active) await savePlaylistName(state.active, input.value);
 }
 
 /* ---------- 菜单 ---------- */
@@ -654,7 +1352,8 @@ function openModal(options) {
 
   (options.actions || []).forEach(function (action) {
     const button = document.createElement("button");
-    button.className = "btn" + (action.primary ? " primary" : "");
+    button.className =
+      "btn" + (action.primary ? " primary" : "") + (action.danger ? " danger" : "");
     button.textContent = action.label;
     button.addEventListener("click", action.onClick);
     qs("#modal-actions").appendChild(button);
@@ -1448,11 +2147,6 @@ function bindEvents() {
     search.focus();
   });
 
-  qs("#songs-sort").addEventListener("change", function (event) {
-    state.sort = event.target.value;
-    renderSongList();
-  });
-
   qs("#songs-select-all").addEventListener("change", function (event) {
     const musics = visibleMusics();
     if (event.target.checked) {
@@ -1512,6 +2206,177 @@ function bindEvents() {
       state.selection.clear();
       renderSongs();
     }
+  });
+
+  qs("#btn-new-playlist").addEventListener("click", openCreatePlaylist);
+
+  qs("#playlist-list").addEventListener("click", function (event) {
+    const row = event.target.closest("[data-playlist-uid]");
+    if (row) selectPlaylist(row.dataset.playlistUid);
+  });
+
+  const playlistSearch = qs("#playlists-search");
+  playlistSearch.addEventListener("input", function () {
+    state.playlistQuery = playlistSearch.value;
+    qs("#playlists-search-clear").hidden = !playlistSearch.value;
+    renderPlaylistList();
+  });
+  qs("#playlists-search-clear").addEventListener("click", function () {
+    playlistSearch.value = "";
+    state.playlistQuery = "";
+    qs("#playlists-search-clear").hidden = true;
+    renderPlaylistList();
+    playlistSearch.focus();
+  });
+
+  const playlistDetail = qs("#playlist-detail");
+
+  playlistDetail.addEventListener("input", function (event) {
+    if (event.target.id === "playlist-name") schedulePlaylistNameSave(event.target);
+  });
+
+  playlistDetail.addEventListener(
+    "blur",
+    function (event) {
+      if (event.target.id === "playlist-name") flushPlaylistName();
+    },
+    true
+  );
+
+  playlistDetail.addEventListener("selectchange", async function (event) {
+    const playlist = playlistByUid(state.active);
+    if (!playlist) return;
+    const mode = event.target.closest("[data-filter-mode]");
+    if (mode) {
+      await flushPlaylistName();
+      const data = await call("update_filter", playlist.uid, Number(mode.dataset.filterMode), {
+        mode: mode.dataset.value,
+      });
+      if (data) apply(data);
+      return;
+    }
+    const target = event.target.closest("[data-filter-target]");
+    if (target) {
+      await flushPlaylistName();
+      const data = await call("update_filter", playlist.uid, Number(target.dataset.filterTarget), {
+        target: target.dataset.value,
+      });
+      if (data) apply(data);
+    }
+  });
+
+  playlistDetail.addEventListener("click", async function (event) {
+    const playlist = playlistByUid(state.active);
+    if (!playlist) return;
+
+    if (event.target.closest("[data-playlist-add]")) {
+      openSongPicker(playlist);
+      return;
+    }
+    if (event.target.closest("[data-filter-add]")) {
+      const data = await call("add_filter", playlist.uid);
+      if (data) apply(data);
+      return;
+    }
+    if (event.target.closest("[data-playlist-preview]")) {
+      openPlaylistPreview(playlist);
+      return;
+    }
+
+    const removeEntry = event.target.closest("[data-entry-remove]");
+    if (removeEntry) {
+      const data = await call("remove_playlist_song", playlist.uid, removeEntry.dataset.entryRemove);
+      if (data) apply(data);
+      return;
+    }
+
+    const pick = event.target.closest("[data-filter-pick]");
+    if (pick) {
+      const index = Number(pick.dataset.filterPick);
+      openValuePicker(playlist, index, playlist.filters[index]);
+      return;
+    }
+
+    const up = event.target.closest("[data-filter-up]");
+    if (up) {
+      const data = await call("move_filter", playlist.uid, Number(up.dataset.filterUp), -1);
+      if (data) apply(data);
+      return;
+    }
+    const down = event.target.closest("[data-filter-down]");
+    if (down) {
+      const data = await call("move_filter", playlist.uid, Number(down.dataset.filterDown), 1);
+      if (data) apply(data);
+      return;
+    }
+    const remove = event.target.closest("[data-filter-remove]");
+    if (remove) {
+      const data = await call("remove_filter", playlist.uid, Number(remove.dataset.filterRemove));
+      if (data) apply(data);
+      return;
+    }
+
+    const menu = event.target.closest("[data-menu='playlist']");
+    if (menu) {
+      openMenu(menu, [
+        {
+          label: T("playlist.delete"),
+          onClick: function () {
+            confirmDeletePlaylist(playlist);
+          },
+        },
+      ]);
+    }
+  });
+
+  playlistDetail.addEventListener("dragstart", function (event) {
+    const row = event.target.closest(".entry-row");
+    if (!row) return;
+    state.dragMd5 = row.dataset.entry;
+    row.classList.add("is-dragging");
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", state.dragMd5);
+    }
+  });
+
+  playlistDetail.addEventListener("dragover", function (event) {
+    const row = event.target.closest(".entry-row");
+    if (!row || !state.dragMd5) return;
+    event.preventDefault();
+    qsa(".entry-row", playlistDetail).forEach(function (node) {
+      node.classList.remove("drop-before", "drop-after");
+    });
+    const rect = row.getBoundingClientRect();
+    row.classList.add(event.clientY > rect.top + rect.height / 2 ? "drop-after" : "drop-before");
+  });
+
+  playlistDetail.addEventListener("drop", async function (event) {
+    const row = event.target.closest(".entry-row");
+    const playlist = playlistByUid(state.active);
+    if (!row || !state.dragMd5 || !playlist) return;
+    event.preventDefault();
+
+    const after = row.classList.contains("drop-after");
+    const entries = (playlist.entries || []).slice();
+    const from = entries.indexOf(state.dragMd5);
+    if (from === -1) return;
+    entries.splice(from, 1);
+    let index = entries.indexOf(row.dataset.entry);
+    if (index === -1) index = entries.length;
+    if (after) index += 1;
+    entries.splice(index, 0, state.dragMd5);
+
+    state.dragMd5 = null;
+    const data = await call("set_playlist_entries", playlist.uid, entries);
+    if (data) apply(data);
+  });
+
+  playlistDetail.addEventListener("dragend", function () {
+    state.dragMd5 = null;
+    qsa(".entry-row", playlistDetail).forEach(function (node) {
+      node.classList.remove("is-dragging", "drop-before", "drop-after");
+    });
   });
 
   qs("#song-detail").addEventListener("input", function (event) {
@@ -1626,8 +2491,10 @@ async function flushNameSave() {
 
 async function init() {
   bindEvents();
+  initSelects();
   await loadStrings();
   applyStrings();
+  setupSortSelect();
   apply(await call("get_state"));
 }
 

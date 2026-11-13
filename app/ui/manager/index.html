@@ -185,12 +185,14 @@
               <input type="checkbox" id="songs-select-all">
               <span data-i18n="action.select_all">全选</span>
             </label>
-            <select class="select" id="songs-sort" aria-label="排序">
-              <option value="title" data-i18n="songs.sort_title">按名称</option>
-              <option value="created" data-i18n="songs.sort_created">按导入时间</option>
-              <option value="duration" data-i18n="songs.sort_duration">按时长</option>
-              <option value="author" data-i18n="songs.sort_author">按作者</option>
-            </select>
+            <div class="select small" id="songs-sort" role="combobox" tabindex="0"
+                 aria-expanded="false" aria-haspopup="listbox" data-value="title">
+              <span class="select-value"></span>
+              <svg class="select-arrow" viewBox="0 0 12 12" aria-hidden="true">
+                <path d="M2.5 4.5L6 8l3.5-3.5"/>
+              </svg>
+              <div class="select-menu" role="listbox"></div>
+            </div>
           </div>
 
           <ul class="song-list" id="song-list"></ul>
@@ -206,6 +208,31 @@
         </aside>
 
         <section class="detail-pane" id="song-detail"></section>
+      </section>
+
+      <section class="view view--split is-hidden" data-view="playlists">
+        <aside class="list-pane">
+          <header class="pane-head">
+            <div class="pane-title">
+              <h2 data-i18n="nav.playlists">歌单</h2>
+              <p class="pane-sub" id="playlists-count"></p>
+            </div>
+            <button class="btn primary" id="btn-new-playlist" data-i18n="playlist.new">新建</button>
+          </header>
+
+          <div class="search">
+            <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"/>
+              <path d="m20 20-3.5-3.5"/>
+            </svg>
+            <input id="playlists-search" type="search" data-i18n-placeholder="playlist.search" autocomplete="off">
+            <button class="search-clear" id="playlists-search-clear" type="button" aria-label="清除" hidden>×</button>
+          </div>
+
+          <ul class="song-list" id="playlist-list"></ul>
+        </aside>
+
+        <section class="detail-pane" id="playlist-detail"></section>
       </section>
 
       <section class="view is-hidden" data-view="pending">

@@ -2,6 +2,16 @@
 
 本地音乐库管理器与播放器。
 
+## 命名
+
+| 代号 | 英文名 | 中文名 |
+|---|---|---|
+| manager | Music Library Manager | 音乐库管理器 |
+| player | Music Player | 音乐播放器 |
+| simple | Simple Music Player | 轻量音乐播放器 |
+
+界面标题、窗口标题、文档与安装包一律使用上表的中文名；代码、目录、入口文件一律使用代号。
+
 ## 文档
 
 - [管理器实施计划](docs/plan_manager.md)

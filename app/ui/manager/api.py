@@ -22,7 +22,7 @@ from app.core.library import Library
 from app.core.naming import parse_filename
 from app.core.playlists import PlaylistStore
 from app.core.stats import StatsStore
-from app.models import Author, Music, new_uid
+from app.models import FILTER_MODES, FILTER_TARGETS, Author, Filter, Music, new_uid
 from app.settings import SettingsStore
 from app.system import theme as theme_tool
 
@@ -86,6 +86,9 @@ class ManagerApi:
             if kind == "music" and uid in self.library.musics:
                 self.selection = {"kind": "music", "uid": uid}
                 self.section = "songs"
+            elif kind == "playlist" and uid in self.playlists.items:
+                self.selection = {"kind": "playlist", "uid": uid}
+                self.section = "playlists"
             return self._snapshot()
 
     def clear_selection(self) -> dict[str, Any]:
@@ -147,9 +150,12 @@ class ManagerApi:
             payload = playlist.to_dict()
             payload["title"] = playlist.name or i18n.t("overview.default_playlist")
             try:
-                payload["count"] = len(self.playlists.resolve(playlist.uid, self.library).md5s)
-            except Exception:  # 循环引用不该让整个快照失败
+                content = self.playlists.resolve(playlist.uid, self.library)
+                payload["count"] = len(content.md5s)
+                payload["error"] = ""
+            except Exception as error:  # 循环引用不该让整个快照失败
                 payload["count"] = 0
+                payload["error"] = str(error)
             result.append(payload)
         return sorted(result, key=lambda item: (not item["builtin"], item["title"]))
 
@@ -376,6 +382,177 @@ class ManagerApi:
                 self.playlists.touch(playlist.uid)
                 self.playlists.save()
             return self._snapshot()
+
+    # ---------- 歌单编辑 ----------
+
+    def create_playlist(self, name: str, kind: str) -> dict[str, Any]:
+        with self._lock:
+            text = (name or "").strip()
+            if not text or kind not in ("manual", "filter"):
+                snapshot = self._snapshot()
+                snapshot["ok"] = False
+                snapshot["message"] = i18n.t("playlist.invalid")
+                return snapshot
+            playlist = self.playlists.create(text, kind)
+            self.playlists.save()
+            self.selection = {"kind": "playlist", "uid": playlist.uid}
+            self.section = "playlists"
+            return self._snapshot()
+
+    def update_playlist_name(self, uid: str, value: str) -> dict[str, Any]:
+        with self._lock:
+            playlist = self.playlists.get(uid)
+            text = (value or "").strip()
+            if playlist is None or playlist.builtin or not text:
+                return {"ok": False}
+            playlist.name = text
+            self.playlists.touch(uid)
+            self.playlists.save()
+            return {"ok": True}
+
+    def delete_playlist(self, uid: str) -> dict[str, Any]:
+        with self._lock:
+            playlist = self.playlists.get(uid)
+            if playlist is None or playlist.builtin:
+                return self._snapshot()
+            referrers = self._playlist_referrers(uid)
+            if referrers:
+                snapshot = self._snapshot()
+                snapshot["ok"] = False
+                snapshot["message"] = i18n.t("playlist.referenced", names="、".join(referrers))
+                return snapshot
+            self.playlists.remove(uid)
+            self.playlists.save()
+            for suffix in (".json", ".lock"):
+                self.stats.path_for(uid).with_suffix(suffix).unlink(missing_ok=True)
+            if self.selection and self.selection.get("uid") == uid:
+                self.selection = None
+            return self._snapshot()
+
+    def _playlist_referrers(self, uid: str) -> list[str]:
+        names: list[str] = []
+        for playlist in self.playlists.items.values():
+            if playlist.uid == uid:
+                continue
+            for condition in playlist.filters:
+                if condition.target == "playlist" and uid in condition.values:
+                    names.append(playlist.name or i18n.t("overview.default_playlist"))
+                    break
+        return names
+
+    def set_playlist_entries(self, uid: str, md5s: list[str]) -> dict[str, Any]:
+        with self._lock:
+            playlist = self.playlists.get(uid)
+            if playlist is None or playlist.kind != "manual":
+                return self._snapshot()
+            seen: set[str] = set()
+            entries: list[str] = []
+            for md5 in md5s or []:
+                if md5 in self.library.musics and md5 not in seen:
+                    seen.add(md5)
+                    entries.append(md5)
+            playlist.entries = entries
+            self.playlists.touch(uid)
+            self.playlists.save()
+            return self._snapshot()
+
+    def add_playlist_songs(self, uid: str, md5s: list[str]) -> dict[str, Any]:
+        with self._lock:
+            playlist = self.playlists.get(uid)
+            if playlist is None or playlist.kind != "manual":
+                return self._snapshot()
+            existing = set(playlist.entries)
+            for md5 in md5s or []:
+                if md5 in self.library.musics and md5 not in existing:
+                    playlist.entries.append(md5)
+                    existing.add(md5)
+            self.playlists.touch(uid)
+            self.playlists.save()
+            return self._snapshot()
+
+    def remove_playlist_song(self, uid: str, md5: str) -> dict[str, Any]:
+        with self._lock:
+            playlist = self.playlists.get(uid)
+            if playlist is None or playlist.kind != "manual":
+                return self._snapshot()
+            playlist.entries = [item for item in playlist.entries if item != md5]
+            self.playlists.touch(uid)
+            self.playlists.save()
+            return self._snapshot()
+
+    def add_filter(self, uid: str) -> dict[str, Any]:
+        with self._lock:
+            playlist = self.playlists.get(uid)
+            if playlist is None or playlist.kind != "filter":
+                return self._snapshot()
+            playlist.filters.append(Filter(mode="include", target="music", values=[]))
+            self.playlists.touch(uid)
+            self.playlists.save()
+            return self._snapshot()
+
+    def update_filter(self, uid: str, index: int, patch: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            playlist = self.playlists.get(uid)
+            if playlist is None or playlist.kind != "filter":
+                return self._snapshot()
+            if not 0 <= index < len(playlist.filters):
+                return self._snapshot()
+            condition = playlist.filters[index]
+            if isinstance(patch, dict):
+                mode = patch.get("mode")
+                if mode in FILTER_MODES:
+                    condition.mode = mode
+                target = patch.get("target")
+                if target in FILTER_TARGETS:
+                    condition.target = target
+                values = patch.get("values")
+                if isinstance(values, list):
+                    condition.values = [str(value) for value in values]
+            condition.normalize()
+            self.playlists.touch(uid)
+            self.playlists.save()
+            return self._snapshot()
+
+    def remove_filter(self, uid: str, index: int) -> dict[str, Any]:
+        with self._lock:
+            playlist = self.playlists.get(uid)
+            if playlist is None or playlist.kind != "filter":
+                return self._snapshot()
+            if 0 <= index < len(playlist.filters):
+                del playlist.filters[index]
+                self.playlists.touch(uid)
+                self.playlists.save()
+            return self._snapshot()
+
+    def move_filter(self, uid: str, index: int, delta: int) -> dict[str, Any]:
+        with self._lock:
+            playlist = self.playlists.get(uid)
+            if playlist is None or playlist.kind != "filter":
+                return self._snapshot()
+            target = index + delta
+            if 0 <= index < len(playlist.filters) and 0 <= target < len(playlist.filters):
+                playlist.filters[index], playlist.filters[target] = (
+                    playlist.filters[target],
+                    playlist.filters[index],
+                )
+                self.playlists.touch(uid)
+                self.playlists.save()
+            return self._snapshot()
+
+    def get_playlist_songs(self, uid: str) -> dict[str, Any]:
+        with self._lock:
+            try:
+                content = self.playlists.resolve(uid, self.library)
+            except Exception as error:
+                return {"ok": False, "message": str(error), "items": []}
+            missing = set(self.library.missing_files())
+            tag_issues = set(self.library.tag_violations())
+            items = [
+                self._music_payload(self.library.musics[md5], missing, tag_issues)
+                for md5 in content.md5s
+                if md5 in self.library.musics
+            ]
+            return {"ok": True, "ordered": content.ordered, "items": items}
 
     # ---------- 导入 ----------
 

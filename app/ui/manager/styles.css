@@ -331,6 +331,17 @@ select {
   background: var(--red-soft);
 }
 
+.btn.danger {
+  border-color: var(--red);
+  background: var(--red);
+  color: #fff;
+}
+
+.btn.danger:hover {
+  border-color: var(--red-text);
+  background: var(--red-text);
+}
+
 .btn.small {
   height: 28px;
   padding: 0 10px;
@@ -671,25 +682,128 @@ select {
   cursor: pointer;
 }
 
+/* 自绘下拉框：原生 select 的弹出层由系统渲染，深色模式下无法控制。 */
 .select {
-  height: 28px;
-  padding: 0 6px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-soft);
-  font-size: 12.5px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 34px 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
   cursor: pointer;
+  user-select: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
 }
 
 .select:hover {
-  background: var(--surface-active);
-  color: var(--text);
+  border-color: var(--muted);
 }
 
-.select:focus {
+.select:focus-visible,
+.select.open {
   outline: none;
   border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.select-value {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.select-arrow {
+  position: absolute;
+  right: 11px;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.16s var(--ease);
+}
+
+.select.open .select-arrow {
+  transform: rotate(180deg);
+}
+
+.select-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  display: none;
+  min-width: 100%;
+  max-height: 240px;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 12px 28px var(--shadow);
+}
+
+.select.open .select-menu {
+  display: block;
+  animation: menu-in 0.14s var(--ease);
+}
+
+.select-option {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.select-option:hover {
+  background: var(--surface-active);
+}
+
+.select-option.active {
+  background: var(--blue-soft);
+  color: var(--blue-text);
+  font-weight: 500;
+}
+
+/* 工具栏里的紧凑变体，弹层仍然按标准尺寸展开。 */
+.select.small {
+  height: 28px;
+  padding: 0 26px 0 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+
+.select.small .select-arrow {
+  right: 8px;
+  width: 10px;
+  height: 10px;
+}
+
+.select.small .select-menu {
+  right: 0;
+  left: auto;
+  min-width: 132px;
+  padding: 4px;
+}
+
+.select.small .select-option {
+  padding: 6px 8px;
+  font-size: 12.5px;
 }
 
 .song-list {
@@ -899,6 +1013,7 @@ select {
 .field-row {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
   gap: 14px;
   padding: 11px 0;
   border-top: 1px solid var(--border-soft);
@@ -908,10 +1023,18 @@ select {
   border-top: none;
 }
 
+/* 多行内容（标签组）让标签回到顶部，其余行一律中线对齐。 */
+.field-row--top {
+  align-items: start;
+}
+
 .field-label {
-  padding-top: 7px;
   color: var(--text-soft);
   font-size: 12.5px;
+}
+
+.field-row--top .field-label {
+  padding-top: 6px;
 }
 
 .field-body {
@@ -1035,6 +1158,181 @@ select {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* ---------- 歌单 ---------- */
+
+.badge {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.badge.is-builtin {
+  background: var(--blue-soft);
+  color: var(--blue-text);
+}
+
+.detail-hint {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.detail-error {
+  margin: 4px 0 0;
+  color: var(--red-text);
+  font-size: 12.5px;
+}
+
+.entry-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  transition: background 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease;
+}
+
+.entry-row:hover {
+  background: var(--surface-hover);
+}
+
+.entry-row.is-dragging {
+  opacity: 0.45;
+}
+
+.entry-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--blue);
+}
+
+.entry-row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--blue);
+}
+
+.grip {
+  flex: none;
+  width: 12px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: -2px;
+  cursor: grab;
+  user-select: none;
+}
+
+.entry-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.entry-title {
+  display: block;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.entry-sub {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: 86px 92px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border-soft);
+}
+
+.filter-row:first-child {
+  border-top: none;
+}
+
+.filter-tools {
+  display: flex;
+  gap: 1px;
+}
+
+.filter-values {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.filter-values .btn {
+  flex: none;
+}
+
+.filter-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.card-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.card-tools .card-title {
+  margin: 0;
+}
+
+/* ---------- 分段控件 ---------- */
+
+.seg {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--surface-muted);
+}
+
+.seg-item {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.seg-item:hover {
+  color: var(--text);
+}
+
+.seg-item.is-active {
+  background: var(--panel);
+  color: var(--text-strong);
+  box-shadow: 0 1px 3px var(--shadow);
 }
 
 /* ---------- 空状态 ---------- */
