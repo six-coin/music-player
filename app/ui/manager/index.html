@@ -128,6 +128,7 @@
           </svg>
           <h2 data-i18n="empty.library_title">库里还没有歌</h2>
           <p data-i18n="empty.library_hint">导入音乐后，这里会显示歌曲、歌单与标签的概况。</p>
+          <button class="btn primary" data-action="import" data-i18n="action.import_first">导入第一首歌</button>
         </div>
 
         <div class="columns" id="overview-columns">
@@ -297,9 +298,9 @@
         <div class="settings">
           <nav class="settings-nav" id="settings-nav" aria-label="设置分页">
             <button class="settings-tab is-active" data-settings="general" data-i18n="settings.general">通用</button>
+            <button class="settings-tab" data-settings="simple" data-i18n="settings.simple">轻量音乐播放器</button>
+            <button class="settings-tab" data-settings="player" data-i18n="settings.player">音乐播放器</button>
             <button class="settings-tab" data-settings="import" data-i18n="settings.import">导入</button>
-            <button class="settings-tab" data-settings="simple" data-i18n="settings.simple">simple</button>
-            <button class="settings-tab" data-settings="player" data-i18n="settings.player">player</button>
             <button class="settings-tab" data-settings="maintenance" data-i18n="settings.maintenance">维护</button>
           </nav>
           <div class="settings-body" id="settings-body"></div>
@@ -316,6 +317,19 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <div class="audition" id="audition" hidden>
+    <audio id="audition-audio" preload="auto"></audio>
+    <div class="audition-title" id="audition-title"></div>
+    <button class="icon-btn audition-toggle" id="audition-toggle" type="button" aria-label="播放">
+      <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+      <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M7 4h4v16H7zM13 4h4v16h-4z"/></svg>
+    </button>
+    <span class="audition-time" id="audition-current">0:00</span>
+    <input class="range audition-seek" id="audition-seek" type="range" min="0" max="1000" value="0" aria-label="进度">
+    <span class="audition-time" id="audition-total">0:00</span>
+    <button class="icon-btn" id="audition-close" type="button" aria-label="关闭">×</button>
   </div>
 
   <aside class="drawer" id="drawer" role="dialog" aria-modal="false" hidden>

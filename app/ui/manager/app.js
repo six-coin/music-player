@@ -11,6 +11,7 @@ const state = {
   authorQuery: "",
   settingsTab: "general",
   drawer: null,
+  auditionMd5: null,
   active: null,
   activeKind: null,
   serverSelection: null,
@@ -301,6 +302,32 @@ function renderOverview(data) {
   renderEmpty(data);
 }
 
+/* ---------- 空状态 ---------- */
+
+const EMPTY_ICONS = {
+  song: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  playlist: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  tag: '<path d="M20.59 13.41 12 22 2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><circle cx="7" cy="7" r="1.5"/>',
+  author:
+    '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+};
+
+function emptyList(kind, title, hint, action) {
+  return (
+    '<li class="list-empty">' +
+    '<svg class="empty-art" viewBox="0 0 24 24" aria-hidden="true">' +
+    (EMPTY_ICONS[kind] || EMPTY_ICONS.song) +
+    "</svg>" +
+    '<p class="list-empty-title">' + esc(title) + "</p>" +
+    (hint ? '<p class="list-empty-hint">' + esc(hint) + "</p>" : "") +
+    (action
+      ? '<button class="btn primary small" data-action="' + action.action + '">' +
+        esc(action.label) + "</button>"
+      : "") +
+    "</li>"
+  );
+}
+
 /* ---------- 歌曲列表 ---------- */
 
 function visibleMusics() {
@@ -359,8 +386,12 @@ function renderSongList() {
     : T("songs.count", { count: total });
 
   if (!musics.length) {
-    const message = total ? T("songs.no_match") : T("songs.empty_hint");
-    list.innerHTML = '<li class="row-empty">' + esc(message) + "</li>";
+    list.innerHTML = total
+      ? '<li class="row-empty">' + esc(T("songs.no_match")) + "</li>"
+      : emptyList("song", T("empty.library_title"), T("songs.empty_hint"), {
+          action: "import",
+          label: T("action.import_first"),
+        });
     return;
   }
 
@@ -484,6 +515,8 @@ function renderDetail() {
     flags.join("") +
     "</div></div>" +
     '<div class="detail-tools">' +
+    '<button class="btn ghost" data-audition="' + esc(music.md5) + '">' +
+    esc(T("audition.play")) + "</button>" +
     '<button class="btn ghost" data-replace="1">' + esc(T("song.replace_source")) + "</button>" +
     '<button class="btn ghost" data-menu="song">' +
     esc(T("action.more")) + "</button></div>" +
@@ -519,10 +552,9 @@ function renderDetail() {
     "</section>" +
 
     '<section class="card"><div class="card-tools"><h3 class="card-title">' +
-    esc(T("adaptation.title")) + '</h3><button class="btn ghost small" data-music-stats="' +
-    esc(music.md5) + '">' + esc(T("adaptation.view_detail")) + "</button></div>" +
-    '<p class="detail-hint" id="music-stats-line">' + esc(T("adaptation.loading")) +
-    "</p></section>" +
+    esc(T("adaptation.title")) + '</h3><span class="detail-hint" id="music-adapt-source"></span>' +
+    '</div><div class="adapt-inline" id="music-adapt">' + esc(T("adaptation.loading")) +
+    '</div><p class="detail-hint">' + esc(T("adaptation.song_scope_hint")) + "</p></section>" +
 
     '<p class="modal-note" style="margin-top:4px">' +
     esc(T("song.alias_count", { count: aliasCount })) + "</p>";
@@ -695,7 +727,12 @@ function renderPlaylistList() {
   qs("#playlists-count").textContent = T("playlist.total", { count: total });
 
   if (!items.length) {
-    list.innerHTML = '<li class="row-empty">' + esc(T("playlist.empty")) + "</li>";
+    list.innerHTML = total
+      ? '<li class="row-empty">' + esc(T("playlist.no_match")) + "</li>"
+      : emptyList("playlist", T("playlist.empty"), T("playlist.empty_hint"), {
+          action: "new_playlist",
+          label: T("playlist.new"),
+        });
     return;
   }
 
@@ -1027,7 +1064,12 @@ function renderTagList() {
   qs("#tags-count").textContent = T("tag.total", { count: total });
 
   if (!items.length) {
-    list.innerHTML = '<li class="row-empty">' + esc(T("tag.empty")) + "</li>";
+    list.innerHTML = total
+      ? '<li class="row-empty">' + esc(T("tag.no_match")) + "</li>"
+      : emptyList("tag", T("tag.empty"), T("tag.empty_hint"), {
+          action: "new_tag_group",
+          label: T("tag.new_group"),
+        });
     return;
   }
 
@@ -1156,7 +1198,12 @@ function renderAuthorList() {
   qs("#authors-count").textContent = T("author.total", { count: total });
 
   if (!items.length) {
-    list.innerHTML = '<li class="row-empty">' + esc(T("author.empty")) + "</li>";
+    list.innerHTML = total
+      ? '<li class="row-empty">' + esc(T("author.no_match")) + "</li>"
+      : emptyList("author", T("author.empty"), T("author.empty_hint"), {
+          action: "new_author",
+          label: T("author.new"),
+        });
     return;
   }
 
@@ -1863,6 +1910,63 @@ async function moveAuthor(uid, delta) {
   if (data) apply(data);
 }
 
+/* ---------- 试听 ---------- */
+
+function auditionAudio() {
+  return qs("#audition-audio");
+}
+
+async function auditionPlay(md5) {
+  const info = await call("audition_url", md5);
+  if (!info || !info.ok) {
+    toast((info && info.message) || T("audition.failed"), false);
+    return;
+  }
+
+  const audio = auditionAudio();
+  if (state.auditionMd5 !== md5) {
+    audio.src = info.url;
+    state.auditionMd5 = md5;
+    qs("#audition-title").textContent = info.title || "";
+    qs("#audition-total").textContent = formatDuration(info.duration_ms);
+    qs("#audition-seek").value = "0";
+    qs("#audition-current").textContent = "0:00";
+  }
+
+  qs("#audition").hidden = false;
+  qs("#app").classList.add("has-audition");
+  const started = audio.play();
+  if (started && started.catch) {
+    started.catch(function () {
+      toast(T("audition.failed"), false);
+    });
+  }
+}
+
+function auditionStop() {
+  const audio = auditionAudio();
+  audio.pause();
+  audio.removeAttribute("src");
+  audio.load();
+  state.auditionMd5 = null;
+  qs("#audition").hidden = true;
+  qs("#app").classList.remove("has-audition");
+}
+
+function syncAudition() {
+  const audio = auditionAudio();
+  const playing = Boolean(audio.src) && !audio.paused && !audio.ended;
+  qs("#audition-toggle .icon-play").hidden = playing;
+  qs("#audition-toggle .icon-pause").hidden = !playing;
+
+  const duration = audio.duration;
+  if (Number.isFinite(duration) && duration > 0) {
+    qs("#audition-seek").value = String(Math.round((audio.currentTime / duration) * 1000));
+    qs("#audition-current").textContent = formatDuration(audio.currentTime * 1000);
+    qs("#audition-total").textContent = formatDuration(duration * 1000);
+  }
+}
+
 /* ---------- 统计抽屉 ---------- */
 
 function percent(value) {
@@ -1955,46 +2059,36 @@ async function refreshDrawer() {
   if (data && data.ok) renderDrawer(data);
 }
 
-async function openMusicStats(md5) {
-  const data = await call("get_music_stats", md5);
-  if (!data || !data.ok) return;
-  const rows = (data.playlists || []).map(function (row) {
-    return {
-      md5: row.uid,
-      title: row.title + (row.enabled ? "" : "（" + T("adaptation.disabled") + "）"),
-      total: row.total,
-      rate: row.rate,
-      auto_skipped: row.auto_skipped,
-      probability: row.probability,
-    };
-  });
-  const body = rows.length
-    ? '<p class="modal-note">' +
-      esc(T("adaptation.song_stats_note", { total: data.total, rate: percent(data.rate) })) +
-      "</p>" + statsTable(rows, {})
-    : '<p class="modal-note">' + esc(T("adaptation.no_records")) + "</p>";
-
-  openModal({
-    title: T("adaptation.song_stats_title"),
-    body: body,
-    wide: true,
-    actions: [{ label: T("action.close"), primary: true, onClick: closeModal }],
-  });
-}
-
 async function loadMusicStats(md5) {
-  const line = qs("#music-stats-line");
-  if (!line) return;
+  const host = qs("#music-adapt");
+  if (!host) return;
   const data = await call("get_music_stats", md5);
-  if (!data || !data.ok || !data.playlists.length) {
-    line.textContent = T("adaptation.no_records");
+  if (!data || !data.ok) {
+    host.textContent = T("adaptation.no_records");
     return;
   }
-  line.textContent = T("adaptation.song_summary", {
-    playlists: data.playlists.length,
-    total: data.total,
-    rate: percent(data.rate),
-  });
+
+  const source = qs("#music-adapt-source");
+  if (source && data.playlist) {
+    source.textContent = T("adaptation.song_source", { name: data.playlist.title });
+  }
+
+  if (!data.in_playlist) {
+    host.innerHTML = '<p class="tag-hint">' + esc(T("adaptation.not_in_default")) + "</p>";
+    return;
+  }
+
+  const cell = function (value, label) {
+    return (
+      '<div class="adapt-cell"><span class="adapt-value">' + esc(value) +
+      '</span><span class="adapt-label">' + esc(label) + "</span></div>"
+    );
+  };
+  host.innerHTML =
+    cell(String(data.total), T("adaptation.col_records")) +
+    cell(percent(data.rate), T("adaptation.col_rate")) +
+    cell(String(data.auto_skipped), T("adaptation.col_auto")) +
+    cell(percent(data.probability), T("adaptation.col_probability"));
 }
 
 /* ---------- 设置 ---------- */
@@ -2247,19 +2341,6 @@ function settingsMaintenance() {
             esc(T("settings.data_dir")) + "</button>" +
             '<button class="btn ghost small" data-action="log_dir">' +
             esc(T("settings.log_dir")) + "</button>"
-        )
-    ) +
-    settingsCard(
-      T("settings.about"),
-      settingsRow(
-          T("settings.version"),
-          "",
-          '<span class="path-text">' + esc((state.data.status || {}).version || "") + "</span>"
-        ) +
-        settingsRow(
-          T("settings.program_dir"),
-          "",
-          '<span class="path-text">' + esc((state.data.status || {}).program_dir || "") + "</span>"
         )
     )
   );
@@ -3383,6 +3464,9 @@ function bindEvents() {
       else if (name === "clear_import_dir") patchSetting("import.dir", "");
       else if (name === "refresh_status") refreshStatus();
       else if (name === "goto_default") goSection("playlists");
+      else if (name === "new_playlist") openCreatePlaylist();
+      else if (name === "new_tag_group") openCreateTagGroup();
+      else if (name === "new_author") openCreateAuthor();
       else if (name === "settings") goSection("settings");
       return;
     }
@@ -3935,6 +4019,27 @@ function bindEvents() {
     }
   });
 
+  /* ---------- 试听条 ---------- */
+
+  qs("#audition-toggle").addEventListener("click", function () {
+    const audio = auditionAudio();
+    if (!audio.src) return;
+    if (audio.paused) audio.play();
+    else audio.pause();
+  });
+
+  qs("#audition-close").addEventListener("click", auditionStop);
+
+  qs("#audition-seek").addEventListener("input", function (event) {
+    const audio = auditionAudio();
+    if (!Number.isFinite(audio.duration) || !audio.duration) return;
+    audio.currentTime = (Number(event.target.value) / 1000) * audio.duration;
+  });
+
+  ["play", "pause", "ended", "timeupdate", "loadedmetadata", "emptied"].forEach(function (name) {
+    auditionAudio().addEventListener(name, syncAudition);
+  });
+
   /* ---------- 设置页 ---------- */
 
   qs("#settings-nav").addEventListener("click", function (event) {
@@ -3994,7 +4099,64 @@ function bindEvents() {
     await patchSetting(select.dataset.settingSelect, select.dataset.value);
   });
 
-  /* ---------- 统计抽屉 ---------- */
+  /* ---------- 试听 ---------- */
+
+function auditionAudio() {
+  return qs("#audition-audio");
+}
+
+async function auditionPlay(md5) {
+  const info = await call("audition_url", md5);
+  if (!info || !info.ok) {
+    toast((info && info.message) || T("audition.failed"), false);
+    return;
+  }
+
+  const audio = auditionAudio();
+  if (state.auditionMd5 !== md5) {
+    audio.src = info.url;
+    state.auditionMd5 = md5;
+    qs("#audition-title").textContent = info.title || "";
+    qs("#audition-total").textContent = formatDuration(info.duration_ms);
+    qs("#audition-seek").value = "0";
+    qs("#audition-current").textContent = "0:00";
+  }
+
+  qs("#audition").hidden = false;
+  qs("#app").classList.add("has-audition");
+  const started = audio.play();
+  if (started && started.catch) {
+    started.catch(function () {
+      toast(T("audition.failed"), false);
+    });
+  }
+}
+
+function auditionStop() {
+  const audio = auditionAudio();
+  audio.pause();
+  audio.removeAttribute("src");
+  audio.load();
+  state.auditionMd5 = null;
+  qs("#audition").hidden = true;
+  qs("#app").classList.remove("has-audition");
+}
+
+function syncAudition() {
+  const audio = auditionAudio();
+  const playing = Boolean(audio.src) && !audio.paused && !audio.ended;
+  qs("#audition-toggle .icon-play").hidden = playing;
+  qs("#audition-toggle .icon-pause").hidden = !playing;
+
+  const duration = audio.duration;
+  if (Number.isFinite(duration) && duration > 0) {
+    qs("#audition-seek").value = String(Math.round((audio.currentTime / duration) * 1000));
+    qs("#audition-current").textContent = formatDuration(audio.currentTime * 1000);
+    qs("#audition-total").textContent = formatDuration(duration * 1000);
+  }
+}
+
+/* ---------- 统计抽屉 ---------- */
 
   qs("#drawer-close").addEventListener("click", closeDrawer);
 
@@ -4048,9 +4210,9 @@ function bindEvents() {
       return;
     }
 
-    const stats = event.target.closest("[data-music-stats]");
-    if (stats) {
-      openMusicStats(stats.dataset.musicStats);
+    const audition = event.target.closest("[data-audition]");
+    if (audition) {
+      auditionPlay(audition.dataset.audition);
       return;
     }
 

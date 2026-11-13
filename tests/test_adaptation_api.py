@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.core.stats import SongStats
+from app.models import Filter
 from app.ui.manager.api import ManagerApi
 
 
@@ -93,23 +94,41 @@ def test_reset_stats_single_and_all(tmp_path, music_factory):
     assert api.stats.load(playlist.uid) == {}
 
 
-def test_music_stats_aggregates_playlists(tmp_path, music_factory):
+def test_music_stats_uses_default_playlist_only(tmp_path, music_factory):
     api = make_api(tmp_path)
     api.library.upsert_music(music_factory("a"))
     api.library.save()
-    first = api.playlists.default()
-    second = api.playlists.create("另一个", "manual")
-    second.entries = ["a" * 32]
-    api.stats.save(first.uid, {"a" * 32: SongStats(records="11", auto_skipped=2)})
-    api.stats.save(second.uid, {"a" * 32: SongStats(records="0")})
+    default = api.playlists.default()
+    other = api.playlists.create("另一个", "manual")
+    other.entries = ["a" * 32]
+    api.stats.save(default.uid, {"a" * 32: SongStats(records="1" * 50 + "0" * 50, auto_skipped=2)})
+    api.stats.save(other.uid, {"a" * 32: SongStats(records="0" * 10)})
 
     data = api.get_music_stats("a" * 32)
 
     assert data["ok"] is True
-    assert len(data["playlists"]) == 2
-    assert data["total"] == 3
-    assert data["skips"] == 2
-    assert data["rate"] == pytest.approx(2 / 3)
+    assert data["playlist"]["uid"] == default.uid
+    assert data["in_playlist"] is True
+    assert data["total"] == 100
+    assert data["skips"] == 50
+    assert data["auto_skipped"] == 2
+    assert data["probability"] == pytest.approx(0.475)
+
+
+def test_music_stats_reports_when_not_in_default_playlist(tmp_path, music_factory):
+    api = make_api(tmp_path)
+    api.library.upsert_music(music_factory("a"))
+    api.library.upsert_music(music_factory("b"))
+    api.library.save()
+    default = api.playlists.default()
+    default.filters = [Filter(mode="include", target="music", values=["b" * 32])]
+    api.playlists.save()
+
+    data = api.get_music_stats("a" * 32)
+
+    assert data["ok"] is True
+    assert data["in_playlist"] is False
+    assert data["total"] == 0
 
 
 def test_music_stats_for_unknown_song(tmp_path):

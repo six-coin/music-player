@@ -1,6 +1,6 @@
 [project]
 name = "music-player"
-version = "0.1.0"
+version = "1.0.0.dev1"
 description = "本地音乐库管理器与播放器。"
 readme = "README.md"
 requires-python = ">=3.11"

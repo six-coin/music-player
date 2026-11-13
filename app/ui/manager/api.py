@@ -37,6 +37,7 @@ from app.models import (
 from app.settings import THEMES, SettingsStore
 from app.system import ffmpeg
 from app.system import theme as theme_tool
+from app.system.media_server import MediaServer
 
 SECTIONS = ("overview", "songs", "playlists", "tags", "authors", "settings")
 RECENT_LIMIT = 5
@@ -65,6 +66,7 @@ class ManagerApi:
         self.section = "overview"
         self.selection: dict[str, str] | None = None
         self.status = self._system_status()
+        self._media: MediaServer | None = None
         self._lock = threading.RLock()
         self._window = None
         self._tasks: dict[str, dict[str, Any]] = {}
@@ -89,6 +91,9 @@ class ManagerApi:
                 self.playlists.save()
         except Exception as error:  # 关闭时保存失败不该挡住窗口退出
             logger.error("退出前保存失败：{}", error)
+        if self._media is not None:
+            self._media.stop()
+            self._media = None
 
     # ---------- 读取 ----------
 
@@ -853,40 +858,38 @@ class ManagerApi:
             }
 
     def get_music_stats(self, md5: str) -> dict[str, Any]:
-        """一首歌在各个歌单里的记录情况，供歌曲详情的「自适应」卡片使用。"""
+        """歌曲详情用：只看「默认歌单」这一套配置与记录。
+
+        自适应是按歌单各自独立配置的，同一首歌在不同歌单里的记录互不相干；
+        歌曲页没有「哪个歌单」的上下文，约定用默认歌单的数据。
+        """
         with self._lock:
             if md5 not in self.library.musics:
-                return {"ok": False, "playlists": [], "total": 0, "skips": 0, "rate": 0.0}
+                return {"ok": False}
+            playlist = self.playlists.default()
             defaults = self._adaptation_defaults()
-            rows: list[dict[str, Any]] = []
-            total = 0
-            skips = 0
-            for playlist in self.playlists.all():
-                summary = self.stats.summary(playlist.uid).get(md5)
-                if not summary:
-                    continue
-                params = effective(playlist.adaptation, defaults)
-                count = int(summary["total"])
-                rows.append(
-                    {
-                        "uid": playlist.uid,
-                        "title": playlist.name or i18n.t("overview.default_playlist"),
-                        "enabled": playlist.adaptation.enabled,
-                        "total": count,
-                        "skips": int(summary["skips"]),
-                        "rate": float(summary["rate"]),
-                        "auto_skipped": int(summary["auto_skipped"]),
-                        "probability": skip_probability(str(summary["records"]), params),
-                    }
-                )
-                total += count
-                skips += int(summary["skips"])
+            params = effective(playlist.adaptation, defaults)
+            try:
+                content = self.playlists.resolve(playlist.uid, self.library)
+                in_playlist = md5 in content.md5s
+            except Exception:
+                in_playlist = False
+            summary = self.stats.summary(playlist.uid).get(md5) or {}
+            records = str(summary.get("records", ""))
             return {
                 "ok": True,
-                "playlists": rows,
-                "total": total,
-                "skips": skips,
-                "rate": skips / total if total else 0.0,
+                "playlist": {
+                    "uid": playlist.uid,
+                    "title": playlist.name or i18n.t("overview.default_playlist"),
+                    "enabled": playlist.adaptation.enabled,
+                },
+                "in_playlist": in_playlist,
+                "params": _params_dict(params),
+                "total": len(records),
+                "skips": records.count("1"),
+                "rate": skip_rate(records),
+                "auto_skipped": int(summary.get("auto_skipped", 0) or 0),
+                "probability": skip_probability(records, params),
             }
 
     def reset_stats(self, uid: str, md5: str = "") -> dict[str, Any]:
@@ -1183,6 +1186,26 @@ class ManagerApi:
                 "song.deleted", count=report.removed, playlists=report.playlists
             )
             return snapshot
+
+    # ---------- 试听 ----------
+
+    def audition_url(self, md5: str) -> dict[str, Any]:
+        """给底部试听条一个能 Range 的地址；播放控制都在网页里做。"""
+        with self._lock:
+            music = self.library.musics.get(md5)
+            if music is None:
+                return {"ok": False}
+            path = paths.music_path(md5, music.ext)
+            if not path.exists():
+                return {"ok": False, "message": i18n.t("song.missing_file")}
+            if self._media is None:
+                self._media = MediaServer(paths.MUSIC_DIR)
+            return {
+                "ok": True,
+                "url": self._media.url(path.name),
+                "title": music.title,
+                "duration_ms": music.duration_ms,
+            }
 
     # ---------- 系统 ----------
 
