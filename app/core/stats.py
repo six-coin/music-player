@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from app import paths
 from app.core.adaptation import push, sanitize, skip_rate
 from app.errors import ConfigError
@@ -99,6 +101,21 @@ class StatsStore:
         lock_path = self.path_for(playlist_uid).with_suffix(".lock")
         with exclusive(lock_path):
             self.save(playlist_uid, {})
+
+    def clear_all(self) -> int:
+        """删掉全部统计文件，返回删掉的份数。"""
+        if not self.directory.exists():
+            return 0
+        removed = 0
+        for file in self.directory.glob("*.json"):
+            lock_path = file.with_suffix(".lock")
+            with exclusive(lock_path):
+                try:
+                    file.unlink()
+                    removed += 1
+                except OSError:
+                    logger.error("删除统计文件失败：{}", file)
+        return removed
 
     def move_key(self, playlist_uid: str, old_md5: str, new_md5: str, window: int) -> bool:
         """换源时把统计从旧标识搬到新标识；新键已存在就按先后合并。"""

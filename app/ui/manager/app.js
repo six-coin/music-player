@@ -9,6 +9,8 @@ const state = {
   playlistQuery: "",
   tagQuery: "",
   authorQuery: "",
+  settingsTab: "general",
+  drawer: null,
   active: null,
   activeKind: null,
   serverSelection: null,
@@ -181,10 +183,10 @@ function applyNav(section) {
   else if (section === "playlists") showView("playlists");
   else if (section === "tags") showView("tags");
   else if (section === "authors") showView("authors");
+  else if (section === "settings") showView("settings");
   else showView("pending");
-  if (section === "settings") {
-    qs("#pending-title").textContent = T("nav." + section);
-  }
+  if (section === "settings") renderSettings();
+  if (section !== "playlists") closeDrawer();
 }
 
 function renderSummary(data) {
@@ -516,6 +518,12 @@ function renderDetail() {
     '<div class="field-body">' + formatDate(music.created_at) + "</div></div>" +
     "</section>" +
 
+    '<section class="card"><div class="card-tools"><h3 class="card-title">' +
+    esc(T("adaptation.title")) + '</h3><button class="btn ghost small" data-music-stats="' +
+    esc(music.md5) + '">' + esc(T("adaptation.view_detail")) + "</button></div>" +
+    '<p class="detail-hint" id="music-stats-line">' + esc(T("adaptation.loading")) +
+    "</p></section>" +
+
     '<p class="modal-note" style="margin-top:4px">' +
     esc(T("song.alias_count", { count: aliasCount })) + "</p>";
 }
@@ -524,11 +532,13 @@ function renderSongs() {
   renderSongList();
   renderSelectionBar();
   renderDetail();
+  const music = state.activeKind === "music" && state.active ? musicByMd5(state.active) : null;
+  if (music) loadMusicStats(music.md5);
 }
 
 /* ---------- 自绘下拉框 ---------- */
 
-function selectMarkup(attrs, options, value) {
+function selectMarkup(attrs, options, value, size) {
   const current = options.find(function (item) {
     return item.value === value;
   });
@@ -542,7 +552,7 @@ function selectMarkup(attrs, options, value) {
     })
     .join("");
   return (
-    '<div class="select small" ' + attrs +
+    '<div class="select ' + (size === undefined ? "small" : size) + '" ' + attrs +
     ' role="combobox" tabindex="0" aria-expanded="false" aria-haspopup="listbox" data-value="' +
     esc(value) + '"><span class="select-value">' + esc(current ? current.label : "") +
     '</span><svg class="select-arrow" viewBox="0 0 12 12" aria-hidden="true">' +
@@ -754,7 +764,98 @@ function renderPlaylistDetail() {
       : '<button class="btn ghost" data-menu="playlist">' + esc(T("action.more")) + "</button>") +
     "</div></header>" +
     '<section class="card">' + nameRow + "</section>" +
-    content;
+    content +
+    adaptationCard(playlist);
+}
+
+/* ---------- 自适应 ---------- */
+
+function adaptationDefaults() {
+  const common = (state.data && state.data.settings && state.data.settings.common) || {};
+  return common.adaptation || {};
+}
+
+function adaptRow(key, label, hint, unit, value, fallback, overridden, limits) {
+  const number = value === null || value === undefined ? fallback : value;
+  const range =
+    limits && limits.min !== undefined
+      ? ' min="' + limits.min + '" max="' + limits.max + '" step="' + (limits.step || 1) + '"'
+      : "";
+  return (
+    '<div class="adapt-row"><div><span class="adapt-name">' + esc(label) + "</span>" +
+    '<span class="adapt-hint">' + esc(hint) + "</span></div>" +
+    '<input class="input" type="number" data-adapt="' + key + '" value="' + esc(number) + '"' +
+    range + (overridden ? "" : " disabled") + ">" +
+    '<span class="adapt-unit">' + esc(unit) + "</span>" +
+    '<label class="check adapt-inherit"><input type="checkbox" data-inherit="' + key + '"' +
+    (overridden ? "" : " checked") + "><span>" + esc(T("adaptation.inherit")) + "</span></label>" +
+    "</div>"
+  );
+}
+
+function adaptationCard(playlist) {
+  const adapt = playlist.adaptation || {};
+  const defaults = adaptationDefaults();
+  const overridden = function (key) {
+    return adapt[key] !== null && adapt[key] !== undefined;
+  };
+  const globalText = function (key, unit) {
+    return unit
+      ? T("adaptation.global_unit", { value: defaults[key], unit: unit })
+      : T("adaptation.global", { value: defaults[key] });
+  };
+
+  return (
+    '<section class="card"><div class="card-tools"><h3 class="card-title">' +
+    esc(T("adaptation.title")) + '</h3><button class="btn ghost small" data-stats="' +
+    esc(playlist.uid) + '">' + esc(T("adaptation.view_stats")) + "</button></div>" +
+    '<div class="toggle-row"><div class="toggle-body"><div class="toggle-title">' +
+    esc(T("adaptation.enabled")) + '</div><p class="toggle-hint">' +
+    esc(T("adaptation.enabled_hint")) + "</p></div>" +
+    '<button class="switch" type="button" role="switch" data-adapt-enabled aria-checked="' +
+    (adapt.enabled ? "true" : "false") + '"><span class="switch-knob"></span></button></div>' +
+    adaptRow(
+      "window",
+      T("adaptation.window"),
+      globalText("window", T("adaptation.times")),
+      T("adaptation.times"),
+      adapt.window,
+      defaults.window,
+      overridden("window"),
+      { min: 10, max: 1000 }
+    ) +
+    adaptRow(
+      "min_plays",
+      T("adaptation.min_plays"),
+      globalText("min_plays", T("adaptation.times")),
+      T("adaptation.times"),
+      adapt.min_plays,
+      defaults.min_plays,
+      overridden("min_plays"),
+      { min: 0, max: 1000 }
+    ) +
+    adaptRow(
+      "base",
+      T("adaptation.base"),
+      globalText("base", ""),
+      "",
+      adapt.base,
+      defaults.base,
+      overridden("base"),
+      { min: 0, max: 0.99, step: 0.01 }
+    ) +
+    adaptRow(
+      "skip_seconds",
+      T("adaptation.skip_seconds"),
+      globalText("skip_seconds", T("adaptation.seconds")),
+      T("adaptation.seconds"),
+      adapt.skip_seconds,
+      defaults.skip_seconds,
+      overridden("skip_seconds"),
+      { min: 5, max: 300 }
+    ) +
+    "</section>"
+  );
 }
 
 function manualPlaylistCard(playlist) {
@@ -1168,6 +1269,9 @@ function apply(data) {
   else if (data.section === "playlists") renderPlaylists();
   else if (data.section === "tags") renderTags();
   else if (data.section === "authors") renderAuthors();
+  else if (data.section === "settings") renderSettings();
+
+  if (state.drawer) refreshDrawer();
 
   if (data.message) toast(data.message, data.ok !== false);
 }
@@ -1757,6 +1861,494 @@ function confirmDeleteAuthor(author) {
 async function moveAuthor(uid, delta) {
   const data = await call("move_author", uid, delta);
   if (data) apply(data);
+}
+
+/* ---------- 统计抽屉 ---------- */
+
+function percent(value) {
+  return (Math.round(value * 1000) / 10).toFixed(1).replace(/\.0$/, "") + "%";
+}
+
+function rateCell(rate) {
+  const width = Math.min(100, Math.round(rate * 100));
+  return (
+    '<div class="rate"><div class="rate-track"><div class="rate-fill' +
+    (rate >= 0.6 ? " is-high" : "") + '" style="width:' + width + '%"></div></div>' +
+    '<span class="rate-text">' + esc(percent(rate)) + "</span></div>"
+  );
+}
+
+function statsTable(rows, options) {
+  const settings = options || {};
+  const head =
+    "<tr><th>" + esc(T("adaptation.col_song")) + "</th>" +
+    '<th class="num">' + esc(T("adaptation.col_records")) + "</th>" +
+    "<th>" + esc(T("adaptation.col_rate")) + "</th>" +
+    '<th class="num">' + esc(T("adaptation.col_auto")) + "</th>" +
+    '<th class="num">' + esc(T("adaptation.col_probability")) + "</th>" +
+    (settings.reset ? "<th></th>" : "") + "</tr>";
+
+  const body = rows
+    .map(function (row) {
+      const reset = settings.reset
+        ? '<td><button class="btn ghost small" data-reset-md5="' + esc(row.md5) + '">' +
+          esc(T("adaptation.reset_one")) + "</button></td>"
+        : "";
+      return (
+        '<tr><td class="cell-title" title="' + esc(row.title) + '">' + esc(row.title) + "</td>" +
+        '<td class="num">' + row.total + "</td>" +
+        "<td>" + rateCell(row.rate) + "</td>" +
+        '<td class="num">' + row.auto_skipped + "</td>" +
+        '<td class="num">' + esc(percent(row.probability)) + "</td>" +
+        reset +
+        "</tr>"
+      );
+    })
+    .join("");
+
+  return '<table class="drawer-table"><thead>' + head + "</thead><tbody>" + body + "</tbody></table>";
+}
+
+async function openStatsDrawer(playlist) {
+  const data = await call("get_playlist_stats", playlist.uid);
+  if (!data || !data.ok) {
+    toast(T("adaptation.stats_failed"), false);
+    return;
+  }
+  state.drawer = playlist.uid;
+  qs("#drawer-title").textContent = T("adaptation.stats_title", { name: playlist.title });
+  renderDrawer(data);
+  qs("#drawer").hidden = false;
+}
+
+function closeDrawer() {
+  if (!state.drawer) return;
+  state.drawer = null;
+  qs("#drawer").hidden = true;
+  qs("#drawer-body").innerHTML = "";
+}
+
+function renderDrawer(data) {
+  const params = data.params || {};
+  const note = T("adaptation.stats_note", {
+    window: params.window,
+    min: params.min_plays,
+    base: params.base,
+    seconds: params.skip_seconds,
+  });
+  const rows = data.rows || [];
+  const body = rows.length
+    ? statsTable(rows, { reset: true })
+    : '<p class="drawer-note">' + esc(T("adaptation.stats_empty")) + "</p>";
+
+  qs("#drawer-body").innerHTML =
+    '<p class="drawer-note">' + esc(note) + "</p>" +
+    '<div class="settings-actions" style="padding-bottom:10px">' +
+    '<button class="btn ghost small" data-reset-all="1">' +
+    esc(T("adaptation.reset_all")) + "</button></div>" +
+    body;
+}
+
+async function refreshDrawer() {
+  if (!state.drawer) return;
+  const data = await call("get_playlist_stats", state.drawer);
+  if (data && data.ok) renderDrawer(data);
+}
+
+async function openMusicStats(md5) {
+  const data = await call("get_music_stats", md5);
+  if (!data || !data.ok) return;
+  const rows = (data.playlists || []).map(function (row) {
+    return {
+      md5: row.uid,
+      title: row.title + (row.enabled ? "" : "（" + T("adaptation.disabled") + "）"),
+      total: row.total,
+      rate: row.rate,
+      auto_skipped: row.auto_skipped,
+      probability: row.probability,
+    };
+  });
+  const body = rows.length
+    ? '<p class="modal-note">' +
+      esc(T("adaptation.song_stats_note", { total: data.total, rate: percent(data.rate) })) +
+      "</p>" + statsTable(rows, {})
+    : '<p class="modal-note">' + esc(T("adaptation.no_records")) + "</p>";
+
+  openModal({
+    title: T("adaptation.song_stats_title"),
+    body: body,
+    wide: true,
+    actions: [{ label: T("action.close"), primary: true, onClick: closeModal }],
+  });
+}
+
+async function loadMusicStats(md5) {
+  const line = qs("#music-stats-line");
+  if (!line) return;
+  const data = await call("get_music_stats", md5);
+  if (!data || !data.ok || !data.playlists.length) {
+    line.textContent = T("adaptation.no_records");
+    return;
+  }
+  line.textContent = T("adaptation.song_summary", {
+    playlists: data.playlists.length,
+    total: data.total,
+    rate: percent(data.rate),
+  });
+}
+
+/* ---------- 设置 ---------- */
+
+function settingsRow(title, hint, control, hintClass) {
+  return (
+    '<div class="settings-row"><div class="settings-row-main">' +
+    '<div class="settings-row-title">' + esc(title) + "</div>" +
+    (hint
+      ? '<p class="settings-row-hint' + (hintClass ? " " + hintClass : "") + '">' +
+        esc(hint) + "</p>"
+      : "") +
+    '</div><div class="settings-row-control">' + control + "</div></div>"
+  );
+}
+
+function settingsCard(title, body) {
+  return (
+    '<section class="card"><h3 class="card-title">' + esc(title) + "</h3>" + body + "</section>"
+  );
+}
+
+function switchMarkup(attr, on, label) {
+  return (
+    '<button class="switch" type="button" role="switch" ' + attr + ' aria-checked="' +
+    (on ? "true" : "false") + '"' + (label ? ' aria-label="' + esc(label) + '"' : "") +
+    '><span class="switch-knob"></span></button>'
+  );
+}
+
+function settingsGeneral() {
+  const common = (state.data.settings && state.data.settings.common) || {};
+  const adapt = common.adaptation || {};
+  const status = state.data.status || {};
+
+  const themes = [
+    ["system", T("settings.theme_system")],
+    ["light", T("settings.theme_light")],
+    ["dark", T("settings.theme_dark")],
+  ];
+  const themeSeg =
+    '<div class="seg" id="theme-seg">' +
+    themes
+      .map(function (item) {
+        return (
+          '<button class="seg-item' + (common.theme === item[0] ? " is-active" : "") +
+          '" type="button" data-theme-value="' + item[0] + '">' + esc(item[1]) + "</button>"
+        );
+      })
+      .join("") +
+    "</div>";
+
+  const adaptRow = function (key, label, unit, min, max, step) {
+    return settingsRow(
+      label,
+      T("adaptation.range", { min: min, max: max }),
+      '<input class="input" type="number" data-default="' + key + '" value="' +
+        esc(adapt[key]) + '" min="' + min + '" max="' + max + '" step="' + step +
+        '" style="width:110px"><span class="adapt-unit">' + esc(unit) + "</span>"
+    );
+  };
+
+  return (
+    settingsCard(
+      T("settings.appearance"),
+      settingsRow(T("settings.theme"), T("settings.theme_hint"), themeSeg) +
+        settingsRow(
+          T("settings.language"),
+          T("settings.language_hint"),
+          '<span class="path-text">' + esc(T("language.name")) + "</span>"
+        )
+    ) +
+    settingsCard(
+      T("settings.adaptation_defaults"),
+      '<p class="settings-row-hint" style="margin:0 0 4px">' +
+        esc(T("settings.adaptation_hint")) + "</p>" +
+        adaptRow("window", T("adaptation.window"), T("adaptation.times"), 10, 1000, 1) +
+        adaptRow("min_plays", T("adaptation.min_plays"), T("adaptation.times"), 0, 1000, 1) +
+        adaptRow("base", T("adaptation.base"), "", 0, 0.99, 0.01) +
+        adaptRow("skip_seconds", T("adaptation.skip_seconds"), T("adaptation.seconds"), 5, 300, 1)
+    ) +
+    settingsCard(
+      T("settings.paths"),
+      settingsRow(
+        T("settings.data_dir"),
+        status.data_dir || "",
+        '<button class="btn ghost small" data-action="data_dir">' +
+          esc(T("action.open")) + "</button>",
+        "path-text"
+      ) +
+        settingsRow(
+          T("settings.log_dir"),
+          status.log_dir || "",
+          '<button class="btn ghost small" data-action="log_dir">' +
+            esc(T("action.open")) + "</button>",
+          "path-text"
+        )
+    )
+  );
+}
+
+function settingsImport() {
+  const section = (state.data.settings && state.data.settings.import) || {};
+  const status = state.data.status || {};
+  const ffmpegStatus = status.ffmpeg || { available: false, path: "" };
+  const probeStatus = status.ffprobe || { available: false, path: "" };
+
+  const statusLine = function (info, label) {
+    return (
+      '<span class="status-dot' + (info.available ? " is-ok" : "") + '"></span>' +
+      esc(info.available ? T("settings.detected") : T("settings.not_detected")) +
+      (info.path ? '<span class="path-text">' + esc(info.path) + "</span>" : "")
+    );
+  };
+
+  return (
+    settingsCard(
+      T("settings.import_section"),
+      settingsRow(
+        T("settings.import_dir"),
+        T("settings.import_dir_hint"),
+        '<input class="input" id="import-dir" value="' + esc(section.dir || "") +
+          '" placeholder="' + esc(T("settings.import_dir_placeholder")) + '">' +
+          '<button class="btn ghost small" data-action="browse_import_dir">' +
+          esc(T("action.browse")) + "</button>" +
+          '<button class="btn ghost small" data-action="clear_import_dir">' +
+          esc(T("action.clear_field")) + "</button>"
+      ) +
+        settingsRow(
+          T("settings.clean_audio"),
+          T("settings.clean_audio_hint"),
+          switchMarkup(
+            'data-setting-switch="import.clean_audio"',
+            section.clean_audio !== false,
+            T("settings.clean_audio")
+          )
+        )
+    ) +
+    settingsCard(
+      T("settings.ffmpeg"),
+      settingsRow(T("settings.ffmpeg_binary"), "", statusLine(ffmpegStatus)) +
+        settingsRow(T("settings.ffprobe_binary"), "", statusLine(probeStatus)) +
+        '<div class="settings-actions"><button class="btn ghost small" ' +
+        'data-action="refresh_status">' + esc(T("settings.refresh")) + "</button></div>"
+    )
+  );
+}
+
+function settingsSimple() {
+  const section = (state.data.settings && state.data.settings.simple) || {};
+  const builtin = ((state.data.playlists || []) || []).find(function (item) {
+    return item.builtin;
+  });
+  const defaultPlaylist = builtin ? builtin.title : "";
+
+  return settingsCard(
+    T("settings.simple_section"),
+    '<p class="settings-row-hint" style="margin:0 0 4px">' +
+      esc(T("settings.simple_hint")) + "</p>" +
+      settingsRow(
+        T("settings.play_order"),
+        T("settings.simple_order_hint"),
+        selectMarkup(
+          'data-setting-select="simple.order"',
+          [
+            { value: "shuffle", label: T("settings.order_shuffle") },
+            { value: "list_loop", label: T("settings.order_list_loop") },
+          ],
+          section.order || "shuffle",
+          ""
+        )
+      ) +
+      settingsRow(
+        T("settings.default_playlist"),
+        T("settings.default_playlist_hint"),
+        '<span class="path-text">' + esc(defaultPlaylist) + "</span>" +
+          '<button class="btn ghost small" data-action="goto_default">' +
+          esc(T("settings.goto")) + "</button>"
+      )
+  );
+}
+
+function settingsPlayer() {
+  const section = (state.data.settings && state.data.settings.player) || {};
+  const volume = Math.round((section.volume === undefined ? 0.8 : section.volume) * 100);
+
+  return settingsCard(
+    T("settings.player_section"),
+    settingsRow(
+      T("settings.volume"),
+      T("settings.volume_hint"),
+      '<div class="volume-line"><input class="range" id="player-volume" type="range" ' +
+        'min="0" max="100" step="1" value="' + volume + '">' +
+        '<span class="volume-value" id="player-volume-value">' + volume + "%</span></div>"
+    ) +
+      settingsRow(
+        T("settings.play_order"),
+        T("settings.player_order_hint"),
+        selectMarkup(
+          'data-setting-select="player.order"',
+          [
+            { value: "shuffle", label: T("settings.order_shuffle") },
+            { value: "list_loop", label: T("settings.order_list_loop") },
+            { value: "repeat_one", label: T("settings.order_repeat_one") },
+          ],
+          section.order || "shuffle",
+          ""
+        )
+      ) +
+      settingsRow(
+        T("settings.remember_progress"),
+        T("settings.remember_progress_hint"),
+        switchMarkup(
+          'data-setting-switch="player.remember_progress"',
+          section.remember_progress !== false,
+          T("settings.remember_progress")
+        )
+      )
+  );
+}
+
+function settingsMaintenance() {
+  return (
+    settingsCard(
+      T("settings.maintenance_section"),
+      settingsRow(
+        T("settings.check"),
+        T("settings.check_hint"),
+        '<button class="btn ghost small" data-action="integrity">' +
+          esc(T("settings.check_quick")) + "</button>" +
+          '<button class="btn ghost small" data-action="integrity_deep">' +
+          esc(T("settings.check_deep")) + "</button>"
+      ) +
+        settingsRow(
+          T("settings.clean_orphans"),
+          T("settings.clean_orphans_hint"),
+          '<button class="btn ghost small" data-action="fix_orphans">' +
+            esc(T("settings.clean_orphans")) + "</button>"
+        ) +
+        settingsRow(
+          T("settings.clear_stats"),
+          T("settings.clear_stats_hint"),
+          '<button class="btn danger-ghost small" data-action="clear_stats">' +
+            esc(T("settings.clear_stats")) + "</button>"
+        ) +
+        settingsRow(
+          T("settings.dirs"),
+          T("settings.dirs_hint"),
+          '<button class="btn ghost small" data-action="data_dir">' +
+            esc(T("settings.data_dir")) + "</button>" +
+            '<button class="btn ghost small" data-action="log_dir">' +
+            esc(T("settings.log_dir")) + "</button>"
+        )
+    ) +
+    settingsCard(
+      T("settings.about"),
+      settingsRow(
+          T("settings.version"),
+          "",
+          '<span class="path-text">' + esc((state.data.status || {}).version || "") + "</span>"
+        ) +
+        settingsRow(
+          T("settings.program_dir"),
+          "",
+          '<span class="path-text">' + esc((state.data.status || {}).program_dir || "") + "</span>"
+        )
+    )
+  );
+}
+
+function renderSettings() {
+  qsa(".settings-tab").forEach(function (tab) {
+    tab.classList.toggle("is-active", tab.dataset.settings === state.settingsTab);
+  });
+  const body = qs("#settings-body");
+  if (!state.data) return;
+  if (state.settingsTab === "import") body.innerHTML = settingsImport();
+  else if (state.settingsTab === "simple") body.innerHTML = settingsSimple();
+  else if (state.settingsTab === "player") body.innerHTML = settingsPlayer();
+  else if (state.settingsTab === "maintenance") body.innerHTML = settingsMaintenance();
+  else body.innerHTML = settingsGeneral();
+}
+
+function settingValue(path) {
+  return path.split(".").reduce(function (node, key) {
+    return node && typeof node === "object" ? node[key] : undefined;
+  }, state.data.settings);
+}
+
+async function patchSetting(path, value) {
+  const parts = path.split(".");
+  const patch = {};
+  let node = patch;
+  parts.forEach(function (key, index) {
+    if (index === parts.length - 1) node[key] = value;
+    else {
+      node[key] = {};
+      node = node[key];
+    }
+  });
+  const data = await call("update_settings", patch);
+  if (data) apply(data);
+}
+
+async function browseImportDir() {
+  const picked = await call("browse_folder");
+  if (!picked || !picked.path) return;
+  const data = await call("update_settings", { import: { dir: picked.path } });
+  if (data) apply(data);
+}
+
+async function refreshStatus() {
+  const data = await call("refresh_status");
+  if (data) apply(data);
+}
+
+function confirmFixOrphans() {
+  openModal({
+    title: T("settings.clean_orphans"),
+    body: '<p class="modal-note">' + esc(T("settings.clean_orphans_confirm")) + "</p>",
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("settings.clean_orphans"),
+        danger: true,
+        onClick: async function () {
+          const data = await call("fix_issues", "orphan_file");
+          if (!data) return;
+          closeModal();
+          apply(data);
+        },
+      },
+    ],
+  });
+}
+
+function confirmClearStats() {
+  openModal({
+    title: T("settings.clear_stats"),
+    body: '<p class="modal-note">' + esc(T("settings.clear_stats_confirm")) + "</p>",
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("settings.clear_stats"),
+        danger: true,
+        onClick: async function () {
+          const data = await call("clear_all_stats");
+          if (!data) return;
+          closeModal();
+          apply(data);
+        },
+      },
+    ],
+  });
 }
 
 /* ---------- 菜单 ---------- */
@@ -2782,7 +3374,15 @@ function bindEvents() {
       const name = action.dataset.action;
       if (name === "import") doImport();
       else if (name === "data_dir") call("open_data_dir");
+      else if (name === "log_dir") call("open_log_dir");
       else if (name === "integrity") openIntegrity();
+      else if (name === "integrity_deep") openIntegrity({ deep: true });
+      else if (name === "fix_orphans") confirmFixOrphans();
+      else if (name === "clear_stats") confirmClearStats();
+      else if (name === "browse_import_dir") browseImportDir();
+      else if (name === "clear_import_dir") patchSetting("import.dir", "");
+      else if (name === "refresh_status") refreshStatus();
+      else if (name === "goto_default") goSection("playlists");
       else if (name === "settings") goSection("settings");
       return;
     }
@@ -2950,9 +3550,49 @@ function bindEvents() {
     }
   });
 
+  playlistDetail.addEventListener("change", async function (event) {
+    const playlist = playlistByUid(state.active);
+    if (!playlist) return;
+
+    const inherit = event.target.closest("[data-inherit]");
+    if (inherit) {
+      const key = inherit.dataset.inherit;
+      const value = inherit.checked ? null : adaptationDefaults()[key];
+      const data = await call("update_adaptation", playlist.uid, { [key]: value });
+      if (data) apply(data);
+      return;
+    }
+
+    const field = event.target.closest("[data-adapt]");
+    if (field) {
+      const key = field.dataset.adapt;
+      const value = key === "base" ? Number(field.value) : parseInt(field.value, 10);
+      if (!Number.isFinite(value)) {
+        renderPlaylistDetail();
+        return;
+      }
+      const data = await call("update_adaptation", playlist.uid, { [key]: value });
+      if (data) apply(data);
+    }
+  });
+
   playlistDetail.addEventListener("click", async function (event) {
     const playlist = playlistByUid(state.active);
     if (!playlist) return;
+
+    if (event.target.closest("[data-stats]")) {
+      openStatsDrawer(playlist);
+      return;
+    }
+
+    const adaptSwitch = event.target.closest("[data-adapt-enabled]");
+    if (adaptSwitch) {
+      const data = await call("update_adaptation", playlist.uid, {
+        enabled: adaptSwitch.getAttribute("aria-checked") !== "true",
+      });
+      if (data) apply(data);
+      return;
+    }
 
     if (event.target.closest("[data-playlist-add]")) {
       openSongPicker(playlist);
@@ -3295,6 +3935,83 @@ function bindEvents() {
     }
   });
 
+  /* ---------- 设置页 ---------- */
+
+  qs("#settings-nav").addEventListener("click", function (event) {
+    const tab = event.target.closest("[data-settings]");
+    if (!tab) return;
+    state.settingsTab = tab.dataset.settings;
+    renderSettings();
+  });
+
+  const settingsBody = qs("#settings-body");
+
+  settingsBody.addEventListener("click", async function (event) {
+    const theme = event.target.closest("[data-theme-value]");
+    if (theme) {
+      const data = await call("set_theme", theme.dataset.themeValue);
+      if (data) apply(data);
+      return;
+    }
+    const toggle = event.target.closest("[data-setting-switch]");
+    if (toggle) {
+      await patchSetting(
+        toggle.dataset.settingSwitch,
+        toggle.getAttribute("aria-checked") !== "true"
+      );
+    }
+  });
+
+  settingsBody.addEventListener("change", async function (event) {
+    if (event.target.id === "import-dir") {
+      await patchSetting("import.dir", event.target.value.trim());
+      return;
+    }
+    if (event.target.id === "player-volume") {
+      await patchSetting("player.volume", Number(event.target.value) / 100);
+      return;
+    }
+    const field = event.target.closest("[data-default]");
+    if (field) {
+      const value = Number(field.value);
+      if (!Number.isFinite(value)) {
+        renderSettings();
+        return;
+      }
+      await patchSetting("common.adaptation." + field.dataset.default, value);
+    }
+  });
+
+  settingsBody.addEventListener("input", function (event) {
+    if (event.target.id !== "player-volume") return;
+    const label = qs("#player-volume-value");
+    if (label) label.textContent = event.target.value + "%";
+  });
+
+  settingsBody.addEventListener("selectchange", async function (event) {
+    const select = event.target.closest("[data-setting-select]");
+    if (!select) return;
+    await patchSetting(select.dataset.settingSelect, select.dataset.value);
+  });
+
+  /* ---------- 统计抽屉 ---------- */
+
+  qs("#drawer-close").addEventListener("click", closeDrawer);
+
+  qs("#drawer-body").addEventListener("click", async function (event) {
+    if (!state.drawer) return;
+    if (event.target.closest("[data-reset-all]")) {
+      const data = await call("reset_stats", state.drawer, "");
+      if (data) apply(data);
+      return;
+    }
+    const one = event.target.closest("[data-reset-md5]");
+    if (one) {
+      const data = await call("reset_stats", state.drawer, one.dataset.resetMd5);
+      if (data) apply(data);
+    }
+  });
+
   qs("#song-detail").addEventListener("input", function (event) {
     if (event.target.id !== "song-name") return;
     scheduleNameSave(event.target);
@@ -3328,6 +4045,12 @@ function bindEvents() {
       } catch (error) {
         toast(String(error), false);
       }
+      return;
+    }
+
+    const stats = event.target.closest("[data-music-stats]");
+    if (stats) {
+      openMusicStats(stats.dataset.musicStats);
       return;
     }
 
@@ -3372,6 +4095,7 @@ function bindEvents() {
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape") {
       if (!qs("#modal").hidden) closeModal();
+      else if (!qs("#drawer").hidden) closeDrawer();
       closeMenu();
       return;
     }

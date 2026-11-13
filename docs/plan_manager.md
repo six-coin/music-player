@@ -625,7 +625,7 @@ random() < p → 自动跳过
 
 | 类别  | 方法                                                                                                                           | 返回                                                 |
 | --- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| 读取  | `get_state` / `get_strings` / `get_playlist_stats`                                                                           | 数据                                                 |
+| 读取  | `get_state` / `get_strings` / `get_playlist_stats` / `get_music_stats`                                                       | 数据                                                 |
 | 导航  | `select_section` / `select_item`                                                                                             | 快照                                                 |
 | 概览  | `get_overview` / `launch_player` / `launch_simple`                                                                           | 数据 / `{ok}`                                        |
 | 歌曲  | `import_files` / `update_music` / `set_music_authors` / `toggle_tag` / `replace_source` / `delete_musics`                    | 快照或任务                                              |
@@ -635,8 +635,8 @@ random() < p → 自动跳过
 | 自适应 | `update_adaptation` / `reset_stats`                                                                                          | 快照                                                 |
 | 标签  | `create_tag_group` / `update_tag_group` / `add_tag` / `rename_tag` / `remove_tag` / `delete_tag_group`                       | 快照                                                 |
 | 作者  | `create_author` / `update_author` / `move_author` / `reorder_authors` / `delete_author`                                      | 快照                                                 |
-| 设置  | `update_settings` / `set_theme`                                                                                              | 快照                                                 |
-| 系统  | `browse_audio` / `open_data_dir` / `run_integrity` / `start_integrity` / `fix_issues`                                        | 值或快照                                               |
+| 设置  | `update_settings` / `set_theme` / `clear_all_stats` / `refresh_status` / `browse_folder`                                     | 快照 / `{path}`                                       |
+| 系统  | `browse_audio` / `open_data_dir` / `open_log_dir` / `run_integrity` / `start_integrity` / `fix_issues`                       | 值或快照                                               |
 | 试听  | `audition_play` / `audition_pause` / `audition_seek` / `audition_stop`                                                       | 状态                                                 |
 | 任务  | `start_import` / `start_replace_source` / `poll_task` / `cancel_task`                                                        | `{ task_id }` / `{ done, total, current, errors, result }` |
 

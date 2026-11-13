@@ -286,6 +286,26 @@
         <section class="detail-pane" id="author-detail"></section>
       </section>
 
+      <section class="view is-hidden" data-view="settings">
+        <header class="page-head">
+          <div class="page-title">
+            <h1 data-i18n="nav.settings">设置</h1>
+            <p class="page-sub" data-i18n="settings.sub">改完即生效，没有保存按钮。</p>
+          </div>
+        </header>
+
+        <div class="settings">
+          <nav class="settings-nav" id="settings-nav" aria-label="设置分页">
+            <button class="settings-tab is-active" data-settings="general" data-i18n="settings.general">通用</button>
+            <button class="settings-tab" data-settings="import" data-i18n="settings.import">导入</button>
+            <button class="settings-tab" data-settings="simple" data-i18n="settings.simple">simple</button>
+            <button class="settings-tab" data-settings="player" data-i18n="settings.player">player</button>
+            <button class="settings-tab" data-settings="maintenance" data-i18n="settings.maintenance">维护</button>
+          </nav>
+          <div class="settings-body" id="settings-body"></div>
+        </div>
+      </section>
+
       <section class="view is-hidden" data-view="pending">
         <div class="empty">
           <svg class="empty-art" viewBox="0 0 24 24" aria-hidden="true">
@@ -297,6 +317,14 @@
       </section>
     </main>
   </div>
+
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="false" hidden>
+    <header class="drawer-head">
+      <h2 id="drawer-title"></h2>
+      <button class="icon-btn" id="drawer-close" type="button" aria-label="关闭">×</button>
+    </header>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
 
   <div class="menu" id="menu" role="menu" hidden></div>
 

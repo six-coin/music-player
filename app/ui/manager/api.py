@@ -15,9 +15,9 @@ from typing import Any
 import webview
 from loguru import logger
 
-from app import i18n, paths
+from app import __version__, i18n, paths
 from app.core import integrity, source
-from app.core.adaptation import Params
+from app.core.adaptation import Params, effective, skip_probability, skip_rate
 from app.core.importer import ImportOutcome, import_file
 from app.core.library import Library
 from app.core.naming import parse_filename
@@ -34,17 +34,29 @@ from app.models import (
     TagGroup,
     new_uid,
 )
-from app.settings import SettingsStore
+from app.settings import THEMES, SettingsStore
+from app.system import ffmpeg
 from app.system import theme as theme_tool
 
 SECTIONS = ("overview", "songs", "playlists", "tags", "authors", "settings")
 RECENT_LIMIT = 5
 AUDIO_FILTER = ("音频文件 (*.mp3;*.m4a)",)
+ADAPTATION_KEYS = ("window", "min_plays", "base", "skip_seconds")
+
+
+def _params_dict(params: Params) -> dict[str, Any]:
+    return {
+        "window": params.window,
+        "min_plays": params.min_plays,
+        "base": params.base,
+        "skip_seconds": params.skip_seconds,
+    }
 
 
 class ManagerApi:
     def __init__(self, config_dir: Path | None = None) -> None:
         base = config_dir or paths.CONFIG_DIR
+        self.base = base
         self.library = Library(base / "library.json")
         self.playlists = PlaylistStore(base / "playlists.json")
         self.settings = SettingsStore(base / "settings.json")
@@ -52,6 +64,7 @@ class ManagerApi:
         self.warnings: list[str] = []
         self.section = "overview"
         self.selection: dict[str, str] | None = None
+        self.status = self._system_status()
         self._lock = threading.RLock()
         self._window = None
         self._tasks: dict[str, dict[str, Any]] = {}
@@ -130,6 +143,7 @@ class ManagerApi:
             "library": self._library_payload(missing, tag_issues),
             "playlists": self._playlist_payload(),
             "settings": self.settings.data,
+            "status": self.status,
             "counts": self._counts(),
             "overview": self._overview(),
             "warnings": list(self.warnings),
@@ -765,6 +779,128 @@ class ManagerApi:
             ]
             return {"ok": True, "ordered": content.ordered, "items": items}
 
+    # ---------- 自适应 ----------
+
+    def update_adaptation(self, uid: str, patch: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            playlist = self.playlists.get(uid)
+            if playlist is None:
+                return self._snapshot()
+            if isinstance(patch, dict):
+                if isinstance(patch.get("enabled"), bool):
+                    playlist.adaptation.enabled = patch["enabled"]
+                for key in ADAPTATION_KEYS:
+                    if key not in patch:
+                        continue
+                    value = patch[key]
+                    if value is None:
+                        setattr(playlist.adaptation, key, None)
+                        continue
+                    try:
+                        setattr(
+                            playlist.adaptation,
+                            key,
+                            float(value) if key == "base" else int(value),
+                        )
+                    except (TypeError, ValueError):
+                        continue
+            playlist.adaptation.normalize()
+            self.playlists.touch(uid)
+            self.playlists.save()
+            return self._snapshot()
+
+    def get_playlist_stats(self, uid: str) -> dict[str, Any]:
+        """统计抽屉的数据：参数、每首歌的记录数与下次跳过概率。"""
+        with self._lock:
+            playlist = self.playlists.get(uid)
+            if playlist is None:
+                return {"ok": False, "rows": []}
+            defaults = self._adaptation_defaults()
+            params = effective(playlist.adaptation, defaults)
+            try:
+                content = self.playlists.resolve(uid, self.library)
+            except Exception as error:
+                return {"ok": False, "message": str(error), "rows": []}
+
+            summary = self.stats.summary(uid)
+            rows: list[dict[str, Any]] = []
+            for md5 in content.md5s:
+                music = self.library.musics.get(md5)
+                if music is None:
+                    continue
+                item = summary.get(md5) or {}
+                records = str(item.get("records", ""))
+                rows.append(
+                    {
+                        "md5": md5,
+                        "title": music.title,
+                        "total": len(records),
+                        "skips": records.count("1"),
+                        "rate": skip_rate(records),
+                        "auto_skipped": int(item.get("auto_skipped", 0) or 0),
+                        "probability": skip_probability(records, params),
+                    }
+                )
+            return {
+                "ok": True,
+                "enabled": playlist.adaptation.enabled,
+                "params": _params_dict(params),
+                "defaults": _params_dict(defaults),
+                "overridden": {
+                    key: getattr(playlist.adaptation, key) is not None for key in ADAPTATION_KEYS
+                },
+                "rows": rows,
+            }
+
+    def get_music_stats(self, md5: str) -> dict[str, Any]:
+        """一首歌在各个歌单里的记录情况，供歌曲详情的「自适应」卡片使用。"""
+        with self._lock:
+            if md5 not in self.library.musics:
+                return {"ok": False, "playlists": [], "total": 0, "skips": 0, "rate": 0.0}
+            defaults = self._adaptation_defaults()
+            rows: list[dict[str, Any]] = []
+            total = 0
+            skips = 0
+            for playlist in self.playlists.all():
+                summary = self.stats.summary(playlist.uid).get(md5)
+                if not summary:
+                    continue
+                params = effective(playlist.adaptation, defaults)
+                count = int(summary["total"])
+                rows.append(
+                    {
+                        "uid": playlist.uid,
+                        "title": playlist.name or i18n.t("overview.default_playlist"),
+                        "enabled": playlist.adaptation.enabled,
+                        "total": count,
+                        "skips": int(summary["skips"]),
+                        "rate": float(summary["rate"]),
+                        "auto_skipped": int(summary["auto_skipped"]),
+                        "probability": skip_probability(str(summary["records"]), params),
+                    }
+                )
+                total += count
+                skips += int(summary["skips"])
+            return {
+                "ok": True,
+                "playlists": rows,
+                "total": total,
+                "skips": skips,
+                "rate": skips / total if total else 0.0,
+            }
+
+    def reset_stats(self, uid: str, md5: str = "") -> dict[str, Any]:
+        with self._lock:
+            if self.playlists.get(uid) is None:
+                return self._snapshot()
+            if md5:
+                self.stats.drop(uid, md5)
+            else:
+                self.stats.reset(uid)
+            snapshot = self._snapshot()
+            snapshot["message"] = i18n.t("adaptation.cleared")
+            return snapshot
+
     # ---------- 导入 ----------
 
     def browse_import(self) -> dict[str, Any]:
@@ -1124,3 +1260,66 @@ class ManagerApi:
             snapshot["fixed"] = counts
             snapshot["message"] = i18n.t("integrity.fixed", count=sum(counts.values()))
             return snapshot
+
+    # ---------- 设置 ----------
+
+    def update_settings(self, patch: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            if isinstance(patch, dict) and patch:
+                self.settings.update(patch)
+            return self._snapshot()
+
+    def set_theme(self, theme: str) -> dict[str, Any]:
+        with self._lock:
+            if theme in THEMES:
+                self.settings.update({"common": {"theme": theme}})
+            return self._snapshot()
+
+    def browse_folder(self) -> dict[str, Any]:
+        if self._window is None:
+            return {"path": ""}
+        try:
+            result = self._window.create_file_dialog(
+                webview.FOLDER_DIALOG, directory=str(paths.PROGRAM_DIR)
+            )
+        except Exception as error:
+            logger.error("打开目录对话框失败：{}", error)
+            return {"path": "", "message": str(error)}
+        if not result:
+            return {"path": ""}
+        if isinstance(result, str):
+            return {"path": result}
+        return {"path": str(result[0]) if result else ""}
+
+    def clear_all_stats(self) -> dict[str, Any]:
+        with self._lock:
+            removed = self.stats.clear_all()
+            snapshot = self._snapshot()
+            snapshot["message"] = i18n.t("settings.stats_cleared", count=removed)
+            return snapshot
+
+    def refresh_status(self) -> dict[str, Any]:
+        with self._lock:
+            self.status = self._system_status()
+            return self._snapshot()
+
+    def _system_status(self) -> dict[str, Any]:
+        binary = ffmpeg.ffmpeg_path()
+        probe = ffmpeg.ffprobe_path()
+        return {
+            "ffmpeg": {"available": binary is not None, "path": binary or ""},
+            "ffprobe": {"available": probe is not None, "path": probe or ""},
+            "data_dir": str(self.base),
+            "log_dir": str(paths.LOG_DIR),
+            "assets_dir": str(paths.ASSETS_DIR),
+            "program_dir": str(paths.PROGRAM_DIR),
+            "version": __version__,
+        }
+
+    def open_log_dir(self) -> dict[str, Any]:
+        try:
+            paths.LOG_DIR.mkdir(parents=True, exist_ok=True)
+            os.startfile(str(paths.LOG_DIR))
+            return {"ok": True}
+        except OSError as error:
+            return {"ok": False, "message": str(error)}
