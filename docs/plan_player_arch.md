@@ -21,7 +21,7 @@
 | `core` 不导入界面库 | 状态机要能被纯 pytest 覆盖 | `test_source_hygiene.py::test_core_has_no_ui_imports`（已有） |
 | 入口 < 30 行 | 装配集中在一处 | `test_source_hygiene.py::test_player_entry_stays_thin`（新增） |
 | 队列顺序 = 实际播放顺序 | 队列是承诺，不是装饰 | `test_player_session.py::test_queue_follows_the_round` |
-| 自适应跳过就地移除 | `plan_player` §4.3 | `test_player_session.py::test_auto_skip_leaves_the_queue` |
+| 队列永远是完整歌单 | 本轮修订；替代 `plan_player` §4.3 的「跳过即移除」 | `test_player_session.py::test_queue_shows_the_whole_playlist_with_states` |
 
 ### 1.3 做什么
 
@@ -31,7 +31,7 @@
 | 播放 | 点歌单从第一首开始；播放/暂停、上一首/下一首、拖进度、拖音量 |
 | 模式 | 随机 / 列表循环 / 单曲循环，三者都是无尽的 |
 | 队列 | 右栏显示接下来会播什么，点即跳转，可收起 |
-| 自适应 | 按歌单配置在切歌前判定，命中就静默跳过并同步队列 |
+| 自适应 | 按歌单配置在切歌前判定，命中就静默跳过；队列里这首变成已播（灰） |
 | 记忆 | 歌单、曲目、位置、音量、模式、窗口尺寸、队列开合 |
 | 异常 | 空歌单、文件缺失、播放失败都有对应界面，不弹窗、不中断队列 |
 | 快捷键 | 只在窗口前台生效的六个键 |
@@ -188,10 +188,8 @@ simple 与 player 都 import 它
 |---|---|---|
 | `mode` | `shuffle` / `list_loop` / `repeat_one` | 来自 `settings.player.order` |
 | `playlist_uid` | `str \| None` | 当前歌单；None 表示未选 |
-| `order` | `list[str]` | 当前这一轮的顺序（md5） |
-| `next_order` | `list[str]` | 下一轮的顺序，建轮时一起算好 |
-| `index` | `int` | 当前曲在 `order` 里的位置；-1 表示没有 |
-| `removed` | `set[str]` | 本轮被自适应跳过的歌；换轮清空 |
+| `order` | `list[str]` | 当前这一轮的顺序（md5），永远是整张歌单 |
+| `index` | `int` | 当前曲在 `order` 里的位置；-1 表示没有，`len(order)` 表示整轮已过 |
 | `pin` | `Pin \| None` | 单曲循环选歌（见 5.4） |
 | `playing` | `bool` | 由网页事件镜像，不用于判定 |
 | `position_ms` | `int` | 网页最后上报的位置，只用于恢复与落盘 |
@@ -203,24 +201,26 @@ simple 与 player 都 import 它
 
 | 模式 | 一轮的顺序 | 一轮结束 | 上一首 | 下一首 | 队列显示 |
 |---|---|---|---|---|---|
-| `shuffle` | 洗牌；当前曲固定在第 1 位；新一轮首曲避开上一轮末曲 | 生成新一轮 | 本轮内前一曲，到头禁用 | 本轮内后一曲，到头开新一轮 | 剩余 + 下一轮 |
-| `list_loop` | 歌单顺序 | 回到第 1 首 | 同上，到头禁用 | 同上，到头回第 1 首 | 剩余 + 下一轮（即整轮） |
-| `repeat_one` | 歌单顺序 | 重播当前曲 | 前一曲，到头禁用 | 后一曲，到头回第 1 首 | 整张歌单，当前高亮 |
+| `shuffle` | 洗牌；当前曲固定在第 1 位；新一轮首曲避开上一轮末曲 | 生成新一轮 | 本轮内前一曲，到头禁用 | 本轮内后一曲，到头开新一轮 | 整张歌单：已播灰 / 当前高亮 / 待播正常 |
+| `list_loop` | 歌单顺序 | 回到第 1 首 | 同上，到头禁用 | 同上，到头回第 1 首 | 同上 |
+| `repeat_one` | 歌单顺序 | 重播当前曲 | 前一曲，到头禁用 | 后一曲，到头回第 1 首 | 整张歌单，只有当前高亮（没有「已播」） |
 
-- 模式切换即时生效，不重载歌单：以**当前曲**为锚重建 `order` / `next_order`。
+- 模式切换即时生效，不重载歌单：以**当前曲**为锚重建 `order`。
 - 随机模式把当前曲放在新一轮第 1 位，是为了让「上一首」在切换后立刻有确定含义（禁用），而不是回到一个用户没见过的位置。
 
 ### 5.3 队列的推导
 
 ```
-queue_items = (order[index + 1:] or next_order)[:50]     # 去掉 removed
+queue = order                                   # 整张歌单，不截断、不预生成下一轮
+state = played (i < index) / current (i == index) / upcoming (i > index)
 ```
 
-- **提前算下一轮**：本轮播到最后一首时，队列紧接着显示下一轮，不会出现空队列；本轮还有剩余时不提前展示下一轮，避免同一首歌在短歌单里立刻出现两次。
-- `list_loop` 的 `next_order` 就是 `order` 本身，队列自然表现出「播完回到第一首」。
-- `repeat_one` 且无 pin：不截断，显示整张歌单，当前曲高亮（`plan_player` §8）。
+- **永远显示完整歌单**：队列不是「接下来几首」，而是这一轮的全貌。已播的灰、正在播的高亮、待播的正常。
+- **下一轮只在播完之后生成**：最后一首播完（或按下一首）才 `_next_round()` 重建 `order`；在生成之前，队列里没有「下一轮」的影子。
+- **不保留上一轮**：进入新一轮后 `index = 0`，「上一首」禁用，回不到上一轮的队列。
+- 队列里除当前曲外都可以点，包括已播的——点回去就从那首重新开始，它后面的又变回待播。
+- `repeat_one` 且无 pin：整张歌单，只有当前高亮（单曲循环没有「已播」的概念）。
 - `repeat_one` 且有 pin：只显示「单曲循环：<歌名>」，不列其它曲。
-- `removed` 只作用于当前轮；换轮后清空——下一轮是新的判定机会。
 
 ### 5.4 单曲循环的 pin
 
@@ -314,10 +314,13 @@ session 不认识文件系统与统计，三个钩子由 api 注入；测试里�
 | 情形 | 记录 |
 |---|---|
 | 自然播完（含单曲循环重播） | `0` |
-| 主动切歌，`played_ms < skip_seconds × 1000` | `1` |
-| 主动切歌，已过阈值 | `0` |
+| **下一首按钮 / `Ctrl+C`**，`played_ms < skip_seconds × 1000` | `1` |
+| **下一首按钮 / `Ctrl+C`**，已过阈值 | `0` |
+| 上一首、点队列、切歌单、选循环曲 | 不记录 |
 | 自适应跳过 | 不记录，只 `auto_skipped += 1` |
-| 切歌单、关闭程序、崩溃 | 不记录 |
+| 关闭程序、崩溃 | 不记录 |
+
+**只有「跳过当前歌」这一个动作会检测实际播放时长并记账**：按钮与 `Ctrl+C` 走同一条 `next_track`。上一首、点队列、切歌单都不碰自适应数据，避免用户在队列里来回点就把统计搅乱。
 
 - 复用 `StatsStore`（已有文件锁），player 不新增写入路径。
 
@@ -376,7 +379,7 @@ patch_player(patch)
 |---|---|---|
 | 左栏 | 歌单名 + 歌曲数；当前歌单高亮；底部一行「模式：随机」 | 点歌单 → 载入并从第一首播放 |
 | 中栏 | 顶部一个 28px 的队列开关；曲名 21px、作者 12.5px；进度条 + 两个时间；传输键 + 模式键；音量条 + 百分比 | 见 §7.5；`repeat_one` 时曲名右侧多一个「选一首循环」ghost 按钮 |
-| 右栏 | 标题「待播队列」+ 序号 + 曲名；缺失的曲目整行 `--muted` 并带「· 文件缺失」 | 单击跳转；头部一个 28px 收起按钮 |
+| 右栏 | **整张歌单**：序号 + 曲名；已播 `--muted`、当前 `--blue-soft` 高亮、待播正常；缺失的曲目带「· 文件缺失」 | 除当前曲外单击跳转；换曲时自动把当前曲滚进视野；头部一个 28px 收起按钮 |
 
 - 队列行只放序号与曲名（264px 放不下两行），完整信息走 `title` 属性。
 - 当前歌单高亮用 `--blue-soft` 底 + `--blue-text` 字；不要只靠左侧色条。
@@ -409,6 +412,7 @@ patch_player(patch)
 | `Space` | 播放/暂停 | 输入框内不接管 |
 | `←` / `→` | 快退/快进 5 秒 | 时长未知时忽略 |
 | `Ctrl+←` / `Ctrl+→` | 上一首/下一首 | 到头时按 §5.2 处理 |
+| `Ctrl+C` | 跳过当前歌，等价于「下一首」 | 只在这里与按钮上记账；输入框内仍是复制 |
 | `↑` / `↓` | 音量 ±5% | 夹到 0–100%，四舍五入到 1% |
 | `Esc` | 收起队列 | 有弹窗时先关弹窗 |
 
@@ -458,8 +462,10 @@ patch_player(patch)
     "transport": { "playing": false, "can_prev": false, "can_next": true },
     "queue": {
         "visible": true,
-        "items": [{ "md5": "b2c3…", "title": "Yellow", "missing": false }],
-        "more": 0,
+        "items": [
+            { "md5": "a1b2…", "title": "Experience", "missing": false, "state": "current" },
+            { "md5": "b2c3…", "title": "Yellow", "missing": false, "state": "upcoming" }
+        ],
         "current_md5": "a1b2…",
         "pinned": null
     },
@@ -483,8 +489,8 @@ patch_player(patch)
 | `theme` / `theme_source` | 已落地的 `light`/`dark`，与设置里的 `system`/`light`/`dark` |
 | `playlists[].count` | 解析后的歌曲数，启动时算一次并缓存 |
 | `track.position_ms` | 最后上报值（≤2 秒旧），只用于恢复与首次渲染 |
-| `queue.more` | 截断后还剩多少首 |
-| `queue.current_md5` | 仅 `repeat_one` 无 pin 时用于高亮 |
+| `queue.items[].state` | `played` / `current` / `upcoming`；整张歌单，不截断 |
+| `queue.current_md5` | 当前曲；队列里除它以外都可以点 |
 | `empty` | `null` / `no_playlist` / `no_selection` / `empty_playlist` |
 | `notice` | `{"kind": "missing", "title": "…", "count": 1}` 这类结构化数据，文案在网页侧用 `T()` 拼 |
 | `command` | `null`，或一个带 `kind`（`load` / `stop`）、`seq` 的对象；`load` 时另带 `md5` / `url` / `position_ms` / `autoplay` |
@@ -494,9 +500,9 @@ patch_player(patch)
 | 类别 | 方法 | 返回 |
 |---|---|---|
 | 读取 | `get_strings()` / `get_state()` | 文案表 / 快照 |
-| 歌单 | `select_playlist(uid)` | 快照（含 command） |
+| 歌单 | `select_playlist(uid)` | 快照；uid 与当前相同则原样返回，不重置 |
 | 传输 | `set_playing(on)` | `{"ok": bool}` |
-| 队列 | `next_track(md5, played_ms)` / `prev_track(md5, played_ms)` / `jump_to(md5, played_ms)` | 快照 |
+| 队列 | `next_track(md5, played_ms)` / `prev_track(md5)` / `jump_to(md5)` | 快照；只有 `next_track` 记账 |
 | 播放事件 | `track_ended(md5, played_ms)` / `track_failed(md5, reason)` | 快照 |
 | 模式 | `set_mode(mode)` | 快照 |
 | 单曲循环 | `pick_loop_song(md5)` | 快照 |
@@ -586,10 +592,11 @@ logging_setup.setup("player")
 
 ```
 select_playlist(uid)
+  → uid == 当前歌单且当前有曲目 → 原样返回（不重置、不重新从第一首开始）
   → playlists.resolve(uid, library)        # PlaylistCycleError → 提示条，保持原状
   → queue.play_order(content, library)
   → queue.build_round(songs, mode, rng)
-  → order / next_order / index=0 / removed 清空 / pin 清空
+  → order / index=0 / pin 清空
   → Load(seq+1, md5, 0, autoplay=True)
 ```
 
@@ -605,7 +612,7 @@ ended → track_ended(md5, played_ms)
 ### 9.4 下一首 / 上一首 / 点队列
 
 ```
-next_track(md5, played_ms)
+next_track(md5, played_ms)          # 按钮与 Ctrl+C 都走这里
   → md5 不是当前曲 → 忽略（过期事件）
   → 记账：played_ms < skip_seconds×1000 ? 1 : 0
   → 有 pin → 清 pin，从 origin_index 前进
@@ -616,22 +623,21 @@ next_track(md5, played_ms)
 
 ```
 从 index 向后找候选
-  → 在 removed 里 → 跳过
   → hooks.available 为假 → 记入 missing，跳过
-  → hooks.should_skip 为真 → removed.add，on_auto_skip，跳过
+  → hooks.should_skip 为真 → on_auto_skip，跳过
   → 找到 → index=候选，返回 Load
-本轮扫完 → order = next_order，index=0，removed 清空，重建 next_order，再扫一遍
+本轮扫完 → _next_round()：重新洗牌 / 回到第一首，index=-1，再扫一遍
 新一轮仍无候选 → Stop + notice=all_skipped
 ```
 
 两轮都扫不到就停，不再无限生成新轮——「所有歌都被跳过」是一种要显示出来的状态，不是要死循环的状态。
 
-点队列里的歌走 `jump_to`：在当前 `order` 里找；找不到就在 `next_order` 里找，命中则先把 `next_order` 提升为当前轮再跳。
+点队列里的歌走 `jump_to`：在整张 `order` 里找，找到就 `index=它`。已播的也可以点，点回去之后它后面的又变回待播。上一首、点队列都不记账。
 
 ### 9.5 自适应
 
 - 判定只在 `_advance` 里发生，点歌单、点队列、选循环曲都不判定——用户明确点的歌被后台吞掉，会像按钮坏了。
-- 判定命中不弹提示、不闪警告，队列就地少一行，用户只会发现这首没播。
+- 判定命中不弹提示、不闪警告，队列里这首直接变成已播（灰），用户只会发现这首没播。
 - `should_skip` 的实现：`adaptation.should_skip(records, params, rng)`，`records` 来自 `stats.load(playlist_uid)`；`params` 是「歌单覆盖值 + 全局默认值」的合并结果（`adaptation.effective`）。
 - 统计在切歌时读一次、判定后更新内存，不每次 stat 文件。
 
@@ -643,7 +649,7 @@ next_track(md5, played_ms)
 播放中 error / 5 秒未出声 → track_failed → missing.add + 前进 + 提示
 ```
 
-队列里缺失的曲目**留在原位标灰**（`plan_player` §7 明确要求），与自适应跳过的「就地移除」是两种不同的处理，不要合并。
+队列里缺失的曲目**留在原位标灰**（`plan_player` §7 明确要求），与自适应跳过的「变成已播」在视觉上一致，但原因不同：一个文件不在，一个是被判定跳过。
 
 ### 9.7 模式切换与单曲循环
 
@@ -651,7 +657,7 @@ next_track(md5, played_ms)
 set_mode(m)
   → m == repeat_one 且当前曲已在歌单里：只切模式，队列改成整张歌单
   → 从 repeat_one 退出且有 pin：Load(原曲, 原位置, autoplay=当前 playing)
-  → 其它：以当前曲为锚重建 order / next_order，index 指向当前曲
+  → 其它：以当前曲为锚重建 order，index 指向当前曲
   → patch_player({"order": m})
 ```
 
@@ -729,7 +735,7 @@ closing（UI 线程）
 | `player.title` | 窗口标题 |
 | `player.already_running` | `播放器已经在运行了。` |
 | `player.mode.shuffle` / `.list_loop` / `.repeat_one` | 模式名 |
-| `player.queue.title` / `.empty` / `.more` | 待播队列标题、空队列、还有 N 首 |
+| `player.queue.title` / `.empty` | 待播队列标题、空队列 |
 | `player.queue.pinned` | `单曲循环：{title}` |
 | `player.missing` | `文件缺失` |
 | `player.notice.missing` | `{title} 的文件缺失，已跳过` |
@@ -774,17 +780,22 @@ tests/
 |---|---|
 | `test_shuffle_round_covers_every_song_once` | 一轮内不重不漏 |
 | `test_shuffle_seam_avoids_the_previous_last` | 新一轮首曲 ≠ 上轮末曲 |
-| `test_queue_follows_the_round` | 队列 == 本轮剩余；剩余为空时接下一轮 |
-| `test_last_track_still_shows_next_round` | 最后一首时队列非空 |
+| `test_queue_shows_the_whole_playlist_with_states` | 整张歌单，已播/当前/待播三态正确 |
+| `test_last_track_keeps_the_full_queue` | 最后一首时整张歌单仍在，前两首已播 |
+| `test_new_round_starts_at_zero_and_cannot_go_back` | 播完才开新一轮；index=0，上一首禁用 |
 | `test_repeat_one_replays_the_same_track` | `on_ended` 返回同一个 md5、position=0 |
-| `test_repeat_one_queue_shows_the_whole_playlist` | 队列长度 == 歌单长度，`current_md5` 正确 |
+| `test_repeat_one_queue_has_no_played_state` | 单曲循环只有当前与待播，没有已播 |
 | `test_next_clears_the_pin_and_moves_from_the_origin` | pin 状态下 next → 从 origin 前进，pin 为 None |
 | `test_exit_repeat_one_restores_the_origin` | 切模式 → 回到原曲原位置 |
-| `test_auto_skip_leaves_the_queue` | 命中后队列少一行，`on_auto_skip` 计数 +1 |
+| `test_auto_skip_marks_the_song_as_played` | 命中后那首变成已播，`on_auto_skip` 计数 +1 |
 | `test_all_skipped_stops_without_looping` | 全轮跳过 → Stop + notice，不无限循环 |
 | `test_missing_track_is_skipped_but_stays_in_the_queue` | 缺失曲仍在队列且 `missing=true` |
 | `test_restore_deleted_playlist_falls_back_to_empty` | `empty=no_selection`，不抛异常 |
 | `test_restore_track_not_in_playlist_stops_at_the_first` | 落在第一首、暂停 |
+| `test_selecting_the_same_playlist_is_a_noop` | 重复点同一歌单，曲目与命令序号都不变 |
+| `test_previous_does_not_record` | 上一首不写统计 |
+| `test_jump_does_not_record` | 点队列不写统计 |
+| `test_queue_snapshot_has_three_states` | 快照里的 `state` 依次是 current/upcoming/played |
 | `test_remember_progress_false_writes_zero` | 关掉「记住进度」时位置写 0 |
 | `test_player_leaves_library_untouched` | 跑一遍全部 API 后 `library.json` / `playlists.json` 字节不变 |
 | `test_invalid_arguments_do_not_raise` | 越界 uid、非法 mode、非法位置都不抛异常 |
@@ -817,24 +828,29 @@ P3 之前不要碰队列渲染：没有真实播放，「接下来会播什么�
 - [ ] `setup.bat` 在干净目录一次装好；`player.bat` 双击能起，无控制台黑框
 - [ ] 已经开着一个 player 时再双击，弹出「播放器已经在运行了」，不出现第二个窗口
 - [ ] 首次启动（无 `player.json`）落在「选个歌单开始」，不报错
-- [ ] 点歌单立刻出声，左栏高亮，队列显示剩余曲目
+- [ ] 点歌单立刻出声，左栏高亮，队列显示整张歌单
+- [ ] 再点一次当前歌单：不重置、不回到第一首、进度不动
 - [ ] 播完一首自动下一首；最后一首之后按模式回到开头或开新一轮，不会停
 - [ ] 随机模式一轮内不重复；新一轮第一首不是上一轮最后一首
 - [ ] 列表循环播完最后一首回到第一首
 - [ ] 单曲循环重复当前曲；点下一首才换，换完仍是单曲循环
 - [ ] 「选一首循环」能选歌单外的歌；队列显示「单曲循环：<歌名>」；切回随机/列表循环回到原位
-- [ ] 队列里点任意一首立刻切过去，进度从 0 开始
-- [ ] 自适应命中时队列少一行，无提示、无闪烁
+- [ ] 队列始终是整张歌单：已播灰、当前高亮、待播正常
+- [ ] 除当前曲外，点队列任意一首（含已播）立刻切过去，进度从 0 开始
+- [ ] 最后一首播完才生成下一轮；进入新一轮后「上一首」禁用
+- [ ] `Ctrl+C` 跳过当前歌，效果与「下一首」一致
+- [ ] 自适应命中时队列里那首变成已播，无提示、无闪烁
+- [ ] 只有「下一首 / Ctrl+C」与自然播完写统计；上一首、点队列、切歌单不写
 - [ ] 歌单关闭自适应时，`config/stats/` 下不产生新写入
 - [ ] 关掉窗口再打开：歌单、曲目、位置都在，处于暂停；按播放继续
 - [ ] 音量、模式、窗口尺寸、队列开合都记住
 - [ ] 把某首歌的文件移走：它标灰并显示「文件缺失」，播放继续
 - [ ] 把上次记住的歌单删掉：回到「选个歌单开始」，不报错
 - [ ] 空歌单不自动播放，显示空状态与「打开管理器」
-- [ ] 六个快捷键都生效；输入框里按 Space 不触发播放
+- [ ] 全部快捷键都生效；输入框里按 Space / Ctrl+C 不触发播放与跳过
 - [ ] 浅色/深色各过一遍，无白底白字；系统切主题后重启跟随
 - [ ] 1920×1080 与 760×480 两档都不溢出、无横向滚动条
-- [ ] 队列 50 条以上时，中栏控件不被挤出窗口
+- [ ] 100 首以上的歌单：队列滚动流畅，换曲时当前曲自动滚进视野
 - [ ] 60 字符以上的歌名正确省略，不撑破三栏
 - [ ] Tab 能走完整个界面；选歌弹窗打开时 Tab 出不去、Esc 能关
 - [ ] 播放中打开 manager 改主题，player 不崩（重启后生效）
@@ -868,7 +884,11 @@ P3 之前不要碰队列渲染：没有真实播放，「接下来会播什么�
 | 单曲循环播完是否记账 | 记 `0`（按「自然播完」处理） | `plan_player` §4.5 的记录表 |
 | 主题切换入口 | player 内不放，主题由 `common.theme` 决定 | `plan_player` §5 限定 player 只写播放位置与自适应记录；两个地方各放一个主题开关正是 `plan_manager.md` §3.6 要避免的 |
 | 启动即播 | 否，恢复后暂停 | `plan_player` §4.5 |
-| 队列最后一首 | 提前算好下一轮并显示 | 队列在整轮里都要回答「接下来播什么」 |
+| 队列最后一首 | 播完才生成下一轮，不预生成 | 本轮修订：队列只呈现当前这一轮 |
+| 队列形态 | 整张歌单，三态区分已播/当前/待播 | 本轮修订：替代 `plan_player` §4.3 的「跳过即移除」 |
+| 重复点当前歌单 | 无操作 | 本轮修订：之前会从第一首重置 |
+| 记账入口 | 只有下一首（按钮 / `Ctrl+C`）与自然播完 | 本轮修订：上一首、点队列、切歌单都不记 |
+| `Ctrl+C` | 跳过当前歌，等价于下一首 | 本轮新增 |
 
 ### 17.2 本轮确认
 

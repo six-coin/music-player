@@ -171,7 +171,7 @@ class PlayerApi:
     def list_songs(self, query: object = "") -> dict[str, Any]:
         with self._lock:
             text = query.strip().casefold() if isinstance(query, str) else ""
-            in_playlist = set(self.session.order) | set(self.session.next_order)
+            in_playlist = set(self.session.order)
             items: list[dict[str, Any]] = []
             musics = sorted(self.library.musics.values(), key=lambda item: item.title.casefold())
             for music in musics:
@@ -196,23 +196,23 @@ class PlayerApi:
         with self._lock:
             if not isinstance(uid, str) or not uid:
                 return self._snapshot()
-            if uid != self.session.playlist_uid:
-                self._records = {}
-                self._records_uid = ""
+            if uid == self.session.playlist_uid and self.session.current_md5 is not None:
+                return self._snapshot()  # 点已选中的歌单不重置；没歌可播时允许重点重试
+            self._records = {}
+            self._records_uid = ""
             self.session.load_playlist(uid, autoplay=True)
             self._after_change()
             return self._snapshot()
 
     def next_track(self, md5: object = "", played_ms: object = 0) -> dict[str, Any]:
         with self._lock:
-            self._record_manual(md5, played_ms)
+            self._record_skip(md5, played_ms)
             self.session.next()
             self._after_change()
             return self._snapshot()
 
     def prev_track(self, md5: object = "", played_ms: object = 0) -> dict[str, Any]:
         with self._lock:
-            self._record_manual(md5, played_ms)
             self.session.previous()
             self._after_change()
             return self._snapshot()
@@ -221,7 +221,6 @@ class PlayerApi:
         with self._lock:
             if not isinstance(md5, str):
                 return self._snapshot()
-            self._record_manual(md5, played_ms)
             self.session.jump(md5)
             self._after_change()
             return self._snapshot()
@@ -260,7 +259,6 @@ class PlayerApi:
         with self._lock:
             if not isinstance(md5, str):
                 return self._snapshot()
-            self._record_manual(self.session.current_md5 or "", played_ms)
             if self.session.pick_loop_song(md5):
                 self._after_change()
             return self._snapshot()
@@ -309,7 +307,7 @@ class PlayerApi:
     def _snapshot(self) -> dict[str, Any]:
         state = self.session.snapshot()
         current = state["current_md5"]
-        items = [self._queue_item(md5) for md5 in state["queue"]]
+        items = [self._queue_item(item) for item in state["queue"]]
         pinned = state["pinned"]
         return {
             "ok": True,
@@ -338,7 +336,6 @@ class PlayerApi:
             "queue": {
                 "visible": self._queue_visible,
                 "items": items,
-                "more": state["queue_more"],
                 "current_md5": current,
                 "pinned": self._title(pinned) if isinstance(pinned, str) else None,
             },
@@ -364,12 +361,14 @@ class PlayerApi:
             "missing": not self._available(md5),
         }
 
-    def _queue_item(self, md5: str) -> dict[str, Any]:
+    def _queue_item(self, item: dict[str, str]) -> dict[str, Any]:
+        md5 = item["md5"]
         music = self.library.find_music(md5)
         return {
             "md5": md5,
             "title": music.title if music else md5[:8],
             "missing": not self._available(md5),
+            "state": item["state"],
         }
 
     def _command_payload(self, command: object) -> dict[str, Any] | None:
@@ -450,7 +449,8 @@ class PlayerApi:
 
     # ---------- 统计 ----------
 
-    def _record_manual(self, md5: object, played_ms: object) -> None:
+    def _record_skip(self, md5: object, played_ms: object) -> None:
+        """只有「下一首」会走到这里；上一首、点队列、切歌单都不记账。"""
         if isinstance(md5, str) and md5 and md5 == self.session.current_md5:
             self._record(md5, _milliseconds(played_ms), natural=False)
 

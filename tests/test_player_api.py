@@ -116,6 +116,50 @@ def test_select_playlist_starts_playing(api):
     assert data["empty"] is None
 
 
+def test_selecting_the_same_playlist_is_a_noop(api):
+    first = api.select_playlist(UID)
+    seq = first["command"]["seq"]
+
+    second = api.select_playlist(UID)
+
+    assert second["track"]["md5"] == first["track"]["md5"]
+    assert second["command"]["seq"] == seq
+
+
+def test_queue_snapshot_has_three_states(api):
+    data = api.select_playlist(UID)
+
+    assert [(item["md5"], item["state"]) for item in data["queue"]["items"]] == [
+        (md5("a"), "current"),
+        (md5("b"), "upcoming"),
+        (md5("c"), "upcoming"),
+    ]
+    assert "more" not in data["queue"]
+
+    data = api.next_track(md5("a"), 1000)
+    assert [item["state"] for item in data["queue"]["items"]] == [
+        "played",
+        "current",
+        "upcoming",
+    ]
+
+
+def test_previous_does_not_record(api, tmp_path):
+    api.select_playlist(UID)
+    api.next_track(md5("a"), 1000)  # 只有这一步记账
+    api.prev_track(md5("b"), 1000)
+
+    stats = json.loads((tmp_path / "stats" / f"{UID}.json").read_text(encoding="utf-8"))
+    assert set(stats["songs"]) == {md5("a")}
+
+
+def test_jump_does_not_record(api, tmp_path):
+    api.select_playlist(UID)
+    api.jump_to(md5("c"), 1000)
+
+    assert not (tmp_path / "stats" / f"{UID}.json").exists()
+
+
 def test_player_leaves_library_untouched(api, tmp_path):
     before = (
         (tmp_path / "library.json").read_bytes(),

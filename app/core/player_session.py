@@ -17,7 +17,6 @@ from app.core.queue import build_round, play_order
 from app.errors import PlaylistCycleError
 
 MODES = ("shuffle", "list_loop", "repeat_one")
-QUEUE_LIMIT = 50
 
 MISSING = "missing"
 FAILED = "failed"
@@ -93,9 +92,7 @@ class PlayerSession:
 
         self._songs: list[str] = []
         self.order: list[str] = []
-        self.next_order: list[str] = []
         self.index = -1
-        self._removed: set[str] = set()
 
         self._seq = 0
         self._notice_seq = 0
@@ -109,7 +106,6 @@ class PlayerSession:
         return self._command
 
     def snapshot(self) -> dict[str, object]:
-        items, more = self.queue()
         return {
             "mode": self.mode,
             "playlist_uid": self.playlist_uid,
@@ -118,25 +114,34 @@ class PlayerSession:
             "playing": self.playing,
             "can_prev": self.can_prev(),
             "can_next": self.can_next(),
-            "queue": items,
-            "queue_more": more,
+            "queue": [{"md5": md5, "state": state} for md5, state in self.queue()],
             "pinned": self.pin.md5 if self.pin is not None else None,
             "empty": self.empty,
             "notice": self.notice,
             "command": self._command,
         }
 
-    def queue(self) -> tuple[list[str], int]:
-        """返回（接下来会播的 md5，被截掉的条数）。"""
+    def queue(self) -> list[tuple[str, str]]:
+        """整张歌单，以及每首的位置：``played`` / ``current`` / ``upcoming``。
+
+        队列永远显示完整歌单，不做截断；单曲循环没有「已播」，除当前曲外都是待播。
+        """
         if self.pin is not None:
-            return [], 0
+            return []
         if self.mode == "repeat_one":
-            items = list(self.order)
-            return items[:QUEUE_LIMIT], max(0, len(items) - QUEUE_LIMIT)
-        upcoming = [md5 for md5 in self.order[self.index + 1 :] if md5 not in self._removed]
-        if not upcoming:
-            upcoming = [md5 for md5 in self.next_order if md5 not in self._removed]
-        return upcoming[:QUEUE_LIMIT], max(0, len(upcoming) - QUEUE_LIMIT)
+            return [
+                (md5, "current" if position == self.index else "upcoming")
+                for position, md5 in enumerate(self.order)
+            ]
+        result: list[tuple[str, str]] = []
+        for position, md5 in enumerate(self.order):
+            if position < self.index:
+                result.append((md5, "played"))
+            elif position == self.index:
+                result.append((md5, "current"))
+            else:
+                result.append((md5, "upcoming"))
+        return result
 
     def can_prev(self) -> bool:
         if self.pin is not None:
@@ -164,12 +169,10 @@ class PlayerSession:
         self.playlist_uid = uid
         self.pin = None
         self._songs = _unique(play_order(content, self._library))
-        self._removed.clear()
         self.position_ms = 0
 
         if not self._songs:
             self.order = []
-            self.next_order = []
             self.index = -1
             self.current_md5 = None
             self.empty = "empty_playlist"
@@ -179,7 +182,6 @@ class PlayerSession:
         self.empty = None
         self.order = build_round(self._songs, self.mode, self._rng)
         self.index = 0
-        self.next_order = build_round(self._songs, self.mode, self._rng, self.order[-1])
         self.current_md5 = self.order[0]
         self._emit(self.current_md5, 0, autoplay)
 
@@ -209,11 +211,9 @@ class PlayerSession:
         self.playlist_uid = playlist.uid
         self._songs = _unique(play_order(content, self._library))
         self.pin = None
-        self._removed.clear()
 
         if not self._songs:
             self.order = []
-            self.next_order = []
             self.index = -1
             self.current_md5 = None
             self.empty = "empty_playlist"
@@ -257,15 +257,9 @@ class PlayerSession:
     def jump(self, md5: str) -> bool:
         if md5 == self.current_md5:
             return False
-        if md5 in self.order:
-            self.index = self.order.index(md5)
-        elif md5 in self.next_order:
-            self._promote()
-            if md5 not in self.order:
-                return False
-            self.index = self.order.index(md5)
-        else:
+        if md5 not in self.order:
             return False
+        self.index = self.order.index(md5)
         self.pin = None
         self.current_md5 = md5
         self.empty = None
@@ -316,7 +310,7 @@ class PlayerSession:
         self.empty = None
         if md5 == self.current_md5:
             return True
-        if md5 in self.order or md5 in self.next_order:
+        if md5 in self.order:
             self.jump(md5)
             self.pin = None
             return True
@@ -343,7 +337,7 @@ class PlayerSession:
         missing: list[str] = []
         picked = self._scan(self.index + 1, len(self.order), judge, missing)
         if picked is None:
-            if not self._promote():
+            if not self._next_round():
                 self._stop(all_skipped=judge and not missing)
                 if missing:
                     self.note(MISSING, missing[0], len(missing))
@@ -375,24 +369,20 @@ class PlayerSession:
         return None
 
     def _verdict(self, md5: str, *, judge: bool) -> str:
-        if md5 in self._removed:
-            return "skip"
         if not self._hooks.available(md5):
             return "missing"
         if judge and self.playlist_uid and self._hooks.should_skip(self.playlist_uid, md5):
-            self._removed.add(md5)
             self._hooks.on_auto_skip(self.playlist_uid, md5)
             return "skip"
         return "take"
 
-    def _promote(self) -> bool:
-        if not self.next_order:
+    def _next_round(self) -> bool:
+        """一轮播完才生成下一轮；生成之后不保留上一轮的历史。"""
+        if not self._songs:
             return False
         previous_last = self.order[-1] if self.order else None
-        self.order = list(self.next_order)
+        self.order = build_round(self._songs, self.mode, self._rng, previous_last)
         self.index = -1
-        self._removed.clear()
-        self.next_order = build_round(self._songs, self.mode, self._rng, previous_last)
         return True
 
     def _rebuild_around(self, md5: str) -> None:
@@ -404,14 +394,11 @@ class PlayerSession:
         else:
             self.order = list(self._songs)
             self.index = self.order.index(md5) if md5 in self.order else 0
-        self._removed.clear()
-        self.next_order = build_round(
-            self._songs, self.mode, self._rng, self.order[-1] if self.order else None
-        )
 
     def _stop(self, *, all_skipped: bool) -> None:
         self.current_md5 = None
         self.position_ms = 0
+        self.index = len(self.order)
         self.empty = "unplayable"
         self._emit_stop()
         if all_skipped:

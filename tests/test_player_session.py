@@ -48,35 +48,50 @@ def test_load_playlist_starts_first_and_autoplays(tmp_path):
     assert session.empty is None
 
 
-def test_queue_follows_the_round(tmp_path):
+def test_queue_shows_the_whole_playlist_with_states(tmp_path):
     session, _, _ = build(tmp_path)
     session.load_playlist(UID, autoplay=True)
 
-    assert session.queue() == ([md5("b"), md5("c")], 0)
+    assert session.queue() == [
+        (md5("a"), "current"),
+        (md5("b"), "upcoming"),
+        (md5("c"), "upcoming"),
+    ]
 
     session.next()
-    assert session.queue() == ([md5("c")], 0)
+    assert session.queue() == [
+        (md5("a"), "played"),
+        (md5("b"), "current"),
+        (md5("c"), "upcoming"),
+    ]
 
 
-def test_last_track_still_shows_next_round(tmp_path):
+def test_last_track_keeps_the_full_queue(tmp_path):
     session, _, _ = build(tmp_path)
     session.load_playlist(UID, autoplay=True)
     session.next()
     session.next()
 
-    items, _ = session.queue()
-    assert items == [md5("a"), md5("b"), md5("c")]  # 列表循环的下一轮就是本轮
+    assert session.queue() == [
+        (md5("a"), "played"),
+        (md5("b"), "played"),
+        (md5("c"), "current"),
+    ]
 
 
-def test_last_track_of_a_shuffle_round_shows_the_next_round(tmp_path):
-    session, _, _ = build(tmp_path, mode="shuffle", seed=3)
+def test_new_round_starts_at_zero_and_cannot_go_back(tmp_path):
+    session, _, _ = build(tmp_path, songs="abcdefgh", mode="shuffle", seed=5)
     session.load_playlist(UID, autoplay=True)
-    session.next()
+    for _ in range(7):
+        session.next()
+    last = session.current_md5
+
     session.next()
 
-    items, _ = session.queue()
-    assert len(items) == 3
-    assert items[0] != session.current_md5  # 新一轮首曲避开上一轮末曲
+    assert session.index == 0
+    assert session.current_md5 != last
+    assert session.can_prev() is False
+    assert all(state != "played" for _md5, state in session.queue())
 
 
 def test_list_loop_wraps_at_the_end(tmp_path):
@@ -112,13 +127,16 @@ def test_repeat_one_replays_the_same_track(tmp_path):
     assert session.command.autoplay is True
 
 
-def test_repeat_one_queue_shows_the_whole_playlist(tmp_path):
+def test_repeat_one_queue_has_no_played_state(tmp_path):
     session, _, _ = build(tmp_path, mode="repeat_one")
     session.load_playlist(UID, autoplay=True)
+    session.next()
 
-    items, _ = session.queue()
-    assert items == [md5("a"), md5("b"), md5("c")]
-    assert session.snapshot()["current_md5"] == md5("a")
+    assert session.queue() == [
+        (md5("a"), "upcoming"),
+        (md5("b"), "current"),
+        (md5("c"), "upcoming"),
+    ]
 
 
 def test_shuffle_round_covers_every_song_once(tmp_path):
@@ -143,7 +161,7 @@ def test_shuffle_seam_avoids_the_previous_last(tmp_path):
     assert session.current_md5 != last
 
 
-def test_auto_skip_leaves_the_queue(tmp_path):
+def test_auto_skip_marks_the_song_as_played(tmp_path):
     skipped: list[str] = []
     hooks = Hooks(
         should_skip=lambda _uid, item: item == md5("b"),
@@ -151,12 +169,11 @@ def test_auto_skip_leaves_the_queue(tmp_path):
     )
     session, _, _ = build(tmp_path, hooks=hooks)
     session.load_playlist(UID, autoplay=True)
-    assert md5("b") in session.queue()[0]
 
     session.next()
 
     assert session.current_md5 == md5("c")
-    assert md5("b") not in session.queue()[0]
+    assert (md5("b"), "played") in session.queue()
     assert skipped == [md5("b")]
 
 
@@ -177,9 +194,10 @@ def test_missing_track_is_skipped_but_stays_in_the_queue(tmp_path):
     session, _, _ = build(tmp_path, hooks=hooks)
     session.load_playlist(UID, autoplay=True)
 
-    assert md5("b") in session.queue()[0]
+    assert (md5("b"), "upcoming") in session.queue()
     session.next()
     assert session.current_md5 == md5("c")
+    assert (md5("b"), "played") in session.queue()
     assert session.notice is not None and session.notice.kind == "missing"
 
 
@@ -196,7 +214,7 @@ def test_pin_only_for_songs_outside_the_playlist(tmp_path):
     assert session.pick_loop_song(md5("e")) is True
     assert session.pin is not None
     assert session.current_md5 == md5("e")
-    assert session.queue() == ([], 0)
+    assert session.queue() == []
 
 
 def test_exit_repeat_one_restores_the_origin(tmp_path):

@@ -364,7 +364,6 @@
     "player.mode.repeat_one": "单曲循环",
     "player.queue.title": "待播队列",
     "player.queue.empty": "队列已空",
-    "player.queue.more": "还有 {count} 首",
     "player.queue.pinned": "单曲循环：{title}",
     "player.missing": "文件缺失",
     "player.notice.missing": "{title} 的文件缺失，已跳过",

@@ -20,6 +20,7 @@ const state = {
   pickerIndex: 0,
   pickerTimer: null,
   systemWatch: false,
+  lastCurrent: null,
 };
 
 const audio = document.getElementById("audio");
@@ -203,7 +204,6 @@ function renderTransport() {
 function renderQueue() {
   const data = state.data;
   const list = qs("#queue-list");
-  const more = qs("#queue-more");
   const top = list.scrollTop;
 
   if (data.queue.pinned) {
@@ -211,8 +211,8 @@ function renderQueue() {
       '<div class="queue-pinned">' +
       esc(T("player.queue.pinned", { title: data.queue.pinned })) +
       "</div>";
-    more.hidden = true;
     list.scrollTop = 0;
+    state.lastCurrent = null;
     return;
   }
 
@@ -221,16 +221,21 @@ function renderQueue() {
   } else {
     list.innerHTML = data.queue.items
       .map(function (item, index) {
-        const current = data.mode === "repeat_one" && item.md5 === data.queue.current_md5;
+        const current = item.state === "current";
         return (
           '<button type="button" class="queue-item' +
-          (item.missing ? " is-missing" : "") +
+          (item.state === "played" ? " is-played" : "") +
           (current ? " is-current" : "") +
+          (item.missing ? " is-missing" : "") +
           '" data-md5="' +
           esc(item.md5) +
+          '" data-state="' +
+          esc(item.state) +
           '" title="' +
           esc(item.title) +
-          '">' +
+          '"' +
+          (current ? ' aria-current="true"' : "") +
+          ">" +
           '<span class="idx">' +
           (index + 1) +
           "</span>" +
@@ -244,9 +249,14 @@ function renderQueue() {
       .join("");
   }
 
-  more.hidden = !data.queue.more;
-  more.textContent = data.queue.more ? T("player.queue.more", { count: data.queue.more }) : "";
   list.scrollTop = top;
+
+  // 换曲时把当前曲滚进视野；同一首重绘时保留用户自己的滚动位置。
+  if (data.queue.current_md5 && data.queue.current_md5 !== state.lastCurrent) {
+    const row = list.querySelector('.queue-item[data-state="current"]');
+    if (row) row.scrollIntoView({ block: "nearest" });
+    state.lastCurrent = data.queue.current_md5;
+  }
 }
 
 function renderEmpty() {
@@ -546,7 +556,9 @@ function bindEvents() {
 
   qs("#queue-list").addEventListener("click", function (event) {
     const item = event.target.closest(".queue-item");
-    if (item) call("jump_to", item.dataset.md5, Math.round(state.playedMs)).then(apply);
+    if (item && item.dataset.state !== "current") {
+      call("jump_to", item.dataset.md5, Math.round(state.playedMs)).then(apply);
+    }
   });
 
   qs("#queue-toggle").addEventListener("click", function () {
@@ -675,6 +687,9 @@ function bindEvents() {
     if (event.code === "Space") {
       event.preventDefault();
       togglePlay();
+    } else if (event.ctrlKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "c") {
+      event.preventDefault();
+      callTrack("next_track");
     } else if (event.key === "ArrowLeft" && event.ctrlKey) {
       event.preventDefault();
       callTrack("prev_track");
