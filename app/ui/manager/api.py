@@ -17,7 +17,7 @@ from loguru import logger
 
 from app import __version__, i18n, paths
 from app.core import integrity, source
-from app.core.adaptation import Params, effective, skip_probability, skip_rate
+from app.core.adaptation import Params, effective, params_from_dict, skip_probability, skip_rate
 from app.core.importer import ImportOutcome, import_file
 from app.core.library import Library
 from app.core.naming import parse_filename
@@ -1073,15 +1073,7 @@ class ManagerApi:
         return {"path": str(result[0]) if result else ""}
 
     def _adaptation_defaults(self) -> Params:
-        data = self.settings.get("common", "adaptation", default={})
-        if not isinstance(data, dict):
-            data = {}
-        return Params(
-            window=int(data.get("window", 100)),
-            min_plays=int(data.get("min_plays", 10)),
-            base=float(data.get("base", 0.95)),
-            skip_seconds=int(data.get("skip_seconds", 30)),
-        )
+        return params_from_dict(self.settings.get("common", "adaptation", default={}))
 
     def start_replace_source(self, md5: str, path: str) -> dict[str, Any]:
         with self._lock:

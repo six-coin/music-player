@@ -9,7 +9,19 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from app.models import BASE_MAX, Adaptation
+from app.models import (
+    BASE_MAX,
+    SKIP_SECONDS_MAX,
+    SKIP_SECONDS_MIN,
+    WINDOW_MAX,
+    WINDOW_MIN,
+    Adaptation,
+)
+
+DEFAULT_WINDOW = 100
+DEFAULT_MIN_PLAYS = 10
+DEFAULT_BASE = 0.95
+DEFAULT_SKIP_SECONDS = 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,6 +30,43 @@ class Params:
     min_plays: int
     base: float
     skip_seconds: int
+
+
+def _as_int(value: object, fallback: int, low: int, high: int) -> int:
+    """配置文件是人手写的，数字也可能是字符串，读不出来就回退默认值。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return fallback
+    try:
+        number = int(float(value)) if isinstance(value, str) else int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return min(high, max(low, number))
+
+
+def _as_float(value: object, fallback: float, low: float, high: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return fallback
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return fallback
+    if number != number:  # NaN
+        return fallback
+    return min(high, max(low, number))
+
+
+def params_from_dict(data: object) -> Params:
+    """把 ``common.adaptation`` 那一段读成参数；manager 与 simple 共用这一份。"""
+    raw = data if isinstance(data, dict) else {}
+    window = _as_int(raw.get("window"), DEFAULT_WINDOW, WINDOW_MIN, WINDOW_MAX)
+    return Params(
+        window=window,
+        min_plays=_as_int(raw.get("min_plays"), DEFAULT_MIN_PLAYS, 0, window),
+        base=_as_float(raw.get("base"), DEFAULT_BASE, 0.0, BASE_MAX),
+        skip_seconds=_as_int(
+            raw.get("skip_seconds"), DEFAULT_SKIP_SECONDS, SKIP_SECONDS_MIN, SKIP_SECONDS_MAX
+        ),
+    )
 
 
 def effective(adaptation: Adaptation, defaults: Params) -> Params:

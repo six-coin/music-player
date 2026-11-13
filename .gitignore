@@ -8,8 +8,7 @@ __pycache__/
 .mypy_cache/
 logs/
 config/
-assets/music/
-assets/temp/
+assets/
 .workbuddy-ai/
 
 # 重构前的参考材料，删除这两个目录后一并删掉这两行
