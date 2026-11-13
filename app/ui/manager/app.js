@@ -514,11 +514,7 @@ function renderDetail() {
     "<span>·</span><span>" + formatDate(music.created_at) + "</span>" +
     flags.join("") +
     "</div></div>" +
-    '<div class="detail-tools">' +
-    '<button class="btn ghost" data-audition="' + esc(music.md5) + '">' +
-    esc(T("audition.play")) + "</button>" +
-    '<button class="btn ghost" data-replace="1">' + esc(T("song.replace_source")) + "</button>" +
-    '<button class="btn ghost" data-menu="song">' +
+    '<div class="detail-tools"><button class="btn ghost" data-menu="song">' +
     esc(T("action.more")) + "</button></div>" +
     "</header>" +
 
@@ -2096,6 +2092,28 @@ function closeDrawer() {
   }, 160);
 }
 
+function confirmClearPlaylistStats() {
+  const uid = state.drawer;
+  if (!uid) return;
+  openModal({
+    title: T("adaptation.reset_all"),
+    body: '<p class="modal-note">' + esc(T("adaptation.reset_all_confirm")) + "</p>",
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("adaptation.reset_all"),
+        danger: true,
+        onClick: async function () {
+          const data = await call("reset_stats", uid, "");
+          if (!data) return;
+          closeModal();
+          apply(data);
+        },
+      },
+    ],
+  });
+}
+
 function renderDrawer(data) {
   const params = data.params || {};
   const note = T("adaptation.stats_note", {
@@ -2316,11 +2334,6 @@ function settingsImport() {
 
 function settingsSimple() {
   const section = (state.data.settings && state.data.settings.simple) || {};
-  const builtin = ((state.data.playlists || []) || []).find(function (item) {
-    return item.builtin;
-  });
-  const defaultPlaylist = builtin ? builtin.title : "";
-
   return settingsCard(
     T("settings.simple_section"),
     '<p class="settings-row-hint" style="margin:0 0 4px">' +
@@ -2341,8 +2354,7 @@ function settingsSimple() {
       settingsRow(
         T("settings.default_playlist"),
         T("settings.default_playlist_hint"),
-        '<span class="path-text">' + esc(defaultPlaylist) + "</span>" +
-          '<button class="btn ghost small" data-action="goto_default">' +
+        '<button class="btn ghost small" data-action="goto_default">' +
           esc(T("settings.goto")) + "</button>"
       )
   );
@@ -2432,7 +2444,7 @@ function settingsMaintenance() {
   );
 }
 
-function renderSettings() {
+function renderSettings(animate) {
   qsa(".settings-tab").forEach(function (tab) {
     tab.classList.toggle("is-active", tab.dataset.settings === state.settingsTab);
   });
@@ -2443,6 +2455,12 @@ function renderSettings() {
   else if (state.settingsTab === "player") body.innerHTML = settingsPlayer();
   else if (state.settingsTab === "maintenance") body.innerHTML = settingsMaintenance();
   else body.innerHTML = settingsGeneral();
+
+  if (animate) {
+    body.classList.remove("is-entering");
+    void body.offsetWidth;
+    body.classList.add("is-entering");
+  }
 }
 
 function settingValue(path) {
@@ -2520,6 +2538,35 @@ function confirmClearStats() {
 
 /* ---------- 菜单 ---------- */
 
+function songMenuItems(music) {
+  return [
+    {
+      label: T("audition.play"),
+      onClick: function () {
+        auditionPlay(music.md5);
+      },
+    },
+    {
+      label: T("action.manage_aliases"),
+      onClick: function () {
+        openAliasEditor(music);
+      },
+    },
+    {
+      label: T("song.replace_source"),
+      onClick: function () {
+        replaceSource(music);
+      },
+    },
+    {
+      label: T("song.delete"),
+      onClick: function () {
+        confirmDeleteSongs([music.md5]);
+      },
+    },
+  ];
+}
+
 function closeMenu() {
   const menu = qs("#menu");
   menu.hidden = true;
@@ -2536,11 +2583,22 @@ function openMenu(anchor, items) {
     .join("");
   menu.hidden = false;
 
-  const rect = anchor.getBoundingClientRect();
   const width = menu.offsetWidth;
-  const left = Math.min(Math.max(8, rect.right - width), window.innerWidth - width - 8);
+  const height = menu.offsetHeight;
+  let left;
+  let top;
+  if (anchor && typeof anchor.x === "number") {
+    left = anchor.x;
+    top = anchor.y;
+  } else {
+    const rect = anchor.getBoundingClientRect();
+    left = rect.right - width;
+    top = rect.bottom + 4;
+  }
+  left = Math.min(Math.max(8, left), window.innerWidth - width - 8);
+  top = Math.min(Math.max(8, top), window.innerHeight - height - 8);
   menu.style.left = left + "px";
-  menu.style.top = rect.bottom + 4 + "px";
+  menu.style.top = top + "px";
 
   menu.onclick = function (event) {
     const button = event.target.closest("[data-menu-index]");
@@ -2554,20 +2612,29 @@ function openMenu(anchor, items) {
 /* ---------- 弹窗 ---------- */
 
 let modalDismissible = true;
+let modalTimer = null;
 
 function closeModal() {
   if (!modalDismissible) return;
   const modal = qs("#modal");
-  modal.hidden = true;
-  qs("#modal-body").innerHTML = "";
-  qs("#modal-actions").innerHTML = "";
-  qs("#app").inert = false;
+  if (modal.hidden) return;
   modalDismissible = true;
+  qs("#app").inert = false;
+  modal.classList.add("is-closing");
+  window.clearTimeout(modalTimer);
+  modalTimer = window.setTimeout(function () {
+    modal.hidden = true;
+    modal.classList.remove("is-closing");
+    qs("#modal-body").innerHTML = "";
+    qs("#modal-actions").innerHTML = "";
+  }, 160);
 }
 
 function openModal(options) {
   const modal = qs("#modal");
   const card = qs("#modal-card");
+  window.clearTimeout(modalTimer);
+  modal.classList.remove("is-closing");
   closeMenu();
   qs("#app").inert = true;
   qs("#modal-title").textContent = options.title || "";
@@ -3576,6 +3643,10 @@ function bindEvents() {
       return;
     }
 
+    if (state.drawer && !event.target.closest("#drawer") && !event.target.closest("[data-stats]")) {
+      closeDrawer();
+    }
+
     // 刚点开菜单的那一次点击不能再把菜单关掉。
     if (event.target.closest("[data-menu]")) return;
     if (!event.target.closest("#menu")) closeMenu();
@@ -3616,6 +3687,16 @@ function bindEvents() {
       });
     }
     renderSongs();
+  });
+
+  qs("#song-list").addEventListener("contextmenu", function (event) {
+    const row = event.target.closest(".song-row");
+    if (!row) return;
+    event.preventDefault();
+    const music = musicByMd5(row.dataset.md5);
+    if (!music) return;
+    if (state.active !== music.md5) selectMusic(music.md5);
+    openMenu({ x: event.clientX, y: event.clientY }, songMenuItems(music));
   });
 
   qs("#song-list").addEventListener("click", function (event) {
@@ -3671,6 +3752,23 @@ function bindEvents() {
   qs("#playlist-list").addEventListener("click", function (event) {
     const row = event.target.closest("[data-playlist-uid]");
     if (row) selectPlaylist(row.dataset.playlistUid);
+  });
+
+  qs("#playlist-list").addEventListener("contextmenu", function (event) {
+    const row = event.target.closest("[data-playlist-uid]");
+    if (!row) return;
+    event.preventDefault();
+    const playlist = playlistByUid(row.dataset.playlistUid);
+    if (!playlist || playlist.builtin) return;
+    if (state.active !== playlist.uid) selectPlaylist(playlist.uid);
+    openMenu({ x: event.clientX, y: event.clientY }, [
+      {
+        label: T("playlist.delete"),
+        onClick: function () {
+          confirmDeletePlaylist(playlist);
+        },
+      },
+    ]);
   });
 
   const playlistSearch = qs("#playlists-search");
@@ -3760,9 +3858,9 @@ function bindEvents() {
 
     const adaptSwitch = event.target.closest("[data-adapt-enabled]");
     if (adaptSwitch) {
-      const data = await call("update_adaptation", playlist.uid, {
-        enabled: adaptSwitch.getAttribute("aria-checked") !== "true",
-      });
+      const next = adaptSwitch.getAttribute("aria-checked") !== "true";
+      adaptSwitch.setAttribute("aria-checked", next ? "true" : "false");
+      const data = await call("update_adaptation", playlist.uid, { enabled: next });
       if (data) apply(data);
       return;
     }
@@ -3886,6 +3984,23 @@ function bindEvents() {
     if (row) selectTagGroup(row.dataset.tagGroup);
   });
 
+  qs("#tag-list").addEventListener("contextmenu", function (event) {
+    const row = event.target.closest("[data-tag-group]");
+    if (!row) return;
+    event.preventDefault();
+    const group = tagGroupByUid(row.dataset.tagGroup);
+    if (!group) return;
+    if (state.active !== group.uid) selectTagGroup(group.uid);
+    openMenu({ x: event.clientX, y: event.clientY }, [
+      {
+        label: T("tag.delete_group"),
+        onClick: function () {
+          confirmDeleteTagGroup(group);
+        },
+      },
+    ]);
+  });
+
   const tagSearch = qs("#tags-search");
   tagSearch.addEventListener("input", function () {
     state.tagQuery = tagSearch.value;
@@ -3949,8 +4064,10 @@ function bindEvents() {
 
     const toggle = event.target.closest("[data-switch]");
     if (toggle) {
+      const next = toggle.getAttribute("aria-checked") !== "true";
+      toggle.setAttribute("aria-checked", next ? "true" : "false");
       const patch = {};
-      patch[toggle.dataset.switch] = toggle.getAttribute("aria-checked") !== "true";
+      patch[toggle.dataset.switch] = next;
       const data = await call("update_tag_group", group.uid, patch);
       if (data) apply(data);
       return;
@@ -3983,6 +4100,35 @@ function bindEvents() {
   qs("#author-list").addEventListener("click", function (event) {
     const row = event.target.closest("[data-author-uid]");
     if (row) selectAuthor(row.dataset.authorUid);
+  });
+
+  qs("#author-list").addEventListener("contextmenu", function (event) {
+    const row = event.target.closest("[data-author-uid]");
+    if (!row) return;
+    event.preventDefault();
+    const author = authorByUid(row.dataset.authorUid);
+    if (!author) return;
+    if (state.active !== author.uid) selectAuthor(author.uid);
+    openMenu({ x: event.clientX, y: event.clientY }, [
+      {
+        label: T("author.move_up"),
+        onClick: function () {
+          moveAuthor(author.uid, -1);
+        },
+      },
+      {
+        label: T("author.move_down"),
+        onClick: function () {
+          moveAuthor(author.uid, 1);
+        },
+      },
+      {
+        label: T("author.delete"),
+        onClick: function () {
+          confirmDeleteAuthor(author);
+        },
+      },
+    ]);
   });
 
   const authorSearch = qs("#authors-search");
@@ -4145,7 +4291,7 @@ function bindEvents() {
     const tab = event.target.closest("[data-settings]");
     if (!tab) return;
     state.settingsTab = tab.dataset.settings;
-    renderSettings();
+    renderSettings(true);
   });
 
   const settingsBody = qs("#settings-body");
@@ -4159,10 +4305,9 @@ function bindEvents() {
     }
     const toggle = event.target.closest("[data-setting-switch]");
     if (toggle) {
-      await patchSetting(
-        toggle.dataset.settingSwitch,
-        toggle.getAttribute("aria-checked") !== "true"
-      );
+      const next = toggle.getAttribute("aria-checked") !== "true";
+      toggle.setAttribute("aria-checked", next ? "true" : "false");
+      await patchSetting(toggle.dataset.settingSwitch, next);
     }
   });
 
@@ -4280,8 +4425,7 @@ function syncAudition() {
   qs("#drawer-body").addEventListener("click", async function (event) {
     if (!state.drawer) return;
     if (event.target.closest("[data-reset-all]")) {
-      const data = await call("reset_stats", state.drawer, "");
-      if (data) apply(data);
+      confirmClearPlaylistStats();
       return;
     }
     const one = event.target.closest("[data-reset-md5]");
@@ -4327,42 +4471,11 @@ function syncAudition() {
       return;
     }
 
-    const audition = event.target.closest("[data-audition]");
-    if (audition) {
-      auditionPlay(audition.dataset.audition);
-      return;
-    }
-
-    if (event.target.closest("[data-replace]")) {
-      const music = musicByMd5(state.active);
-      if (music) replaceSource(music);
-      return;
-    }
-
     const menu = event.target.closest("[data-menu='song']");
     if (menu) {
       const music = musicByMd5(state.active);
       if (!music) return;
-      openMenu(menu, [
-        {
-          label: T("action.manage_aliases"),
-          onClick: function () {
-            openAliasEditor(music);
-          },
-        },
-        {
-          label: T("song.replace_source"),
-          onClick: function () {
-            replaceSource(music);
-          },
-        },
-        {
-          label: T("song.delete"),
-          onClick: function () {
-            confirmDeleteSongs([music.md5]);
-          },
-        },
-      ]);
+      openMenu(menu, songMenuItems(music));
     }
   });
 

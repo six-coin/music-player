@@ -414,5 +414,6 @@
     "settings.debug": "调试状态",
     "settings.debug_hint": "开启后，音乐播放器与轻量音乐播放器都不再记录自适应，也不会自动跳过。",
     "audition.pause": "暂停",
-    "audition.volume": "试听音量"
+    "audition.volume": "试听音量",
+    "adaptation.reset_all_confirm": "清空这个歌单的全部自适应统计？这个操作不可恢复。"
 }

@@ -20,6 +20,7 @@ const state = {
   pickerItems: [],
   pickerIndex: 0,
   pickerTimer: null,
+  pickerCloseTimer: null,
   systemWatch: false,
   lastCurrent: null,
 };
@@ -474,6 +475,8 @@ function tick() {
 async function openPicker() {
   state.pickerOpen = true;
   state.pickerIndex = 0;
+  window.clearTimeout(state.pickerCloseTimer);
+  qs("#picker").classList.remove("is-closing");
   qs("#picker").hidden = false;
   qs("#app").setAttribute("inert", "");
   qs("#picker-search").value = "";
@@ -483,8 +486,14 @@ async function openPicker() {
 
 function closePicker() {
   state.pickerOpen = false;
-  qs("#picker").hidden = true;
   qs("#app").removeAttribute("inert");
+  const picker = qs("#picker");
+  picker.classList.add("is-closing");
+  window.clearTimeout(state.pickerCloseTimer);
+  state.pickerCloseTimer = window.setTimeout(function () {
+    picker.hidden = true;
+    picker.classList.remove("is-closing");
+  }, 160);
 }
 
 async function loadPicker(query) {
