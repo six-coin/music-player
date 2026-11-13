@@ -471,23 +471,45 @@ select {
   font-weight: 500;
 }
 
-/* 卡片标题下面画一条比行分隔线更重的线，标题与第一行才分得开。 */
+/* 卡片标题下面画一条比行分隔线更重的线。
+   线的上下各留 10px 左右：上面是标题的内边距，下面是第一行自己的 padding-top，
+   所以这里不能再加 margin-bottom，否则线会明显贴着标题、远离内容。 */
 .card > .card-title,
-.card > .card-tools {
+.card > .card-tools,
+.card > .card-heading {
   padding-bottom: 10px;
-  margin-bottom: 10px;
   border-bottom: 1px solid var(--border);
 }
 
-.card > .card-tools .card-title {
+.card > .card-tools,
+.card > .card-heading {
   margin-bottom: 0;
 }
 
+.card-heading .card-title {
+  margin: 0;
+}
+
+.card-hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.card-heading + .field-row,
+.card-heading + .toggle-row,
+.card-heading + .settings-row,
+.card-heading + .adapt-row,
 .card-tools + .field-row,
 .card-tools + .toggle-row,
 .card-tools + .settings-row,
 .card-tools + .adapt-row {
   border-top: none;
+}
+
+.card-tools + .entry-list {
+  margin-top: 10px;
 }
 
 .tabs {

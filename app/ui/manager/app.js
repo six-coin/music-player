@@ -2187,9 +2187,12 @@ function settingsRow(title, hint, control, hintClass) {
   );
 }
 
-function settingsCard(title, body) {
+function settingsCard(title, body, hint) {
   return (
-    '<section class="card"><h3 class="card-title">' + esc(title) + "</h3>" + body + "</section>"
+    '<section class="card"><div class="card-heading"><h3 class="card-title">' +
+    esc(title) + "</h3>" +
+    (hint ? '<p class="card-hint">' + esc(hint) + "</p>" : "") +
+    "</div>" + body + "</section>"
   );
 }
 
@@ -2248,12 +2251,11 @@ function settingsGeneral() {
     ) +
     settingsCard(
       T("settings.adaptation_defaults"),
-      '<p class="settings-row-hint" style="margin:0 0 4px">' +
-        esc(T("settings.adaptation_hint")) + "</p>" +
-        adaptRow("window", T("adaptation.window"), T("adaptation.times"), 10, 1000, 1) +
+      adaptRow("window", T("adaptation.window"), T("adaptation.times"), 10, 1000, 1) +
         adaptRow("min_plays", T("adaptation.min_plays"), T("adaptation.times"), 0, 1000, 1) +
         adaptRow("base", T("adaptation.base"), "", 0, 0.99, 0.01) +
-        adaptRow("skip_seconds", T("adaptation.skip_seconds"), T("adaptation.seconds"), 5, 300, 1)
+        adaptRow("skip_seconds", T("adaptation.skip_seconds"), T("adaptation.seconds"), 5, 300, 1),
+      T("settings.adaptation_hint")
     ) +
     settingsCard(
       T("settings.audition"),
@@ -2336,9 +2338,7 @@ function settingsSimple() {
   const section = (state.data.settings && state.data.settings.simple) || {};
   return settingsCard(
     T("settings.simple_section"),
-    '<p class="settings-row-hint" style="margin:0 0 4px">' +
-      esc(T("settings.simple_hint")) + "</p>" +
-      settingsRow(
+    settingsRow(
         T("settings.play_order"),
         T("settings.simple_order_hint"),
         selectMarkup(
@@ -2356,7 +2356,8 @@ function settingsSimple() {
         T("settings.default_playlist_hint"),
         '<button class="btn ghost small" data-action="goto_default">' +
           esc(T("settings.goto")) + "</button>"
-      )
+      ),
+    T("settings.simple_hint")
   );
 }
 
