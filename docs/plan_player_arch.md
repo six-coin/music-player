@@ -41,6 +41,7 @@
 - 不做封面、歌词、频谱（`plan_player` §6）。
 - 不做媒体键与全局热键（`plan_player` §4.6）。
 - 不做播放历史、拖拽调序、删除单曲（`plan_player` §8）。
+- **不做任何设置入口**：没有设置页、没有主题开关、没有偏好弹窗。所有设置都在 manager 里改，player 只读。
 - **不做运行期热加载**：播放中 manager 改了歌单，player 不跟着变。理由见 §9.9。
 
 ### 1.5 与另外两个程序的关系
@@ -50,7 +51,7 @@
 | 与 manager | 只读它配置的歌单与设置，不回写音乐库 | `Library` / `PlaylistStore` 只调 `load` 与 `resolve`，不调 `save` |
 | 与 simple | 互不干扰，可以同时开，两边各按自己的规则播放与记账 | 统计走 `StatsStore` 的文件锁；设置走 §6.4 的读改写 |
 | 数据一致性 | 只写播放位置与自适应记录 | §6.1 与 §6.3 的写入表 |
-| 进程关系 | player 不是 manager 的子窗口，关掉 manager 后照常工作 | 两个独立入口，`launcher.spawn` 拉起后不等待 |
+| 进程关系 | player 不是 manager 的子窗口，关掉 manager 后照常工作；**player 只允许开一个** | 两个独立入口，`launcher.spawn` 拉起后不等待；player 启动时先取命名互斥量 |
 
 ---
 
@@ -121,6 +122,8 @@ Music Player/
 ### 3.2 入口
 
 `player.pyw` 与 `manager.pyw` 同构：把项目根放进 `sys.path`、延迟导入 `app.ui.player.app`、调用 `main()`，不读配置、不建窗口。
+
+`app.py` 的 `main()` 在创建窗口之前先取命名互斥量 `Local\MusicPlayerPlayer`；已有实例在跑就弹一句「播放器已经在运行」并退出。用 `SingleInstance`，与 manager / simple 同一套。
 
 `player.bat` 照 `manager.bat`：`@echo off` / `chcp 65001 >nul` / `setlocal` / `cd /d "%~dp0"` / 检查 `.venv\Scripts\pythonw.exe` / `start "" ".venv\Scripts\pythonw.exe" "player.pyw"`。
 
@@ -210,10 +213,10 @@ simple 与 player 都 import 它
 ### 5.3 队列的推导
 
 ```
-queue_items = (order[index + 1:] + next_order)[:50]     # 去掉 removed 与不可用的
+queue_items = (order[index + 1:] or next_order)[:50]     # 去掉 removed
 ```
 
-- **提前算下一轮**：随机模式下最后一首播完之前，队列不能是空的；提前算好，「接下来会播什么」在整轮里都成立。
+- **提前算下一轮**：本轮播到最后一首时，队列紧接着显示下一轮，不会出现空队列；本轮还有剩余时不提前展示下一轮，避免同一首歌在短歌单里立刻出现两次。
 - `list_loop` 的 `next_order` 就是 `order` 本身，队列自然表现出「播完回到第一首」。
 - `repeat_one` 且无 pin：不截断，显示整张歌单，当前曲高亮（`plan_player` §8）。
 - `repeat_one` 且有 pin：只显示「单曲循环：<歌名>」，不列其它曲。
@@ -532,9 +535,10 @@ patch_player(patch)
 
 ```
 tick: 若 !audio.paused → playedMs += min(now - lastTick, 500)
-      暂停 / 跳转 / 换曲 → playedMs = 0
+      换曲 → playedMs = 0
 ```
 
+- 暂停与拖动**不清零**：`played_ms` 是「这一首累计听了多久」，暂停前后、来回拖进度都属于同一首的收听。
 - 每 8 次 tick（约 2 秒）调一次 `report_position`。
 - `ended` / `next` / `prev` / `jump` 时把 `playedMs` 一起上报，Python 用它判定 `1` 还是 `0`。
 - 缓冲停顿会被算进播放时长。本地文件、停顿以毫秒计，这个近似可以接受；换成 `currentTime` 做差反而会把拖动算成听了很久。
@@ -553,6 +557,7 @@ tick: 若 !audio.paused → playedMs += min(now - lastTick, 500)
 
 ```
 logging_setup.setup("player")
+  → SingleInstance("MusicPlayerPlayer").acquire() → 失败则提示并退出
   → SettingsStore.load（损坏则备份后继续，见 §11）
   → i18n.set_language(common.language)
   → theme.resolve(common.theme)
@@ -708,6 +713,7 @@ closing（UI 线程）
 | 播放失败（解码错误 / 5 秒未出声） | 同上，不中断整个队列 |
 | 写设置失败 | 记日志 + 提示条，界面保持新值（下次事件再试），不假装成功 |
 | 媒体服务起不来 | 提示「无法启动本地播放服务」+ 日志；窗口仍打开，歌单可看 |
+| 已有实例在运行 | 原生 `MessageBoxW` 提示后退出，不再开第二个窗口 |
 | 未捕获异常 | `sys.excepthook` 记录 → `logger.complete()` → `MessageBoxW` → `os._exit(1)` |
 
 原则与 reference 一致：**能降级的降级，不能降级的必须留下可读的原因。** player 的降级底线是「窗口能打开、歌单能看见、能关掉」。
@@ -721,6 +727,7 @@ closing（UI 线程）
 | 键 | 用途 |
 |---|---|
 | `player.title` | 窗口标题 |
+| `player.already_running` | `播放器已经在运行了。` |
 | `player.mode.shuffle` / `.list_loop` / `.repeat_one` | 模式名 |
 | `player.queue.title` / `.empty` / `.more` | 待播队列标题、空队列、还有 N 首 |
 | `player.queue.pinned` | `单曲循环：{title}` |
@@ -765,22 +772,22 @@ tests/
 
 | 用例 | 断言 |
 |---|---|
-| `test_shuffle_covers_every_song_once` | 一轮内不重不漏 |
-| `test_shuffle_seam_avoids_previous_last` | 新一轮首曲 ≠ 上轮末曲 |
-| `test_queue_follows_the_round` | 队列 == `order[index+1:] + next_order` 去 removed |
+| `test_shuffle_round_covers_every_song_once` | 一轮内不重不漏 |
+| `test_shuffle_seam_avoids_the_previous_last` | 新一轮首曲 ≠ 上轮末曲 |
+| `test_queue_follows_the_round` | 队列 == 本轮剩余；剩余为空时接下一轮 |
 | `test_last_track_still_shows_next_round` | 最后一首时队列非空 |
-| `test_repeat_one_replays_same_track` | `on_ended` 返回同一个 md5、position=0 |
-| `test_repeat_one_queue_shows_whole_playlist` | 队列长度 == 歌单长度，`current_md5` 正确 |
-| `test_next_clears_pin` | pin 状态下 next → 从 origin 前进，pin 为 None |
-| `test_exit_repeat_one_restores_origin` | 切模式 → 回到原曲原位置 |
+| `test_repeat_one_replays_the_same_track` | `on_ended` 返回同一个 md5、position=0 |
+| `test_repeat_one_queue_shows_the_whole_playlist` | 队列长度 == 歌单长度，`current_md5` 正确 |
+| `test_next_clears_the_pin_and_moves_from_the_origin` | pin 状态下 next → 从 origin 前进，pin 为 None |
+| `test_exit_repeat_one_restores_the_origin` | 切模式 → 回到原曲原位置 |
 | `test_auto_skip_leaves_the_queue` | 命中后队列少一行，`on_auto_skip` 计数 +1 |
-| `test_all_skipped_stops` | 全轮跳过 → Stop + notice，不无限循环 |
-| `test_missing_skips_but_stays_in_queue` | 缺失曲仍在队列且 `missing=true` |
-| `test_restore_deleted_playlist` | `empty=no_selection`，不抛异常 |
-| `test_restore_track_not_in_playlist` | 落在第一首、暂停 |
-| `test_restore_respects_remember_progress` | 关掉时位置为 0 |
+| `test_all_skipped_stops_without_looping` | 全轮跳过 → Stop + notice，不无限循环 |
+| `test_missing_track_is_skipped_but_stays_in_the_queue` | 缺失曲仍在队列且 `missing=true` |
+| `test_restore_deleted_playlist_falls_back_to_empty` | `empty=no_selection`，不抛异常 |
+| `test_restore_track_not_in_playlist_stops_at_the_first` | 落在第一首、暂停 |
+| `test_remember_progress_false_writes_zero` | 关掉「记住进度」时位置写 0 |
 | `test_player_leaves_library_untouched` | 跑一遍全部 API 后 `library.json` / `playlists.json` 字节不变 |
-| `test_invalid_arguments_return_snapshot` | 越界 uid、非法 mode、负数位置都不抛异常 |
+| `test_invalid_arguments_do_not_raise` | 越界 uid、非法 mode、非法位置都不抛异常 |
 | `test_ui_tokens_match` | 两个 `styles.css` 的 `:root` 变量名集合相等 |
 
 界面不做自动化，按 §15 与 reference 3.13 的清单手工过。
@@ -808,6 +815,7 @@ P3 之前不要碰队列渲染：没有真实播放，「接下来会播什么�
 ## 15. 验收清单
 
 - [ ] `setup.bat` 在干净目录一次装好；`player.bat` 双击能起，无控制台黑框
+- [ ] 已经开着一个 player 时再双击，弹出「播放器已经在运行了」，不出现第二个窗口
 - [ ] 首次启动（无 `player.json`）落在「选个歌单开始」，不报错
 - [ ] 点歌单立刻出声，左栏高亮，队列显示剩余曲目
 - [ ] 播完一首自动下一首；最后一首之后按模式回到开头或开新一轮，不会停
@@ -848,7 +856,7 @@ P3 之前不要碰队列渲染：没有真实播放，「接下来会播什么�
 
 ---
 
-## 17. 已确认的判断与待确认
+## 17. 已确认的判断与已知限制
 
 ### 17.1 本文做出的判断
 
@@ -859,18 +867,16 @@ P3 之前不要碰队列渲染：没有真实播放，「接下来会播什么�
 | 退出单曲循环 | 立即回到原歌单原位置，保持播放/暂停状态 | `plan_player` §4.2 |
 | 单曲循环播完是否记账 | 记 `0`（按「自然播完」处理） | `plan_player` §4.5 的记录表 |
 | 主题切换入口 | player 内不放，主题由 `common.theme` 决定 | `plan_player` §5 限定 player 只写播放位置与自适应记录；两个地方各放一个主题开关正是 `plan_manager.md` §3.6 要避免的 |
-| 多开 | 不做单实例守卫 | `plan_manager.md` §14 |
 | 启动即播 | 否，恢复后暂停 | `plan_player` §4.5 |
 | 队列最后一首 | 提前算好下一轮并显示 | 队列在整轮里都要回答「接下来播什么」 |
 
-### 17.2 待确认
+### 17.2 本轮确认
 
-| 事项 | 备选 | 本文的默认 |
-|---|---|---|
-| 主题是否要在 player 内可切 | 加一个 `player.json` 的 `theme_override`（不改 `common.theme`），顶栏放一个 28px 图标键 | 不加，跟随 manager 的通用页设置 |
-| 是否需要运行期刷新歌单 | 窗口重新获得焦点时比对 `library.json` / `playlists.json` 的 mtime，变了就重建左栏、当前曲目不动 | 不做，重启生效（§9.9） |
-
-两项都不影响 P0–P6 的结构，改起来只动一个方法或一个键；确定后再补进本节。
+| 事项 | 决定 |
+|---|---|
+| 设置入口 | player 内一个都没有：没有设置页、没有主题开关。主题、语言、音量默认值、播放模式默认值都在 manager 里改，player 只读 |
+| 运行期刷新 | 不做。启动读一次库与歌单，重启生效 |
+| 单实例 | 做。命名互斥量 `Local\MusicPlayerPlayer`，第二次启动弹一句提示后退出 |
 
 ### 17.3 已知限制
 
@@ -879,4 +885,3 @@ P3 之前不要碰队列渲染：没有真实播放，「接下来会播什么�
 | 运行期不热加载库与歌单 | manager 里新导入的歌要重启 player 才出现 | 播放中重建队列会让「接下来」跳变，比看不到新歌更难受（§9.9） |
 | 主题与语言只在启动时读 | manager 改了要重启才生效 | 两个进程各持一份设置，做实时同步要引入文件监听与推送，收益不抵复杂度 |
 | 关闭时最多丢 2 秒进度 | 极端情况下重开会回退两秒 | 换掉 `closing` 里等网页回话的死锁风险（§9.8） |
-| 不做单实例 | 两个 player 同时开时 `last_*` 以最后关闭的为准 | 统计写入有文件锁，不会写坏；进度是「上次听到哪」，本来就只有一份语义 |

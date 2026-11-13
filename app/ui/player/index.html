@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>音乐播放器</title>
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // 首帧前先把主题定下来，避免深色模式下先白一下。
+    (function () {
+      try {
+        var saved = window.localStorage.getItem("theme");
+        if (saved === "light" || saved === "dark") {
+          document.documentElement.dataset.theme = saved;
+        } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+          document.documentElement.dataset.theme = "dark";
+        }
+      } catch (error) {
+        /* localStorage 不可用时按浅色处理 */
+      }
+    })();
+  </script>
+</head>
+<body>
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-prev" viewBox="0 0 24 24"><path d="M18 5v14"/><path fill="currentColor" stroke="none" d="M15 6L7 12l8 6z"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M6 5v14"/><path fill="currentColor" stroke="none" d="M9 6l8 6-8 6z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M8 5.4l11 6.6-11 6.6z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect fill="currentColor" stroke="none" x="7.4" y="5" width="3.6" height="14" rx="1.2"/><rect fill="currentColor" stroke="none" x="13" y="5" width="3.6" height="14" rx="1.2"/></symbol>
+    <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M4 7h3.2l9.6 10H20"/><path d="M4 17h3.2l2.4-2.6"/><path d="M14.2 9.6L16.8 7H20"/><path d="M17 4l3 3-3 3"/><path d="M17 14l3 3-3 3"/></symbol>
+    <symbol id="i-loop" viewBox="0 0 24 24"><path d="M4 9V8a3 3 0 0 1 3-3h10"/><path d="M14 2l3 3-3 3"/><path d="M20 15v1a3 3 0 0 1-3 3H7"/><path d="M10 22l-3-3 3-3"/></symbol>
+    <symbol id="i-repeat-one" viewBox="0 0 24 24"><path d="M4 10V9a3 3 0 0 1 3-3h10"/><path d="M14 3l3 3-3 3"/><path d="M20 14v1a3 3 0 0 1-3 3H7"/><path d="M10 21l-3-3 3-3"/><text x="12" y="15.4" text-anchor="middle" font-size="7.5" font-weight="700" fill="currentColor" stroke="none">1</text></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12L7.5 14.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18 6.5a7.5 7.5 0 0 1 0 11"/></symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M15 4.5v15"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9.5 5l7 7-7 7"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l4.5 4.5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2"/><path d="M10.6 16.2V8.4l5.8-1.4v7.4"/><circle cx="8.7" cy="16.4" r="1.9"/><circle cx="14.5" cy="14.6" r="1.9"/></symbol>
+  </svg>
+
+  <div class="app" id="app">
+    <aside class="sidebar">
+      <div class="sidebar-head" data-i18n="player.playlist_header">歌单</div>
+      <div class="playlist-list" id="playlists" role="list"></div>
+      <div class="sidebar-foot" id="mode-label"></div>
+    </aside>
+
+    <main class="now">
+      <div class="now-top">
+        <button class="icon-btn" id="queue-toggle" type="button" aria-controls="queue">
+          <svg class="icon" aria-hidden="true"><use href="#i-panel"/></svg>
+        </button>
+      </div>
+
+      <div class="notice" id="notice" role="status" aria-live="polite"></div>
+
+      <div class="now-body">
+        <section class="playing" id="playing">
+          <div class="title-row">
+            <h1 class="track-title" id="track-title"></h1>
+            <button class="ghost-btn" id="pick-loop" type="button" hidden data-i18n="player.action.pick_loop">选一首循环</button>
+          </div>
+          <div class="track-authors" id="track-authors"></div>
+
+          <div class="progress-row">
+            <span class="time" id="time-elapsed">0:00</span>
+            <input class="slider" id="seek" type="range" min="0" max="1000" step="1" value="0" aria-label="进度">
+            <span class="time" id="time-total">0:00</span>
+          </div>
+
+          <div class="controls">
+            <button class="icon-btn" id="prev" type="button" aria-label="上一首" data-i18n-title="player.action.prev">
+              <svg class="icon" aria-hidden="true"><use href="#i-prev"/></svg>
+            </button>
+            <button class="icon-btn play" id="play" type="button" data-playing="false" aria-label="播放">
+              <svg class="icon icon-play" aria-hidden="true"><use href="#i-play"/></svg>
+              <svg class="icon icon-pause" aria-hidden="true"><use href="#i-pause"/></svg>
+            </button>
+            <button class="icon-btn" id="next" type="button" aria-label="下一首" data-i18n-title="player.action.next">
+              <svg class="icon" aria-hidden="true"><use href="#i-next"/></svg>
+            </button>
+            <div class="modes" role="group" aria-label="播放模式">
+              <button class="mode-btn" type="button" data-mode="shuffle">
+                <svg class="icon" aria-hidden="true"><use href="#i-shuffle"/></svg>
+              </button>
+              <button class="mode-btn" type="button" data-mode="list_loop">
+                <svg class="icon" aria-hidden="true"><use href="#i-loop"/></svg>
+              </button>
+              <button class="mode-btn" type="button" data-mode="repeat_one">
+                <svg class="icon" aria-hidden="true"><use href="#i-repeat-one"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="volume-row">
+            <span class="volume-icon" aria-hidden="true">
+              <svg class="icon" aria-hidden="true"><use href="#i-volume"/></svg>
+            </span>
+            <input class="slider" id="volume" type="range" min="0" max="100" step="1" value="80" aria-label="音量">
+            <span class="volume-value" id="volume-value">80%</span>
+          </div>
+        </section>
+
+        <section class="empty" id="empty" hidden>
+          <svg class="empty-icon" aria-hidden="true"><use href="#i-note"/></svg>
+          <h2 id="empty-title"></h2>
+          <p id="empty-body"></p>
+          <button class="btn primary" id="empty-action" type="button" data-i18n="player.action.open_manager" hidden>打开管理器</button>
+        </section>
+      </div>
+    </main>
+
+    <aside class="queue" id="queue">
+      <div class="queue-head">
+        <span data-i18n="player.queue.title">待播队列</span>
+        <button class="icon-btn small" id="queue-collapse" type="button" aria-controls="queue">
+          <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </button>
+      </div>
+      <div class="queue-list" id="queue-list"></div>
+      <div class="queue-more" id="queue-more" hidden></div>
+    </aside>
+  </div>
+
+  <div class="modal" id="picker" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+      <div class="modal-head">
+        <h2 id="picker-title" data-i18n="player.pick.title">选一首循环</h2>
+        <button class="icon-btn small" id="picker-close" type="button" aria-label="关闭">
+          <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </div>
+      <div class="modal-search">
+        <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <input id="picker-search" type="search" autocomplete="off" data-i18n-placeholder="player.pick.search">
+      </div>
+      <div class="picker-list" id="picker-list" role="listbox"></div>
+      <div class="modal-foot" data-i18n="player.pick.hint"></div>
+    </div>
+  </div>
+
+  <audio id="audio" preload="metadata"></audio>
+  <script src="app.js"></script>
+</body>
+</html>

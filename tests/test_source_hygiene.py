@@ -41,3 +41,9 @@ def test_manager_entry_stays_thin():
     lines = paths.MANAGER_ENTRY.read_text(encoding="utf-8").strip().splitlines()
 
     assert len(lines) < 30
+
+
+def test_player_entry_stays_thin():
+    lines = paths.PLAYER_ENTRY.read_text(encoding="utf-8").strip().splitlines()
+
+    assert len(lines) < 30

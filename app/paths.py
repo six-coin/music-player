@@ -20,10 +20,12 @@ TEMP_DIR = ASSETS_DIR / "temp"
 SETTINGS_PATH = CONFIG_DIR / "settings.json"
 LIBRARY_PATH = CONFIG_DIR / "library.json"
 PLAYLISTS_PATH = CONFIG_DIR / "playlists.json"
+PLAYER_STATE_PATH = CONFIG_DIR / "player.json"
 STATS_DIR = CONFIG_DIR / "stats"
 
 LOCALES_DIR = PACKAGE_DIR / "locales"
 UI_MANAGER_DIR = PACKAGE_DIR / "ui" / "manager"
+UI_PLAYER_DIR = PACKAGE_DIR / "ui" / "player"
 
 MANAGER_ENTRY = PROGRAM_DIR / "manager.pyw"
 PLAYER_ENTRY = PROGRAM_DIR / "player.pyw"

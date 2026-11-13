@@ -1,13 +1,13 @@
-"""两种模式的队列生成。"""
+"""一轮的顺序：洗牌、接缝与列表循环。"""
 
 from __future__ import annotations
 
 import random
 from pathlib import Path
 
-from app.cli.simple import build_queue, play_order
 from app.core.library import Library
 from app.core.playlists import PlaylistContent
+from app.core.queue import build_round, play_order
 
 
 def ids(count: int) -> list[str]:
@@ -16,27 +16,27 @@ def ids(count: int) -> list[str]:
 
 def test_shuffle_covers_every_song_exactly_once():
     items = ids(20)
-    queue = build_queue(items, "shuffle", random.Random(3))
+    queue = build_round(items, "shuffle", random.Random(3))
     assert sorted(queue) == sorted(items)
 
 
 def test_shuffle_never_repeats_across_the_seam():
     items = ids(20)
     rng = random.Random(11)
-    first = build_queue(items, "shuffle", rng)
-    second = build_queue(items, "shuffle", rng, first[-1])
+    first = build_round(items, "shuffle", rng)
+    second = build_round(items, "shuffle", rng, first[-1])
     assert second[0] != first[-1]
     assert sorted(second) == sorted(items)
 
 
 def test_shuffle_with_one_song_repeats_it():
     items = ids(1)
-    assert build_queue(items, "shuffle", random.Random(1), items[0]) == items
+    assert build_round(items, "shuffle", random.Random(1), items[0]) == items
 
 
 def test_list_loop_keeps_the_given_order():
     items = ids(5)
-    assert build_queue(items, "list_loop", random.Random(1)) == items
+    assert build_round(items, "list_loop", random.Random(1)) == items
 
 
 def test_play_order_keeps_manual_order(music_factory):

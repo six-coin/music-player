@@ -23,6 +23,17 @@ class _Handler(BaseHTTPRequestHandler):
     server_version = "MusicPlayerMedia/1.0"
     protocol_version = "HTTP/1.1"
 
+    def handle_one_request(self) -> None:  # noqa: N802 —— BaseHTTPRequestHandler 的约定
+        """浏览器主动断开（拖动进度条、关窗口）是常态，不要往 stderr 打堆栈。
+
+        读取请求行时连接已经没了，异常会从 ``handle_one_request`` 冒到
+        ``socketserver``，由它在控制台打印一整段 traceback；这里就地收掉。
+        """
+        try:
+            super().handle_one_request()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            self.close_connection = True
+
     def do_GET(self) -> None:  # noqa: N802 —— BaseHTTPRequestHandler 的约定
         server = self.server
         parts = self.path.split("/", 3)
@@ -86,7 +97,7 @@ class _Handler(BaseHTTPRequestHandler):
                         break
                     self.wfile.write(chunk)
                     remaining -= len(chunk)
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             return  # 用户拖动进度条会主动断开旧请求，属于正常现象
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002

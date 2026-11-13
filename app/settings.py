@@ -13,6 +13,7 @@ from typing import Any
 from app.errors import ConfigError
 from app.models import Adaptation
 from app.system import atomic
+from app.system.filelock import exclusive
 
 THEMES = ("system", "light", "dark")
 SIMPLE_ORDERS = ("shuffle", "list_loop")
@@ -118,6 +119,19 @@ class SettingsStore:
         self.path = path
         self.data: dict[str, Any] = defaults()
 
+    def _lock_path(self) -> Path:
+        return self.path.with_suffix(".lock")
+
+    def _read_disk(self) -> dict[str, Any]:
+        """锁内重读用；读不出来就按默认值，绝不抛异常。"""
+        if not self.path.exists():
+            return defaults()
+        try:
+            raw = atomic.read_json(self.path)
+        except ConfigError:
+            return defaults()
+        return raw if isinstance(raw, dict) else defaults()
+
     def load(self) -> list[str]:
         """返回警告；设置损坏不阻断启动。"""
         if not self.path.exists():
@@ -138,8 +152,25 @@ class SettingsStore:
         atomic.write_json(self.path, self.data)
 
     def update(self, patch: dict[str, Any]) -> dict[str, Any]:
-        self.data = clamp(_merge(self.data, patch))
-        self.save()
+        """锁内先读盘再合并：另一个进程刚写的字段不该被内存里的旧值盖掉。"""
+        with exclusive(self._lock_path()):
+            self.data = clamp(_merge(self._read_disk(), patch))
+            atomic.write_json(self.path, self.data)
+        return self.data
+
+    def patch_player(self, patch: dict[str, Any]) -> dict[str, Any]:
+        """只改 ``player`` 节里指定的键。
+
+        manager 与 player 都会写这一节：manager 改默认值，player 记进度。
+        整份写回会用启动时的旧值覆盖对方刚写的字段，所以必须读改写。
+        """
+        with exclusive(self._lock_path()):
+            raw = self._read_disk()
+            current = raw.get("player")
+            merged = dict(current) if isinstance(current, dict) else {}
+            merged.update(patch)
+            self.data = clamp(_merge(raw, {"player": merged}))
+            atomic.write_json(self.path, self.data)
         return self.data
 
     def get(self, *keys: str, default: Any = None) -> Any:

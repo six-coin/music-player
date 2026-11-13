@@ -26,7 +26,8 @@ from app.cli.console import Action
 from app.core import adaptation
 from app.core.adaptation import Params
 from app.core.library import Library
-from app.core.playlists import PlaylistContent, PlaylistStore
+from app.core.playlists import PlaylistStore
+from app.core.queue import build_round, play_order
 from app.core.stats import SongStats, StatsStore
 from app.errors import AppError
 from app.models import Music, Playlist
@@ -72,43 +73,6 @@ class Deps:
     rng: random.Random = field(default_factory=random.Random)
 
 
-# ---------- 队列 ----------
-
-
-def build_queue(
-    md5s: Sequence[str],
-    order: str,
-    rng: random.Random,
-    previous_last: str | None = None,
-) -> list[str]:
-    """生成一轮队列。
-
-    随机模式每轮重新洗牌，一轮内每首恰好一次；列表循环按给定顺序。
-    只处理轮与轮的接缝：新一轮首曲恰好是上一轮末曲时，把首曲与中间某首换开，
-    否则听感上像「连着放了两遍」。
-    """
-    items = list(md5s)
-    if order != "shuffle":
-        return items
-    rng.shuffle(items)
-    if len(items) > 1 and previous_last is not None and items[0] == previous_last:
-        index = rng.randrange(1, len(items))
-        items[0], items[index] = items[index], items[0]
-    return items
-
-
-def play_order(content: PlaylistContent, library: Library) -> list[str]:
-    """列表循环的顺序：手动歌单按用户设定，条件歌单按歌名。"""
-
-    def key(md5: str) -> tuple[str, str]:
-        music = library.find_music(md5)
-        return ((music.title if music else md5).casefold(), md5)
-
-    if content.ordered:
-        return list(content.md5s)
-    return sorted(content.md5s, key=key)
-
-
 # ---------- 播放循环 ----------
 
 
@@ -138,7 +102,7 @@ class Session:
     def run(self) -> int:
         while True:
             self._reload_records()
-            queue = build_queue(self._songs, self._order, self._deps.rng, self._last_sounded)
+            queue = build_round(self._songs, self._order, self._deps.rng, self._last_sounded)
             total = len(queue)
             for index, md5 in enumerate(queue, 1):
                 if self._auto_skip(md5):
