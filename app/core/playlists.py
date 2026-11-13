@@ -10,6 +10,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from app.core.library import Library
 from app.errors import ConfigError, DataError, PlaylistCycleError
@@ -100,12 +101,23 @@ class PlaylistStore:
         self.default_uid = playlist.uid
 
     def save(self) -> None:
-        payload = {
+        atomic.write_json(self.path, self.to_payload())
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
             "version": PLAYLIST_VERSION,
             "default_uid": self.default_uid,
             "items": [item.to_dict() for item in self.items.values()],
         }
-        atomic.write_json(self.path, payload)
+
+    def restore(self, payload: dict[str, Any]) -> None:
+        """只重建内存状态，不写盘；用于多文件事务失败时回滚。"""
+        self.items = {}
+        for item in payload.get("items", []):
+            playlist = Playlist.from_dict(item)
+            self.items[playlist.uid] = playlist
+        self.default_uid = payload.get("default_uid", "")
+        self._ensure_default()
 
     # ---------- 查询 ----------
 
@@ -153,6 +165,46 @@ class PlaylistStore:
         playlist = self.items.get(uid)
         if playlist is not None:
             playlist.updated_at = int(time.time())
+
+    # ---------- 换源与删除 ----------
+
+    def replace_song(self, old_md5: str, new_md5: str) -> int:
+        """把对旧歌的引用换成新标识，保持位置。返回改动的歌单数。"""
+        changed = 0
+        for playlist in self.items.values():
+            touched = False
+            if playlist.kind == "manual":
+                entries = [new_md5 if item == old_md5 else item for item in playlist.entries]
+                if entries != playlist.entries:
+                    playlist.entries = list(dict.fromkeys(entries))
+                    touched = True
+            for condition in playlist.filters:
+                if condition.target != "music" or old_md5 not in condition.values:
+                    continue
+                values = [new_md5 if value == old_md5 else value for value in condition.values]
+                condition.values = list(dict.fromkeys(values))
+                touched = True
+            if touched:
+                playlist.updated_at = int(time.time())
+                changed += 1
+        return changed
+
+    def drop_song(self, md5: str) -> list[str]:
+        """把某首歌从所有歌单里摘掉，返回被改动的歌单标识。"""
+        changed: list[str] = []
+        for playlist in self.items.values():
+            touched = False
+            if playlist.kind == "manual" and md5 in playlist.entries:
+                playlist.entries = [item for item in playlist.entries if item != md5]
+                touched = True
+            for condition in playlist.filters:
+                if condition.target == "music" and md5 in condition.values:
+                    condition.values = [value for value in condition.values if value != md5]
+                    touched = True
+            if touched:
+                playlist.updated_at = int(time.time())
+                changed.append(playlist.uid)
+        return changed
 
     # ---------- 解析 ----------
 

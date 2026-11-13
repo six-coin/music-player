@@ -264,8 +264,9 @@ class Filter:
             raise DataError(f"条件的包含方式不合法：{self.mode}")
         if self.target not in FILTER_TARGETS:
             raise DataError(f"条件的筛选对象不合法：{self.target}")
-        if self.target != "all" and not self.values:
-            raise DataError("筛选歌曲、歌单、标签或作者时，必须至少选一个对象")
+        # 值可以为空：界面允许先把对象类型选好再去挑值，删歌也可能把某个条件的值
+        # 清空。空条件命中零首歌，这是能表达的语义；如果在这里报错，整条歌单会
+        # 在下次加载时被当作坏记录丢掉。
         for value in self.values:
             if not is_md5(value):
                 raise DataError(f"条件引用了不合法的标识：{value}")

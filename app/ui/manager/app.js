@@ -7,6 +7,8 @@ const state = {
   sort: "title",
   query: "",
   playlistQuery: "",
+  tagQuery: "",
+  authorQuery: "",
   active: null,
   activeKind: null,
   serverSelection: null,
@@ -17,6 +19,7 @@ const state = {
   nameTimer: null,
   playlistNameTimer: null,
   dragMd5: null,
+  dragAuthor: null,
 };
 
 function qs(selector, root) {
@@ -176,8 +179,10 @@ function applyNav(section) {
   if (section === "overview") showView("overview");
   else if (section === "songs") showView("songs");
   else if (section === "playlists") showView("playlists");
+  else if (section === "tags") showView("tags");
+  else if (section === "authors") showView("authors");
   else showView("pending");
-  if (section !== "overview" && section !== "songs" && section !== "playlists") {
+  if (section === "settings") {
     qs("#pending-title").textContent = T("nav." + section);
   }
 }
@@ -433,7 +438,9 @@ function renderDetail() {
     const selected = group.tags.filter(function (tag) {
       return (music.tags || []).indexOf(tag.uid) !== -1;
     });
-    const warn = group.compulsory && selected.length === 0;
+    const missing = group.compulsory && selected.length === 0;
+    const conflict = group.unique && selected.length > 1;
+    const warn = missing || conflict;
     const flags = [];
     if (group.compulsory) flags.push(T("tag.compulsory"));
     if (group.unique) flags.push(T("tag.unique"));
@@ -448,12 +455,13 @@ function renderDetail() {
         );
       })
       .join("");
+    const hint = missing ? T("song.missing_tag") : conflict ? T("song.tag_conflict") : "";
     return (
       '<div class="tag-group' + (warn ? " is-warn" : "") + '">' +
       '<div class="tag-group-head"><span>' + esc(group.name) + "</span>" +
       '<span class="tag-flag">' + esc(flags.join(" · ")) + "</span></div>" +
       '<div class="chips">' + chips + "</div>" +
-      (warn ? '<p class="tag-hint">' + esc(T("song.missing_tag")) + "</p>" : "") +
+      (warn ? '<p class="tag-hint">' + esc(hint) + "</p>" : "") +
       "</div>"
     );
   });
@@ -473,7 +481,9 @@ function renderDetail() {
     "<span>·</span><span>" + formatDate(music.created_at) + "</span>" +
     flags.join("") +
     "</div></div>" +
-    '<div class="detail-tools"><button class="btn ghost" data-menu="song">' +
+    '<div class="detail-tools">' +
+    '<button class="btn ghost" data-replace="1">' + esc(T("song.replace_source")) + "</button>" +
+    '<button class="btn ghost" data-menu="song">' +
     esc(T("action.more")) + "</button></div>" +
     "</header>" +
 
@@ -880,6 +890,249 @@ function renderPlaylists() {
   renderPlaylistDetail();
 }
 
+/* ---------- 标签 ---------- */
+
+function tagGroupByUid(uid) {
+  return (
+    ((state.data && state.data.library.tag_groups) || []).find(function (item) {
+      return item.uid === uid;
+    }) || null
+  );
+}
+
+function visibleTagGroups() {
+  const list = (state.data && state.data.library.tag_groups) || [];
+  const query = state.tagQuery.trim().toLowerCase();
+  if (!query) return list;
+  return list.filter(function (group) {
+    if (group.name.toLowerCase().indexOf(query) !== -1) return true;
+    return (group.tags || []).some(function (tag) {
+      return tag.name.toLowerCase().indexOf(query) !== -1;
+    });
+  });
+}
+
+function tagFlags(group) {
+  const flags = [];
+  if (group.compulsory) flags.push(T("tag.compulsory"));
+  if (group.unique) flags.push(T("tag.unique"));
+  return flags;
+}
+
+function renderTagList() {
+  const list = qs("#tag-list");
+  const total = ((state.data && state.data.library.tag_groups) || []).length;
+  const items = visibleTagGroups();
+  qs("#tags-count").textContent = T("tag.total", { count: total });
+
+  if (!items.length) {
+    list.innerHTML = '<li class="row-empty">' + esc(T("tag.empty")) + "</li>";
+    return;
+  }
+
+  list.innerHTML = items
+    .map(function (group) {
+      const classes = ["song-row"];
+      if (state.activeKind === "tag_group" && state.active === group.uid) {
+        classes.push("is-active");
+      }
+      const flags = tagFlags(group);
+      const sub =
+        T("tag.group_summary", { tags: (group.tags || []).length, songs: group.count || 0 }) +
+        (flags.length ? " · " + flags.join(" / ") : "");
+      return (
+        '<li class="' + classes.join(" ") + '" data-tag-group="' + esc(group.uid) +
+        '" tabindex="0"><div class="song-body"><span class="song-title">' + esc(group.name) +
+        '</span><span class="song-sub">' + esc(sub) + "</span></div></li>"
+      );
+    })
+    .join("");
+}
+
+function renderTagDetail() {
+  const pane = qs("#tag-detail");
+  const group =
+    state.activeKind === "tag_group" && state.active ? tagGroupByUid(state.active) : null;
+
+  if (!group) {
+    pane.innerHTML =
+      '<div class="detail-empty">' +
+      '<svg class="empty-art" viewBox="0 0 24 24" aria-hidden="true">' +
+      '<path d="M20.59 13.41 12 22 2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/>' +
+      '<circle cx="7" cy="7" r="1.5"/></svg>' +
+      "<h2>" + esc(T("tag.no_selection_title")) + "</h2>" +
+      "<p>" + esc(T("tag.no_selection_hint")) + "</p></div>";
+    return;
+  }
+
+  const tags = (group.tags || []).slice().sort(function (a, b) {
+    return a.name.localeCompare(b.name, "zh-CN");
+  });
+
+  const rows = tags.length
+    ? tags
+        .map(function (tag) {
+          return (
+            '<div class="tag-edit-row">' +
+            '<input class="input" data-tag-name="' + esc(tag.uid) + '" data-tag-original="' +
+            esc(tag.name) + '" value="' + esc(tag.name) + '" maxlength="60">' +
+            '<span class="tag-count">' + esc(T("tag.usage", { count: tag.count || 0 })) + "</span>" +
+            '<button class="icon-btn" type="button" data-tag-remove="' + esc(tag.uid) +
+            '" aria-label="' + esc(T("action.remove")) + '">×</button></div>'
+          );
+        })
+        .join("")
+    : '<p class="tag-hint">' + esc(T("tag.empty")) + "</p>";
+
+  const flags = tagFlags(group);
+  const badge = flags.length
+    ? '<span class="badge">' + esc(flags.join(" / ")) + "</span>"
+    : "";
+
+  pane.innerHTML =
+    '<header class="detail-head"><div class="detail-title"><h2>' + esc(group.name) +
+    '</h2><div class="detail-meta">' + badge +
+    "<span>" + esc(T("tag.group_summary", { tags: tags.length, songs: group.count || 0 })) +
+    "</span></div></div>" +
+    '<div class="detail-tools"><button class="btn ghost" data-menu="tag">' +
+    esc(T("action.more")) + "</button></div></header>" +
+
+    '<section class="card"><h3 class="card-title">' + esc(T("common.basic")) + "</h3>" +
+    '<div class="field-row"><span class="field-label">' + esc(T("tag.name")) + "</span>" +
+    '<div class="field-body"><input class="input" id="tag-group-name" value="' +
+    esc(group.name) + '" maxlength="60"></div></div>' +
+    '<div class="toggle-row"><div class="toggle-body">' +
+    '<div class="toggle-title">' + esc(T("tag.compulsory")) + "</div>" +
+    '<p class="toggle-hint">' + esc(T("tag.compulsory_hint")) + "</p></div>" +
+    '<button class="switch" type="button" role="switch" data-switch="compulsory" aria-checked="' +
+    (group.compulsory ? "true" : "false") + '"><span class="switch-knob"></span></button></div>' +
+    '<div class="toggle-row"><div class="toggle-body">' +
+    '<div class="toggle-title">' + esc(T("tag.unique")) + "</div>" +
+    '<p class="toggle-hint">' + esc(T("tag.unique_hint")) + "</p></div>" +
+    '<button class="switch" type="button" role="switch" data-switch="unique" aria-checked="' +
+    (group.unique ? "true" : "false") + '"><span class="switch-knob"></span></button></div>' +
+    "</section>" +
+
+    '<section class="card"><div class="card-tools"><h3 class="card-title">' +
+    esc(T("tag.tags")) + '</h3><span class="detail-hint">' +
+    esc(T("tag.usage", { count: group.count || 0 })) + "</span></div>" +
+    rows +
+    '<form class="inline-form" id="tag-add-form">' +
+    '<input class="input" id="tag-new" maxlength="60" placeholder="' +
+    esc(T("tag.add_placeholder")) + '">' +
+    '<button class="btn primary small" type="submit">' + esc(T("action.add")) + "</button>" +
+    "</form></section>";
+}
+
+function renderTags() {
+  renderTagList();
+  renderTagDetail();
+}
+
+/* ---------- 作者 ---------- */
+
+function authorByUid(uid) {
+  return (
+    ((state.data && state.data.library.authors) || []).find(function (item) {
+      return item.uid === uid;
+    }) || null
+  );
+}
+
+function visibleAuthors() {
+  const list = (state.data && state.data.library.authors) || [];
+  const query = state.authorQuery.trim().toLowerCase();
+  if (!query) return list;
+  return list.filter(function (author) {
+    return author.name.toLowerCase().indexOf(query) !== -1;
+  });
+}
+
+function renderAuthorList() {
+  const list = qs("#author-list");
+  const total = ((state.data && state.data.library.authors) || []).length;
+  const items = visibleAuthors();
+  qs("#authors-count").textContent = T("author.total", { count: total });
+
+  if (!items.length) {
+    list.innerHTML = '<li class="row-empty">' + esc(T("author.empty")) + "</li>";
+    return;
+  }
+
+  list.innerHTML = items
+    .map(function (author) {
+      const classes = ["song-row", "author-row"];
+      if (state.activeKind === "author" && state.active === author.uid) {
+        classes.push("is-active");
+      }
+      return (
+        '<li class="' + classes.join(" ") + '" draggable="true" data-author-uid="' +
+        esc(author.uid) + '" tabindex="0"><div class="song-body"><span class="song-title">' +
+        esc(author.name) + '</span><span class="song-sub">' +
+        esc(T("author.count", { count: author.count || 0 })) + "</span></div></li>"
+      );
+    })
+    .join("");
+}
+
+function renderAuthorDetail() {
+  const pane = qs("#author-detail");
+  const author = state.activeKind === "author" && state.active ? authorByUid(state.active) : null;
+
+  if (!author) {
+    pane.innerHTML =
+      '<div class="detail-empty">' +
+      '<svg class="empty-art" viewBox="0 0 24 24" aria-hidden="true">' +
+      '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' +
+      "<h2>" + esc(T("author.no_selection_title")) + "</h2>" +
+      "<p>" + esc(T("author.no_selection_hint")) + "</p></div>";
+    return;
+  }
+
+  const songs = ((state.data && state.data.library.musics) || []).filter(function (music) {
+    return (music.authors || []).indexOf(author.uid) !== -1;
+  });
+  const rows = songs.length
+    ? songs
+        .map(function (music) {
+          return (
+            '<li class="entry-row" data-author-song="' + esc(music.md5) + '" tabindex="0">' +
+            '<div class="entry-body"><span class="entry-title">' + esc(music.title) +
+            '</span><span class="entry-sub">' + formatDuration(music.duration_ms) +
+            "</span></div></li>"
+          );
+        })
+        .join("")
+    : '<li class="row-empty">' + esc(T("author.songs_empty")) + "</li>";
+
+  pane.innerHTML =
+    '<header class="detail-head"><div class="detail-title"><h2>' + esc(author.name) +
+    '</h2><div class="detail-meta"><span>' +
+    esc(T("author.count", { count: songs.length })) + "</span></div></div>" +
+    '<div class="detail-tools"><button class="btn ghost" data-menu="author">' +
+    esc(T("action.more")) + "</button></div></header>" +
+
+    '<section class="card"><h3 class="card-title">' + esc(T("common.basic")) + "</h3>" +
+    '<div class="field-row"><span class="field-label">' + esc(T("author.name")) + "</span>" +
+    '<div class="field-body"><input class="input" id="author-name" value="' +
+    esc(author.name) + '" maxlength="120"></div></div>' +
+    '<div class="field-row field-row--top"><span class="field-label">' +
+    esc(T("author.description")) + "</span>" +
+    '<div class="field-body"><textarea class="input textarea" id="author-description" ' +
+    'maxlength="2000" placeholder="' + esc(T("author.description_placeholder")) + '">' +
+    esc(author.description || "") + "</textarea></div></div></section>" +
+
+    '<section class="card"><div class="card-tools"><h3 class="card-title">' +
+    esc(T("author.songs")) + '</h3><span class="detail-hint">' +
+    esc(T("author.count", { count: songs.length })) + "</span></div>" +
+    '<ul class="entry-list">' + rows + "</ul></section>";
+}
+
+function renderAuthors() {
+  renderAuthorList();
+  renderAuthorDetail();
+}
+
 /* ---------- 总渲染 ---------- */
 
 function apply(data) {
@@ -913,6 +1166,8 @@ function apply(data) {
   if (data.section === "overview") renderOverview(data);
   else if (data.section === "songs") renderSongs();
   else if (data.section === "playlists") renderPlaylists();
+  else if (data.section === "tags") renderTags();
+  else if (data.section === "authors") renderAuthors();
 
   if (data.message) toast(data.message, data.ok !== false);
 }
@@ -921,6 +1176,8 @@ function itemByKind(kind, uid) {
   if (!uid) return null;
   if (kind === "music") return musicByMd5(uid);
   if (kind === "playlist") return playlistByUid(uid);
+  if (kind === "tag_group") return tagGroupByUid(uid);
+  if (kind === "author") return authorByUid(uid);
   return null;
 }
 
@@ -942,10 +1199,16 @@ async function goSection(section) {
   const data = await call("select_section", section);
   if (data) apply(data);
 
-  // 歌单数量少，进分区时直接落在第一个，省掉一次点击。
+  // 数量都不多，进分区时直接落在第一个，省掉一次点击。
   if (section === "playlists" && state.activeKind !== "playlist") {
     const first = ((state.data && state.data.playlists) || [])[0];
     if (first) selectPlaylist(first.uid);
+  } else if (section === "tags" && state.activeKind !== "tag_group") {
+    const first = ((state.data && state.data.library.tag_groups) || [])[0];
+    if (first) selectTagGroup(first.uid);
+  } else if (section === "authors" && state.activeKind !== "author") {
+    const first = ((state.data && state.data.library.authors) || [])[0];
+    if (first) selectAuthor(first.uid);
   }
 }
 
@@ -964,6 +1227,22 @@ async function selectPlaylist(uid) {
   state.activeKind = "playlist";
   renderPlaylists();
   const data = await call("select_item", "playlist", uid);
+  if (data) apply(data);
+}
+
+async function selectTagGroup(uid) {
+  state.active = uid;
+  state.activeKind = "tag_group";
+  renderTags();
+  const data = await call("select_item", "tag_group", uid);
+  if (data) apply(data);
+}
+
+async function selectAuthor(uid) {
+  state.active = uid;
+  state.activeKind = "author";
+  renderAuthors();
+  const data = await call("select_item", "author", uid);
   if (data) apply(data);
 }
 
@@ -1291,6 +1570,193 @@ async function flushPlaylistName() {
   state.playlistNameTimer = null;
   const input = qs("#playlist-name");
   if (input && state.active) await savePlaylistName(state.active, input.value);
+}
+
+/* ---------- 标签与作者交互 ---------- */
+
+function openCreateTagGroup() {
+  const flags = { compulsory: false, unique: false };
+  openModal({
+    title: T("tag.create_title"),
+    body:
+      '<div class="field-row"><span class="field-label">' + esc(T("tag.name")) +
+      '</span><div class="field-body"><input class="input" id="new-tag-name" placeholder="' +
+      esc(T("tag.name_placeholder")) + '" maxlength="60"></div></div>' +
+      '<div class="toggle-row"><div class="toggle-body"><div class="toggle-title">' +
+      esc(T("tag.compulsory")) + '</div><p class="toggle-hint">' +
+      esc(T("tag.compulsory_hint")) + "</p></div>" +
+      '<button class="switch" type="button" role="switch" data-flag="compulsory" ' +
+      'aria-checked="false"><span class="switch-knob"></span></button></div>' +
+      '<div class="toggle-row"><div class="toggle-body"><div class="toggle-title">' +
+      esc(T("tag.unique")) + '</div><p class="toggle-hint">' +
+      esc(T("tag.unique_hint")) + "</p></div>" +
+      '<button class="switch" type="button" role="switch" data-flag="unique" ' +
+      'aria-checked="false"><span class="switch-knob"></span></button></div>',
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("tag.create"),
+        primary: true,
+        onClick: async function () {
+          const input = qs("#new-tag-name");
+          const name = input.value.trim();
+          if (!name) {
+            input.classList.add("invalid");
+            return;
+          }
+          const data = await call("create_tag_group", name, flags.compulsory, flags.unique);
+          if (data && data.ok) {
+            closeModal();
+            apply(data);
+          } else if (data) {
+            toast(data.message || T("tag.name_required"), false);
+          }
+        },
+      },
+    ],
+    onMount: function () {
+      qs("#new-tag-name").focus();
+      qsa("[data-flag]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          const key = button.dataset.flag;
+          flags[key] = !flags[key];
+          button.setAttribute("aria-checked", flags[key] ? "true" : "false");
+        });
+      });
+    },
+  });
+}
+
+function confirmDeleteTagGroup(group) {
+  openModal({
+    title: T("tag.delete_group"),
+    body: '<p class="modal-note">' + esc(T("tag.delete_confirm", { name: group.name })) + "</p>",
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("tag.delete_group"),
+        danger: true,
+        onClick: async function () {
+          const data = await call("delete_tag_group", group.uid, false);
+          if (!data) return;
+          if (data.ok) {
+            closeModal();
+            apply(data);
+            return;
+          }
+          openModal({
+            title: T("tag.delete_group"),
+            body: '<p class="modal-note">' + esc(data.message) + "</p>",
+            actions: [
+              { label: T("action.cancel"), onClick: closeModal },
+              {
+                label: T("tag.delete_force"),
+                danger: true,
+                onClick: async function () {
+                  const forced = await call("delete_tag_group", group.uid, true);
+                  if (forced) {
+                    closeModal();
+                    apply(forced);
+                  }
+                },
+              },
+            ],
+          });
+        },
+      },
+    ],
+  });
+}
+
+function openCreateAuthor() {
+  openModal({
+    title: T("author.create_title"),
+    body:
+      '<div class="field-row"><span class="field-label">' + esc(T("author.name")) +
+      '</span><div class="field-body"><input class="input" id="new-author-name" placeholder="' +
+      esc(T("author.name_placeholder")) + '" maxlength="120"></div></div>' +
+      '<div class="field-row field-row--top"><span class="field-label">' +
+      esc(T("author.description")) + '</span><div class="field-body">' +
+      '<textarea class="input textarea" id="new-author-desc" maxlength="2000" placeholder="' +
+      esc(T("author.description_placeholder")) + '"></textarea></div></div>',
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("author.create"),
+        primary: true,
+        onClick: async function () {
+          const input = qs("#new-author-name");
+          const name = input.value.trim();
+          if (!name) {
+            input.classList.add("invalid");
+            return;
+          }
+          const created = await call("create_author", name);
+          if (!created) return;
+          const author = (created.library.authors || []).find(function (item) {
+            return item.name === name;
+          });
+          const description = qs("#new-author-desc").value.trim();
+          let data = created;
+          if (author && description) {
+            data = await call("update_author", author.uid, { description: description });
+          }
+          closeModal();
+          apply(data || created);
+          if (author) selectAuthor(author.uid);
+        },
+      },
+    ],
+    onMount: function () {
+      qs("#new-author-name").focus();
+    },
+  });
+}
+
+function confirmDeleteAuthor(author) {
+  openModal({
+    title: T("author.delete"),
+    body: '<p class="modal-note">' + esc(T("author.delete_confirm", { name: author.name })) + "</p>",
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("author.delete"),
+        danger: true,
+        onClick: async function () {
+          const data = await call("delete_author", author.uid, false);
+          if (!data) return;
+          if (data.ok) {
+            closeModal();
+            apply(data);
+            return;
+          }
+          openModal({
+            title: T("author.delete"),
+            body: '<p class="modal-note">' + esc(data.message) + "</p>",
+            actions: [
+              { label: T("action.cancel"), onClick: closeModal },
+              {
+                label: T("author.delete_force"),
+                danger: true,
+                onClick: async function () {
+                  const forced = await call("delete_author", author.uid, true);
+                  if (forced) {
+                    closeModal();
+                    apply(forced);
+                  }
+                },
+              },
+            ],
+          });
+        },
+      },
+    ],
+  });
+}
+
+async function moveAuthor(uid, delta) {
+  const data = await call("move_author", uid, delta);
+  if (data) apply(data);
 }
 
 /* ---------- 菜单 ---------- */
@@ -1713,42 +2179,255 @@ function openBatchPlaylist() {
   });
 }
 
+/* ---------- 换源与删除 ---------- */
+
+async function replaceSource(music) {
+  const picked = await call("browse_audio");
+  if (!picked || !picked.path) return;
+  const started = await call("start_replace_source", music.md5, picked.path);
+  if (!started || !started.task_id) return;
+  openReplaceModal(started.task_id, music);
+}
+
+function openReplaceModal(taskId, music) {
+  openModal({
+    title: T("song.replace_title"),
+    body:
+      '<p class="progress-text" id="replace-line">' + esc(T("song.replace_running")) + "</p>" +
+      '<div class="progress"><div class="progress-bar is-indeterminate" id="replace-bar"></div></div>' +
+      '<div id="replace-report"></div>',
+    dismissible: false,
+    actions: [],
+  });
+
+  async function poll() {
+    const task = await call("poll_task", taskId);
+    if (!task) return;
+    if (task.state === "running") {
+      window.setTimeout(poll, 300);
+      return;
+    }
+
+    const line = qs("#replace-line");
+    const bar = qs("#replace-bar");
+    if (bar) {
+      bar.classList.remove("is-indeterminate");
+      bar.style.width = "100%";
+    }
+
+    if (task.state === "failed" || (task.errors && task.errors.length)) {
+      line.textContent = T("song.replace_failed");
+      const note = document.createElement("p");
+      note.className = "modal-note";
+      note.textContent = (task.errors || []).join("；");
+      qs("#replace-report").appendChild(note);
+    } else {
+      const report = task.result || {};
+      line.textContent = T("song.replace_done");
+      const body = document.createElement("div");
+      body.innerHTML =
+        '<p class="modal-note">' + esc(report.title || music.title) + "</p>" +
+        '<ul class="report-list">' +
+        "<li>" +
+        esc(
+          T("song.replace_report", {
+            playlists: report.playlists || 0,
+            stats: report.stats || 0,
+          })
+        ) +
+        "</li><li>" +
+        esc(report.recycled ? T("song.replace_recycled") : T("song.replace_recycled_no")) +
+        "</li></ul>";
+      qs("#replace-report").appendChild(body);
+      const data = await call("get_state");
+      if (data) apply(data);
+    }
+
+    const actions = qs("#modal-actions");
+    const button = document.createElement("button");
+    button.className = "btn primary";
+    button.textContent = T("action.close");
+    button.addEventListener("click", closeModal);
+    actions.appendChild(button);
+    modalDismissible = true;
+    qs("#modal-close").hidden = false;
+  }
+
+  poll();
+}
+
+function confirmDeleteSongs(md5s) {
+  const list = (md5s || []).filter(function (md5) {
+    return Boolean(musicByMd5(md5));
+  });
+  if (!list.length) return;
+  const one = list.length === 1 ? musicByMd5(list[0]) : null;
+  const text = one
+    ? T("song.delete_confirm", { title: one.title })
+    : T("song.delete_batch_confirm", { count: list.length });
+
+  openModal({
+    title: one ? T("song.delete") : T("song.delete_batch", { count: list.length }),
+    body: '<p class="modal-note">' + esc(text) + "</p>",
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("song.delete"),
+        danger: true,
+        onClick: async function () {
+          const data = await call("delete_musics", list);
+          if (!data) return;
+          state.selection.clear();
+          closeModal();
+          apply(data);
+        },
+      },
+    ],
+  });
+}
+
 /* ---------- 完整性检查 ---------- */
 
-async function openIntegrity() {
-  const report = await call("run_integrity");
-  if (!report) return;
-
-  let body;
+function integrityBody(report) {
   if (report.ok) {
-    body = '<div class="empty" style="min-height:200px"><h2>' +
-      esc(T("integrity.ok")) + "</h2></div>";
-  } else {
-    body =
-      '<p class="modal-note">' + esc(T("integrity.count", { count: report.count })) + "</p>" +
-      report.sections
-        .map(function (section) {
-          const items = section.items
-            .map(function (item) {
-              return "<li>" + esc(item) + "</li>";
-            })
-            .join("");
-          return (
-            '<div class="report-section"><h3 class="report-title">' +
-            esc(T("integrity." + section.key)) +
-            '<span class="report-count">' + section.items.length + "</span></h3>" +
-            '<ul class="report-list">' + items + "</ul></div>"
-          );
-        })
-        .join("");
+    return (
+      '<div class="empty" style="min-height:200px"><h2>' + esc(T("integrity.ok")) + "</h2></div>"
+    );
   }
+  return (
+    '<p class="modal-note">' + esc(T("integrity.count", { count: report.count })) + "</p>" +
+    report.sections
+      .map(function (section) {
+        const items = section.items
+          .map(function (item) {
+            return "<li>" + esc(item) + "</li>";
+          })
+          .join("");
+        const fix = section.fixable
+          ? '<button class="btn soft small report-fix" data-fix="' + esc(section.key) + '">' +
+            esc(T("integrity.fix")) + "</button>"
+          : "";
+        return (
+          '<div class="report-section"><h3 class="report-title">' +
+          esc(T("integrity." + section.key)) +
+          '<span class="report-count">' + section.items.length + "</span>" +
+          fix +
+          '</h3><ul class="report-list">' + items + "</ul></div>"
+        );
+      })
+      .join("")
+  );
+}
+
+async function runDeepCheck() {
+  const started = await call("start_integrity", true);
+  if (!started || !started.task_id) return null;
+  const taskId = started.task_id;
+
+  return new Promise(function (resolve) {
+    openModal({
+      title: T("integrity.title"),
+      body:
+        '<p class="progress-text" id="deep-line"></p>' +
+        '<div class="progress"><div class="progress-bar" id="deep-bar"></div></div>',
+      dismissible: false,
+      actions: [
+        {
+          label: T("integrity.cancel"),
+          onClick: function () {
+            call("cancel_task", taskId);
+          },
+        },
+      ],
+    });
+
+    async function poll() {
+      const task = await call("poll_task", taskId);
+      if (!task) {
+        modalDismissible = true;
+        resolve(null);
+        return;
+      }
+      if (task.state === "running") {
+        const percent = task.total ? Math.round((task.done / task.total) * 100) : 0;
+        const line = qs("#deep-line");
+        const bar = qs("#deep-bar");
+        if (line) {
+          line.textContent = T("integrity.running", {
+            done: formatSize(task.done),
+            total: formatSize(task.total),
+          });
+        }
+        if (bar) bar.style.width = percent + "%";
+        window.setTimeout(poll, 250);
+        return;
+      }
+      modalDismissible = true;
+      if (task.state === "cancelled") {
+        resolve(null);
+        return;
+      }
+      resolve(task.result || null);
+    }
+
+    poll();
+  });
+}
+
+async function openIntegrity(options) {
+  const settings = options || {};
+  let report = settings.report || null;
+  if (!report) {
+    report = settings.deep ? await runDeepCheck() : await call("run_integrity");
+  }
+  if (!report) {
+    closeModal();
+    toast(T("integrity.cancelled"));
+    return;
+  }
+
+  const fixable = report.sections.some(function (section) {
+    return section.fixable;
+  });
+  const actions = [];
+  if (fixable) {
+    actions.push({
+      label: T("integrity.fix_all"),
+      primary: true,
+      onClick: function () {
+        fixIssues("");
+      },
+    });
+  }
+  actions.push({
+    label: T("integrity.deep"),
+    onClick: function () {
+      openIntegrity({ deep: true });
+    },
+  });
+  actions.push({ label: T("action.close"), primary: !fixable, onClick: closeModal });
 
   openModal({
     title: T("integrity.title"),
-    body: body,
+    body: integrityBody(report),
     wide: true,
-    actions: [{ label: T("action.close"), primary: true, onClick: closeModal }],
+    actions: actions,
+    onMount: function () {
+      qsa("[data-fix]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          fixIssues(button.dataset.fix);
+        });
+      });
+    },
   });
+}
+
+async function fixIssues(kind) {
+  const data = await call("fix_issues", kind);
+  if (!data) return;
+  apply(data);
+  toast(data.message || T("integrity.fixed", { count: 0 }), true);
+  openIntegrity();
 }
 
 /* ---------- 导入 ---------- */
@@ -2114,8 +2793,13 @@ function bindEvents() {
       return;
     }
 
-    if (event.target.closest("#issues .row")) {
-      goSection("songs");
+    const issue = event.target.closest("#issues .row");
+    if (issue) {
+      if (issue.dataset.issue === "orphan_file" || issue.dataset.issue === "broken_reference") {
+        openIntegrity();
+      } else {
+        goSection("songs");
+      }
       return;
     }
 
@@ -2202,6 +2886,7 @@ function bindEvents() {
     const action = button.dataset.batch;
     if (action === "tags") openBatchTags();
     else if (action === "playlist") openBatchPlaylist();
+    else if (action === "delete") confirmDeleteSongs(Array.from(state.selection));
     else if (action === "clear") {
       state.selection.clear();
       renderSongs();
@@ -2379,6 +3064,237 @@ function bindEvents() {
     });
   });
 
+  /* ---------- 标签页 ---------- */
+
+  qs("#btn-new-tag-group").addEventListener("click", openCreateTagGroup);
+
+  qs("#tag-list").addEventListener("click", function (event) {
+    const row = event.target.closest("[data-tag-group]");
+    if (row) selectTagGroup(row.dataset.tagGroup);
+  });
+
+  const tagSearch = qs("#tags-search");
+  tagSearch.addEventListener("input", function () {
+    state.tagQuery = tagSearch.value;
+    qs("#tags-search-clear").hidden = !tagSearch.value;
+    renderTagList();
+  });
+  qs("#tags-search-clear").addEventListener("click", function () {
+    tagSearch.value = "";
+    state.tagQuery = "";
+    qs("#tags-search-clear").hidden = true;
+    renderTagList();
+    tagSearch.focus();
+  });
+
+  const tagDetail = qs("#tag-detail");
+
+  tagDetail.addEventListener("change", async function (event) {
+    const group = tagGroupByUid(state.active);
+    if (!group) return;
+    if (event.target.id === "tag-group-name") {
+      const value = event.target.value.trim();
+      if (!value || value === group.name) {
+        event.target.value = group.name;
+        return;
+      }
+      const data = await call("update_tag_group", group.uid, { name: value });
+      if (data) apply(data);
+      return;
+    }
+    const tagInput = event.target.closest("[data-tag-name]");
+    if (tagInput) {
+      const value = tagInput.value.trim();
+      if (!value || value === tagInput.dataset.tagOriginal) {
+        tagInput.value = tagInput.dataset.tagOriginal;
+        return;
+      }
+      const data = await call("rename_tag", group.uid, tagInput.dataset.tagName, value);
+      if (data) apply(data);
+    }
+  });
+
+  tagDetail.addEventListener("submit", async function (event) {
+    if (event.target.id !== "tag-add-form") return;
+    event.preventDefault();
+    const group = tagGroupByUid(state.active);
+    if (!group) return;
+    const input = qs("#tag-new");
+    const name = input.value.trim();
+    if (!name) return;
+    const data = await call("add_tag", group.uid, name);
+    if (data) {
+      apply(data);
+      const again = qs("#tag-new");
+      if (again) again.focus();
+    }
+  });
+
+  tagDetail.addEventListener("click", async function (event) {
+    const group = tagGroupByUid(state.active);
+    if (!group) return;
+
+    const toggle = event.target.closest("[data-switch]");
+    if (toggle) {
+      const patch = {};
+      patch[toggle.dataset.switch] = toggle.getAttribute("aria-checked") !== "true";
+      const data = await call("update_tag_group", group.uid, patch);
+      if (data) apply(data);
+      return;
+    }
+
+    const remove = event.target.closest("[data-tag-remove]");
+    if (remove) {
+      const data = await call("remove_tag", group.uid, remove.dataset.tagRemove);
+      if (data) apply(data);
+      return;
+    }
+
+    const menu = event.target.closest("[data-menu='tag']");
+    if (menu) {
+      openMenu(menu, [
+        {
+          label: T("tag.delete_group"),
+          onClick: function () {
+            confirmDeleteTagGroup(group);
+          },
+        },
+      ]);
+    }
+  });
+
+  /* ---------- 作者页 ---------- */
+
+  qs("#btn-new-author").addEventListener("click", openCreateAuthor);
+
+  qs("#author-list").addEventListener("click", function (event) {
+    const row = event.target.closest("[data-author-uid]");
+    if (row) selectAuthor(row.dataset.authorUid);
+  });
+
+  const authorSearch = qs("#authors-search");
+  authorSearch.addEventListener("input", function () {
+    state.authorQuery = authorSearch.value;
+    qs("#authors-search-clear").hidden = !authorSearch.value;
+    renderAuthorList();
+  });
+  qs("#authors-search-clear").addEventListener("click", function () {
+    authorSearch.value = "";
+    state.authorQuery = "";
+    qs("#authors-search-clear").hidden = true;
+    renderAuthorList();
+    authorSearch.focus();
+  });
+
+  const authorList = qs("#author-list");
+
+  authorList.addEventListener("dragstart", function (event) {
+    const row = event.target.closest("[data-author-uid]");
+    if (!row) return;
+    state.dragAuthor = row.dataset.authorUid;
+    row.classList.add("is-dragging");
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", state.dragAuthor);
+    }
+  });
+
+  authorList.addEventListener("dragover", function (event) {
+    const row = event.target.closest("[data-author-uid]");
+    if (!row || !state.dragAuthor) return;
+    event.preventDefault();
+    qsa("[data-author-uid]", authorList).forEach(function (node) {
+      node.classList.remove("drop-before", "drop-after");
+    });
+    const rect = row.getBoundingClientRect();
+    row.classList.add(event.clientY > rect.top + rect.height / 2 ? "drop-after" : "drop-before");
+  });
+
+  authorList.addEventListener("drop", async function (event) {
+    const row = event.target.closest("[data-author-uid]");
+    if (!row || !state.dragAuthor) return;
+    event.preventDefault();
+    const after = row.classList.contains("drop-after");
+    const order = qsa("[data-author-uid]", authorList).map(function (node) {
+      return node.dataset.authorUid;
+    });
+    const from = order.indexOf(state.dragAuthor);
+    if (from === -1) return;
+    order.splice(from, 1);
+    let index = order.indexOf(row.dataset.authorUid);
+    if (index === -1) index = order.length;
+    if (after) index += 1;
+    order.splice(index, 0, state.dragAuthor);
+    state.dragAuthor = null;
+    const data = await call("reorder_authors", order);
+    if (data) apply(data);
+  });
+
+  authorList.addEventListener("dragend", function () {
+    state.dragAuthor = null;
+    qsa("[data-author-uid]", authorList).forEach(function (node) {
+      node.classList.remove("is-dragging", "drop-before", "drop-after");
+    });
+  });
+
+  const authorDetail = qs("#author-detail");
+
+  authorDetail.addEventListener("change", async function (event) {
+    const author = authorByUid(state.active);
+    if (!author) return;
+    if (event.target.id === "author-name") {
+      const value = event.target.value.trim();
+      if (!value || value === author.name) {
+        event.target.value = author.name;
+        return;
+      }
+      const data = await call("update_author", author.uid, { name: value });
+      if (data) apply(data);
+      return;
+    }
+    if (event.target.id === "author-description") {
+      const value = event.target.value.trim();
+      if (value === (author.description || "")) return;
+      const data = await call("update_author", author.uid, { description: value });
+      if (data) apply(data);
+    }
+  });
+
+  authorDetail.addEventListener("click", function (event) {
+    const author = authorByUid(state.active);
+    if (!author) return;
+
+    const song = event.target.closest("[data-author-song]");
+    if (song) {
+      selectMusic(song.dataset.authorSong);
+      return;
+    }
+
+    const menu = event.target.closest("[data-menu='author']");
+    if (menu) {
+      openMenu(menu, [
+        {
+          label: T("author.move_up"),
+          onClick: function () {
+            moveAuthor(author.uid, -1);
+          },
+        },
+        {
+          label: T("author.move_down"),
+          onClick: function () {
+            moveAuthor(author.uid, 1);
+          },
+        },
+        {
+          label: T("author.delete"),
+          onClick: function () {
+            confirmDeleteAuthor(author);
+          },
+        },
+      ]);
+    }
+  });
+
   qs("#song-detail").addEventListener("input", function (event) {
     if (event.target.id !== "song-name") return;
     scheduleNameSave(event.target);
@@ -2415,6 +3331,12 @@ function bindEvents() {
       return;
     }
 
+    if (event.target.closest("[data-replace]")) {
+      const music = musicByMd5(state.active);
+      if (music) replaceSource(music);
+      return;
+    }
+
     const menu = event.target.closest("[data-menu='song']");
     if (menu) {
       const music = musicByMd5(state.active);
@@ -2424,6 +3346,18 @@ function bindEvents() {
           label: T("action.manage_aliases"),
           onClick: function () {
             openAliasEditor(music);
+          },
+        },
+        {
+          label: T("song.replace_source"),
+          onClick: function () {
+            replaceSource(music);
+          },
+        },
+        {
+          label: T("song.delete"),
+          onClick: function () {
+            confirmDeleteSongs([music.md5]);
           },
         },
       ]);

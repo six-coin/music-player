@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app import i18n
+from app import i18n, paths
 from app.models import Music
 
 
@@ -13,6 +13,16 @@ def fixed_language():
     i18n.set_language("zh-CN")
     yield
     i18n.set_language("zh-CN")
+
+
+@pytest.fixture(autouse=True)
+def isolated_media(tmp_path_factory, monkeypatch):
+    """测试绝不碰真实的 assets 目录：用户库里的音频不该被测试删掉或数成孤儿。"""
+    root = tmp_path_factory.mktemp("media")
+    monkeypatch.setattr(paths, "ASSETS_DIR", root)
+    monkeypatch.setattr(paths, "MUSIC_DIR", root / "music")
+    monkeypatch.setattr(paths, "TEMP_DIR", root / "temp")
+    yield root
 
 
 @pytest.fixture

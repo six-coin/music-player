@@ -100,6 +100,42 @@ class StatsStore:
         with exclusive(lock_path):
             self.save(playlist_uid, {})
 
+    def move_key(self, playlist_uid: str, old_md5: str, new_md5: str, window: int) -> bool:
+        """换源时把统计从旧标识搬到新标识；新键已存在就按先后合并。"""
+        if not self.path_for(playlist_uid).exists():
+            return False
+        lock_path = self.path_for(playlist_uid).with_suffix(".lock")
+        with exclusive(lock_path):
+            songs = self.load(playlist_uid)
+            moved = songs.pop(old_md5, None)
+            if moved is None:
+                return False
+            current = songs.get(new_md5)
+            if current is None:
+                songs[new_md5] = moved
+            else:
+                merged = moved.records + current.records
+                if window > 0:
+                    merged = merged[-window:]
+                current.records = merged
+                current.auto_skipped += moved.auto_skipped
+                current.last_played_at = max(current.last_played_at, moved.last_played_at)
+            self.save(playlist_uid, songs)
+            return True
+
+    def drop(self, playlist_uid: str, md5: str) -> bool:
+        """删歌时把它的统计一并移除。"""
+        if not self.path_for(playlist_uid).exists():
+            return False
+        lock_path = self.path_for(playlist_uid).with_suffix(".lock")
+        with exclusive(lock_path):
+            songs = self.load(playlist_uid)
+            if md5 not in songs:
+                return False
+            del songs[md5]
+            self.save(playlist_uid, songs)
+            return True
+
     def prune(self, playlist_uid: str, valid_md5s: set[str]) -> int:
         """删掉库里已经不存在的歌，返回清理条数。"""
         lock_path = self.path_for(playlist_uid).with_suffix(".lock")

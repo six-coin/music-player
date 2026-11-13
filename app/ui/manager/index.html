@@ -203,6 +203,7 @@
               <button class="btn soft" data-batch="tags" data-i18n="action.batch_tags">加标签</button>
               <button class="btn soft" data-batch="playlist" data-i18n="action.batch_playlist">加入歌单</button>
               <button class="btn ghost" data-batch="clear" data-i18n="action.clear">取消选择</button>
+              <button class="btn danger-ghost" data-batch="delete" data-i18n="song.delete">删除歌曲</button>
             </div>
           </div>
         </aside>
@@ -233,6 +234,56 @@
         </aside>
 
         <section class="detail-pane" id="playlist-detail"></section>
+      </section>
+
+      <section class="view view--split is-hidden" data-view="tags">
+        <aside class="list-pane">
+          <header class="pane-head">
+            <div class="pane-title">
+              <h2 data-i18n="nav.tags">标签</h2>
+              <p class="pane-sub" id="tags-count"></p>
+            </div>
+            <button class="btn primary" id="btn-new-tag-group" data-i18n="tag.new_group">新建</button>
+          </header>
+
+          <div class="search">
+            <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"/>
+              <path d="m20 20-3.5-3.5"/>
+            </svg>
+            <input id="tags-search" type="search" data-i18n-placeholder="tag.search" autocomplete="off">
+            <button class="search-clear" id="tags-search-clear" type="button" aria-label="清除" hidden>×</button>
+          </div>
+
+          <ul class="song-list" id="tag-list"></ul>
+        </aside>
+
+        <section class="detail-pane" id="tag-detail"></section>
+      </section>
+
+      <section class="view view--split is-hidden" data-view="authors">
+        <aside class="list-pane">
+          <header class="pane-head">
+            <div class="pane-title">
+              <h2 data-i18n="nav.authors">作者</h2>
+              <p class="pane-sub" id="authors-count"></p>
+            </div>
+            <button class="btn primary" id="btn-new-author" data-i18n="author.new">新建</button>
+          </header>
+
+          <div class="search">
+            <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"/>
+              <path d="m20 20-3.5-3.5"/>
+            </svg>
+            <input id="authors-search" type="search" data-i18n-placeholder="author.search" autocomplete="off">
+            <button class="search-clear" id="authors-search-clear" type="button" aria-label="清除" hidden>×</button>
+          </div>
+
+          <ul class="song-list" id="author-list"></ul>
+        </aside>
+
+        <section class="detail-pane" id="author-detail"></section>
       </section>
 
       <section class="view is-hidden" data-view="pending">

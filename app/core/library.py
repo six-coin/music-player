@@ -68,13 +68,24 @@ class Library:
         target[identity] = record
 
     def save(self) -> None:
-        payload = {
+        atomic.write_json(self.path, self.to_payload())
+
+    def to_payload(self) -> dict[str, Any]:
+        """导出成可以直接写盘的结构；换源失败回滚时也用它。"""
+        return {
             "version": LIBRARY_VERSION,
             "authors": [item.to_dict() for item in self.authors.values()],
             "tag_groups": [item.to_dict() for item in self.tag_groups.values()],
             "musics": [item.to_dict() for item in self.musics.values()],
         }
-        atomic.write_json(self.path, payload)
+
+    def restore(self, payload: dict[str, Any]) -> None:
+        """只重建内存里的对象，不写盘。"""
+        self.authors = {item["uid"]: Author.from_dict(item) for item in payload.get("authors", [])}
+        self.tag_groups = {
+            item["uid"]: TagGroup.from_dict(item) for item in payload.get("tag_groups", [])
+        }
+        self.musics = {item["md5"]: Music.from_dict(item) for item in payload.get("musics", [])}
 
     # ---------- 查询 ----------
 
@@ -125,6 +136,50 @@ class Library:
     def remove_author(self, uid: str) -> Author | None:
         return self.authors.pop(uid, None)
 
+    def reorder_authors(self, order: list[str]) -> None:
+        """按给定顺序重排作者；没出现在列表里的追加在末尾。"""
+        result: dict[str, Author] = {}
+        for uid in order:
+            author = self.authors.get(uid)
+            if author is not None:
+                result[uid] = author
+        for uid, author in self.authors.items():
+            if uid not in result:
+                result[uid] = author
+        self.authors = result
+
+    def move_author(self, uid: str, delta: int) -> bool:
+        order = list(self.authors)
+        if uid not in order:
+            return False
+        source = order.index(uid)
+        target = source + delta
+        if not 0 <= target < len(order):
+            return False
+        order[source], order[target] = order[target], order[source]
+        self.reorder_authors(order)
+        return True
+
+    # ---------- 引用 ----------
+
+    def tag_group_songs(self, group_uid: str) -> list[Music]:
+        group = self.tag_groups.get(group_uid)
+        if group is None:
+            return []
+        wanted = {tag.uid for tag in group.tags}
+        return [music for music in self.musics.values() if wanted & set(music.tags)]
+
+    def author_songs(self, uid: str) -> list[Music]:
+        return [music for music in self.musics.values() if uid in music.authors]
+
+    def tag_usage(self) -> dict[str, int]:
+        """每个标签被多少首歌用着。"""
+        usage: dict[str, int] = {}
+        for music in self.musics.values():
+            for uid in music.tags:
+                usage[uid] = usage.get(uid, 0) + 1
+        return usage
+
     def upsert_tag_group(self, group: TagGroup) -> None:
         group.normalize()
         group.validate()
@@ -144,15 +199,16 @@ class Library:
         ]
 
     def tag_violations(self) -> list[str]:
-        """违反必选标签约束的歌曲 MD5。"""
+        """违反必选 / 唯一标签约束的歌曲 MD5。"""
         result: list[str] = []
         for music in self.musics.values():
             selected = set(music.tags)
             for group in self.tag_groups.values():
-                if not group.compulsory:
-                    continue
-                group_tags = {tag.uid for tag in group.tags}
-                if not selected & group_tags:
+                chosen = selected & {tag.uid for tag in group.tags}
+                if group.compulsory and not chosen:
+                    result.append(music.md5)
+                    break
+                if group.unique and len(chosen) > 1:
                     result.append(music.md5)
                     break
         return result

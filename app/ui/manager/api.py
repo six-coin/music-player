@@ -16,13 +16,24 @@ import webview
 from loguru import logger
 
 from app import i18n, paths
-from app.core import integrity
+from app.core import integrity, source
+from app.core.adaptation import Params
 from app.core.importer import ImportOutcome, import_file
 from app.core.library import Library
 from app.core.naming import parse_filename
 from app.core.playlists import PlaylistStore
 from app.core.stats import StatsStore
-from app.models import FILTER_MODES, FILTER_TARGETS, Author, Filter, Music, new_uid
+from app.errors import ActionError
+from app.models import (
+    FILTER_MODES,
+    FILTER_TARGETS,
+    Author,
+    Filter,
+    Music,
+    Tag,
+    TagGroup,
+    new_uid,
+)
 from app.settings import SettingsStore
 from app.system import theme as theme_tool
 
@@ -89,6 +100,12 @@ class ManagerApi:
             elif kind == "playlist" and uid in self.playlists.items:
                 self.selection = {"kind": "playlist", "uid": uid}
                 self.section = "playlists"
+            elif kind == "tag_group" and uid in self.library.tag_groups:
+                self.selection = {"kind": "tag_group", "uid": uid}
+                self.section = "tags"
+            elif kind == "author" and uid in self.library.authors:
+                self.selection = {"kind": "author", "uid": uid}
+                self.section = "authors"
             return self._snapshot()
 
     def clear_selection(self) -> dict[str, Any]:
@@ -120,12 +137,24 @@ class ManagerApi:
         }
 
     def _library_payload(self, missing: set[str], tag_issues: set[str]) -> dict[str, Any]:
+        usage = self.library.tag_usage()
+        tag_groups: list[dict[str, Any]] = []
+        for group in sorted(self.library.tag_groups.values(), key=lambda item: item.name):
+            payload = group.to_dict()
+            payload["count"] = len(self.library.tag_group_songs(group.uid))
+            for tag in payload["tags"]:
+                tag["count"] = usage.get(tag["uid"], 0)
+            tag_groups.append(payload)
+
+        authors: list[dict[str, Any]] = []
+        for author in self.library.authors.values():
+            payload = author.to_dict()
+            payload["count"] = len(self.library.author_songs(author.uid))
+            authors.append(payload)
+
         return {
-            "authors": [author.to_dict() for author in self.library.authors.values()],
-            "tag_groups": [
-                group.to_dict()
-                for group in sorted(self.library.tag_groups.values(), key=lambda item: item.name)
-            ],
+            "authors": authors,
+            "tag_groups": tag_groups,
             "musics": [
                 self._music_payload(music, missing, tag_issues) for music in self._sorted_musics()
             ],
@@ -209,6 +238,12 @@ class ManagerApi:
         missing_file = self.library.missing_files()
         if missing_file:
             issues.append({"kind": "missing_file", "count": len(missing_file)})
+        orphans = integrity.orphan_paths(self.library)
+        if orphans:
+            issues.append({"kind": "orphan_file", "count": len(orphans)})
+        broken = self.library.broken_references()
+        if broken:
+            issues.append({"kind": "broken_reference", "count": len(broken)})
 
         return {
             "recent_imported": recent_imported,
@@ -327,6 +362,182 @@ class ManagerApi:
             text = (name or "").strip()
             if text and not any(author.name == text for author in self.library.authors.values()):
                 self.library.upsert_author(Author(uid=new_uid(), name=text))
+                self.library.save()
+            return self._snapshot()
+
+    # ---------- 标签 ----------
+
+    def _fail(self, key: str, **values: Any) -> dict[str, Any]:
+        """带一句人话的失败快照；界面直接 toast 出来。"""
+        return self._fail_message(i18n.t(key, **values))
+
+    def _fail_message(self, message: str) -> dict[str, Any]:
+        snapshot = self._snapshot()
+        snapshot["ok"] = False
+        snapshot["message"] = message
+        return snapshot
+
+    def create_tag_group(
+        self, name: str, compulsory: bool = False, unique: bool = False
+    ) -> dict[str, Any]:
+        with self._lock:
+            text = (name or "").strip()
+            if not text:
+                return self._fail("tag.name_required")
+            if any(group.name == text for group in self.library.tag_groups.values()):
+                return self._fail("tag.group_exists", name=text)
+            group = TagGroup(
+                uid=new_uid(), name=text, compulsory=bool(compulsory), unique=bool(unique)
+            )
+            group.normalize()
+            group.validate()
+            self.library.upsert_tag_group(group)
+            self.library.save()
+            self.selection = {"kind": "tag_group", "uid": group.uid}
+            self.section = "tags"
+            return self._snapshot()
+
+    def update_tag_group(self, uid: str, patch: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            group = self.library.tag_groups.get(uid)
+            if group is None:
+                return self._snapshot()
+            if isinstance(patch, dict):
+                name = patch.get("name")
+                if isinstance(name, str) and name.strip():
+                    text = name.strip()
+                    if text != group.name and any(
+                        item.name == text
+                        for item in self.library.tag_groups.values()
+                        if item.uid != uid
+                    ):
+                        return self._fail("tag.group_exists", name=text)
+                    group.name = text
+                if isinstance(patch.get("compulsory"), bool):
+                    group.compulsory = patch["compulsory"]
+                if isinstance(patch.get("unique"), bool):
+                    group.unique = patch["unique"]
+            group.normalize()
+            self.library.save()
+            return self._snapshot()
+
+    def delete_tag_group(self, uid: str, force: bool = False) -> dict[str, Any]:
+        with self._lock:
+            group = self.library.tag_groups.get(uid)
+            if group is None:
+                return self._snapshot()
+            songs = self.library.tag_group_songs(uid)
+            if songs and not force:
+                names = "、".join(music.title for music in songs[:3])
+                return self._fail("tag.group_referenced", count=len(songs), names=names)
+            if songs:
+                group_tags = {tag.uid for tag in group.tags}
+                for music in songs:
+                    music.tags = [tag_uid for tag_uid in music.tags if tag_uid not in group_tags]
+                    self._touch(music)
+            self.library.remove_tag_group(uid)
+            self.library.save()
+            if self.selection and self.selection.get("uid") == uid:
+                self.selection = None
+            return self._snapshot()
+
+    def add_tag(self, group_uid: str, name: str) -> dict[str, Any]:
+        with self._lock:
+            group = self.library.tag_groups.get(group_uid)
+            text = (name or "").strip()
+            if group is None:
+                return self._snapshot()
+            if not text:
+                return self._fail("tag.name_required")
+            if any(tag.name == text for tag in group.tags):
+                return self._fail("tag.exists", name=text)
+            group.tags.append(Tag(uid=new_uid(), name=text))
+            group.normalize()
+            self.library.save()
+            return self._snapshot()
+
+    def rename_tag(self, group_uid: str, tag_uid: str, value: str) -> dict[str, Any]:
+        with self._lock:
+            group = self.library.tag_groups.get(group_uid)
+            text = (value or "").strip()
+            if group is None:
+                return self._snapshot()
+            tag = next((item for item in group.tags if item.uid == tag_uid), None)
+            if tag is None:
+                return self._snapshot()
+            if not text:
+                return self._fail("tag.name_required")
+            if any(item.name == text and item.uid != tag_uid for item in group.tags):
+                return self._fail("tag.exists", name=text)
+            tag.name = text
+            self.library.save()
+            return self._snapshot()
+
+    def remove_tag(self, group_uid: str, tag_uid: str) -> dict[str, Any]:
+        with self._lock:
+            group = self.library.tag_groups.get(group_uid)
+            if group is None:
+                return self._snapshot()
+            group.tags = [tag for tag in group.tags if tag.uid != tag_uid]
+            for music in self.library.musics.values():
+                if tag_uid in music.tags:
+                    music.tags = [uid for uid in music.tags if uid != tag_uid]
+                    self._touch(music)
+            self.library.save()
+            return self._snapshot()
+
+    # ---------- 作者 ----------
+
+    def update_author(self, uid: str, patch: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            author = self.library.authors.get(uid)
+            if author is None:
+                return self._snapshot()
+            if isinstance(patch, dict):
+                name = patch.get("name")
+                if isinstance(name, str) and name.strip():
+                    text = name.strip()
+                    if text != author.name and any(
+                        item.name == text
+                        for item in self.library.authors.values()
+                        if item.uid != uid
+                    ):
+                        return self._fail("author.exists", name=text)
+                    author.name = text
+                description = patch.get("description")
+                if isinstance(description, str):
+                    author.description = description
+            author.normalize()
+            self.library.save()
+            return self._snapshot()
+
+    def delete_author(self, uid: str, force: bool = False) -> dict[str, Any]:
+        with self._lock:
+            author = self.library.authors.get(uid)
+            if author is None:
+                return self._snapshot()
+            songs = self.library.author_songs(uid)
+            if songs and not force:
+                names = "、".join(music.title for music in songs[:3])
+                return self._fail("author.referenced", count=len(songs), names=names)
+            for music in songs:
+                music.authors = [item for item in music.authors if item != uid]
+                self._touch(music)
+            self.library.remove_author(uid)
+            self.library.save()
+            if self.selection and self.selection.get("uid") == uid:
+                self.selection = None
+            return self._snapshot()
+
+    def reorder_authors(self, uids: list[str]) -> dict[str, Any]:
+        with self._lock:
+            self.library.reorder_authors([str(uid) for uid in uids or []])
+            self.library.save()
+            return self._snapshot()
+
+    def move_author(self, uid: str, delta: int) -> dict[str, Any]:
+        with self._lock:
+            if self.library.move_author(uid, int(delta)):
                 self.library.save()
             return self._snapshot()
 
@@ -681,12 +892,161 @@ class ManagerApi:
                 return {"state": "missing", "done": 0, "total": 0, "current": "", "errors": []}
             return {
                 "state": task["state"],
+                "kind": task.get("kind", ""),
                 "done": task["done"],
                 "total": task["total"],
                 "current": task["current"],
                 "imported": list(task["imported"]),
                 "errors": list(task["errors"]),
+                "result": task.get("result"),
             }
+
+    def cancel_task(self, task_id: str) -> dict[str, Any]:
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if task is not None:
+                task["cancel"] = True
+            return {"ok": task is not None}
+
+    # ---------- 换源与删除 ----------
+
+    def browse_audio(self) -> dict[str, Any]:
+        """换源用的单文件选择。"""
+        if self._window is None:
+            return {"path": ""}
+        start_dir = str(
+            paths.resolve_user_path(str(self.settings.get("import", "dir", default="")))
+        )
+        try:
+            result = self._window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                directory=start_dir,
+                allow_multiple=False,
+                file_types=AUDIO_FILTER,
+            )
+        except Exception as error:
+            logger.error("打开文件对话框失败：{}", error)
+            return {"path": "", "message": str(error)}
+        if not result:
+            return {"path": ""}
+        if isinstance(result, str):
+            return {"path": result}
+        return {"path": str(result[0]) if result else ""}
+
+    def _adaptation_defaults(self) -> Params:
+        data = self.settings.get("common", "adaptation", default={})
+        if not isinstance(data, dict):
+            data = {}
+        return Params(
+            window=int(data.get("window", 100)),
+            min_plays=int(data.get("min_plays", 10)),
+            base=float(data.get("base", 0.95)),
+            skip_seconds=int(data.get("skip_seconds", 30)),
+        )
+
+    def start_replace_source(self, md5: str, path: str) -> dict[str, Any]:
+        with self._lock:
+            if md5 not in self.library.musics:
+                return {"task_id": ""}
+        task_id = new_uid()
+        with self._lock:
+            self._tasks[task_id] = {
+                "state": "running",
+                "kind": "replace",
+                "done": 0,
+                "total": 1,
+                "current": "",
+                "imported": [],
+                "errors": [],
+                "result": None,
+            }
+        thread = threading.Thread(
+            target=self._run_replace, args=(task_id, md5, path), name="replace", daemon=True
+        )
+        thread.start()
+        return {"task_id": task_id}
+
+    def _run_replace(self, task_id: str, md5: str, path: str) -> None:
+        clean = bool(self.settings.get("import", "clean_audio", default=True))
+        try:
+            prepared = source.prepare_replacement(Path(path), clean)
+        except ActionError as error:
+            self._finish_task(task_id, error=str(error))
+            return
+        except Exception as error:  # 未预料的失败也要让界面能退出进度框
+            logger.exception("换源准备失败")
+            self._finish_task(task_id, error=str(error))
+            return
+
+        with self._lock:
+            music = self.library.musics.get(md5)
+            if music is None:
+                prepared.temp.unlink(missing_ok=True)
+                self._finish_task(task_id, error=i18n.t("song.deleted_elsewhere"))
+                return
+            try:
+                report = source.apply_replacement(
+                    music,
+                    prepared,
+                    self.library,
+                    self.playlists,
+                    self.stats,
+                    self._adaptation_defaults(),
+                )
+            except ActionError as error:
+                self._finish_task(task_id, error=str(error))
+                return
+            except Exception as error:
+                logger.exception("换源失败")
+                self._finish_task(task_id, error=str(error))
+                return
+            self.selection = {"kind": "music", "uid": report.new_md5}
+            self.section = "songs"
+            self._finish_task(
+                task_id,
+                result={
+                    "title": report.title,
+                    "old_md5": report.old_md5,
+                    "new_md5": report.new_md5,
+                    "playlists": report.playlists,
+                    "stats": report.stats,
+                    "recycled": report.recycled,
+                },
+            )
+
+    def _finish_task(
+        self,
+        task_id: str,
+        error: str = "",
+        result: dict[str, Any] | None = None,
+    ) -> None:
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if task is None:
+                return
+            task["state"] = "failed" if error else "done"
+            task["current"] = ""
+            if error:
+                task["errors"].append(error)
+            if result is not None:
+                task["result"] = result
+
+    def delete_musics(self, md5s: list[str]) -> dict[str, Any]:
+        with self._lock:
+            targets = [md5 for md5 in md5s or [] if md5 in self.library.musics]
+            if not targets:
+                return self._snapshot()
+            try:
+                report = source.delete_musics(targets, self.library, self.playlists, self.stats)
+            except ActionError as error:
+                return self._fail_message(str(error))
+            if self.selection and self.selection.get("uid") in targets:
+                self.selection = None
+            snapshot = self._snapshot()
+            snapshot["message"] = i18n.t(
+                "song.deleted", count=report.removed, playlists=report.playlists
+            )
+            return snapshot
 
     # ---------- 系统 ----------
 
@@ -700,4 +1060,67 @@ class ManagerApi:
 
     def run_integrity(self) -> dict[str, Any]:
         with self._lock:
-            return integrity.check(self.library)
+            return integrity.check(self.library, self.playlists, self.stats)
+
+    def start_integrity(self, deep: bool = False) -> dict[str, Any]:
+        task_id = new_uid()
+        with self._lock:
+            self._tasks[task_id] = {
+                "state": "running",
+                "kind": "integrity",
+                "done": 0,
+                "total": 0,
+                "current": "",
+                "imported": [],
+                "errors": [],
+                "result": None,
+                "cancel": False,
+            }
+        thread = threading.Thread(
+            target=self._run_integrity, args=(task_id, bool(deep)), name="integrity", daemon=True
+        )
+        thread.start()
+        return {"task_id": task_id}
+
+    def _run_integrity(self, task_id: str, deep: bool) -> None:
+        def progress(done: int, total: int, name: str) -> None:
+            with self._lock:
+                task = self._tasks.get(task_id)
+                if task is not None:
+                    task["done"] = done
+                    task["total"] = total
+                    task["current"] = name
+
+        def cancelled() -> bool:
+            with self._lock:
+                task = self._tasks.get(task_id)
+                return bool(task and task.get("cancel"))
+
+        try:
+            if deep:
+                report = integrity.deep_check(
+                    self.library, self.playlists, self.stats, progress, cancelled
+                )
+            else:
+                report = integrity.check(self.library, self.playlists, self.stats)
+        except Exception as error:
+            logger.exception("完整性检查失败")
+            self._finish_task(task_id, error=str(error))
+            return
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if task is None:
+                return
+            task["state"] = "cancelled" if cancelled() else "done"
+            task["current"] = ""
+            task["result"] = report
+
+    def fix_issues(self, kind: str = "") -> dict[str, Any]:
+        with self._lock:
+            counts = integrity.fix(self.library, self.playlists, self.stats, kind)
+            self.library.save()
+            self.playlists.save()
+            snapshot = self._snapshot()
+            snapshot["fixed"] = counts
+            snapshot["message"] = i18n.t("integrity.fixed", count=sum(counts.values()))
+            return snapshot

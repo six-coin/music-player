@@ -88,12 +88,14 @@ def test_filter_all_drops_values():
     assert condition.to_dict() == {"mode": "include", "target": "all"}
 
 
-def test_filter_requires_values_for_specific_target():
+def test_filter_allows_empty_values():
+    """值可以先空着：界面允许先选对象类型再挑值，删歌也可能把值清空。"""
     condition = Filter(mode="include", target="tag", values=[])
     condition.normalize()
 
-    with pytest.raises(DataError):
-        condition.validate()
+    condition.validate()
+
+    assert condition.values == []
 
 
 def test_playlist_builtin_forces_empty_name():
