@@ -13,6 +13,11 @@ def strip(text: str) -> str:
     return ANSI.sub("", text)
 
 
+def cells(text: str) -> int:
+    """控制台实际占几格：方框线固定一格，其余按 ``render.char_width``。"""
+    return sum(1 if 0x2500 <= ord(char) <= 0x257F else render.char_width(char) for char in text)
+
+
 def make(**overrides) -> render.NowPlaying:
     payload = {
         "title": "Experience",
@@ -21,16 +26,17 @@ def make(**overrides) -> render.NowPlaying:
         "index": 3,
         "total": 37,
         "order": "shuffle",
+        "adaptation": True,
     }
     payload.update(overrides)
     return render.NowPlaying(**payload)
 
 
-def test_every_line_is_the_same_visible_width():
+def test_every_line_is_the_same_width():
     lines = render.draw(make()).split("\r\n")[:-1]
-    assert len(lines) == 11
+    assert len(lines) == 12
     for line in lines:
-        assert render.width(strip(line)) == render.WIDTH + 2
+        assert cells(strip(line)) == render.WIDTH + 2
 
 
 def test_each_line_resets_colors_before_ending():
@@ -42,12 +48,26 @@ def test_long_title_is_clipped_with_ellipsis():
     text = render.draw(make(title="很长的歌名" * 20, author="作者" * 40))
     assert "…" in text
     for line in text.split("\r\n")[:-1]:
-        assert render.width(strip(line)) == render.WIDTH + 2
+        assert cells(strip(line)) == render.WIDTH + 2
 
 
-def test_cjk_counts_as_two_columns():
+def test_long_ascii_title_keeps_the_border_in_place():
+    # 复现用户截图里那首：全角歌名 + 一长串数字，截断后必须正好占满一行
+    title = "弥渡山歌(PHONK)" + "1" * 71
+    for line in render.draw(make(title=title)).split("\r\n")[:-1]:
+        assert cells(strip(line)) == render.WIDTH + 2
+
+
+def test_ambiguous_width_characters_count_as_two():
+    # 中文环境里控制台把 … · 这类字符渲染成两格，按一格算会短一格
+    assert render.width("…") == 2
     assert render.width("默认歌单") == 8
     assert render.width("Ctrl") == 4
+
+
+def test_adaptation_state_is_shown():
+    assert "自适应  开" in strip(render.draw(make(adaptation=True)))
+    assert "自适应  关" in strip(render.draw(make(adaptation=False)))
 
 
 def test_warning_is_drawn_above_the_box():

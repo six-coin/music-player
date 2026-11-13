@@ -148,7 +148,9 @@ class SimpleEnv:
             name=None,
             builtin=True,
             kind="filter",
-            adaptation=Adaptation(),
+            # 大部分用例断言的是「记录写了什么」，所以默认打开自适应；
+            # 关掉的场景在用例里显式改成 False。
+            adaptation=Adaptation(enabled=True),
         )
         self.player = FakePlayer()
         self.keys = FakeKeys()

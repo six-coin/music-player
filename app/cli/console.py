@@ -50,18 +50,33 @@ class Action(Enum):
 BINDINGS: dict[bytes, Action] = {
     b"\x03": Action.SKIP,  # Ctrl+C
     b"\x11": Action.QUIT,  # Ctrl+Q
+    # 关掉 ENABLE_PROCESSED_INPUT 之后 Alt+F4 不再由窗口处理，而是当按键送进来：
+    # 功能键是两字节（0x00 + 码），控制台给 Alt+F4 的是 0x6B、裸 F4 是 0x3E。
+    # 两个都绑上，免得键盘/控制台版本不同时漏掉。
+    b"\x00\x6b": Action.QUIT,  # Alt+F4
+    b"\x00\x3e": Action.QUIT,  # F4
 }
+
+# 功能键（F1–F12、方向键等）的 getch 前缀：第一个字节是 0x00 或 0xE0。
+_FUNCTION_PREFIXES = (b"\x00", b"\xe0")
 
 
 def decode(chunk: bytes | None) -> Action | None:
-    """把一个输入字节翻成动作；没绑定就返回 None。"""
+    """把一个输入块翻成动作；没绑定就返回 None。"""
     if not chunk:
         return None
+    action = BINDINGS.get(chunk)
+    if action is not None:
+        return action
     return BINDINGS.get(chunk[:1])
 
 
 def read_key(timeout_ms: int = 0) -> bytes | None:
-    """最多等 ``timeout_ms`` 毫秒；没按键返回 None，不阻塞主循环。"""
+    """最多等 ``timeout_ms`` 毫秒；没按键返回 None，不阻塞主循环。
+
+    功能键是两个字节（前缀 + 扫描码），一次读齐再返回，否则第二个字节会被
+    当成单独的一次按键。
+    """
     if os.name != "nt":  # pragma: no cover - 只服务 Windows
         time.sleep(max(0, timeout_ms) / 1000)
         return None
@@ -72,7 +87,10 @@ def read_key(timeout_ms: int = 0) -> bytes | None:
     while True:
         try:
             if msvcrt.kbhit():
-                return msvcrt.getch()
+                chunk = msvcrt.getch()
+                if chunk in _FUNCTION_PREFIXES and msvcrt.kbhit():
+                    chunk += msvcrt.getch()
+                return chunk
         except OSError:  # 标准输入被重定向时没有控制台可读，退化为一直没按键
             time.sleep(max(0, timeout_ms) / 1000)
             return None

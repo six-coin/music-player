@@ -83,6 +83,17 @@ def test_adaptation_disabled_never_skips(simple_env):
     assert simple_env.player.played[0].name == f"{first}.mp3"
 
 
+def test_adaptation_off_writes_no_stats(simple_env):
+    """关掉自适应就完全不碰统计文件：记录只服务于自适应。"""
+    simple_env.add("a")
+    simple_env.add("b")
+    simple_env.playlist.adaptation.enabled = False
+    simple_env.keys.quit_at = 9
+    simple_env.run()
+    assert simple_env.stats.load(simple_env.playlist.uid) == {}
+    assert not simple_env.stats.path_for(simple_env.playlist.uid).exists()
+
+
 def test_window_caps_the_records(simple_env):
     first = simple_env.add("a")
     simple_env.add("b")

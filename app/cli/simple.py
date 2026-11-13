@@ -214,12 +214,15 @@ class Session:
             index=index,
             total=total,
             order=self._order,
+            adaptation=self._adaptation_on,
         )
 
     # ---------- 自适应 ----------
 
     def _reload_records(self) -> None:
         """每轮开始读一次统计：player 同时开着时也能看到它写下的记录。"""
+        if not self._adaptation_on:
+            return
         try:
             self._records = self._deps.stats.load(self._uid)
         except AppError as error:
@@ -243,6 +246,9 @@ class Session:
         return True
 
     def _remember(self, md5: str, outcome: Outcome, seconds: float) -> None:
+        # 自适应没开就不写统计：记录只服务于自适应，用户关掉它就别再动文件。
+        if not self._adaptation_on:
+            return
         if outcome is Outcome.PLAYED:
             self._record(md5, skipped=False)
         elif outcome is Outcome.SKIPPED:

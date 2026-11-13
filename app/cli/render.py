@@ -3,7 +3,10 @@
 只在状态变化时整块重绘，不做逐帧刷新：逐帧刷新会闪，也会白吃 CPU。
 颜色只用青（标题 / 边框）、蓝（字段名）、白（值）、灰（提示），克制、不刺眼。
 
-中文字符占两列，方框对齐必须按显示宽度算，不能按字符数算。
+中文字符占两列，方框对齐必须按显示宽度算，不能按字符数算。**东亚宽度模糊**
+（``east_asian_width`` 为 ``A``）的字符也按两列算：中文环境下控制台把 ``…``
+``·`` 这类字符渲染成两格，按一格算会让整行短一格，右边的竖线就歪了。
+方框线本身不参与计算，它是固定宽度拼上去的。
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ CLEAR = "\x1b[H\x1b[J"  # 回到左上角，清到屏幕末尾
 
 WIDTH = 48  # 框内宽度，含左右各两个空格的内边距
 INSET = 2
+LABEL_WIDTH = 6  # 字段名列宽：歌单 / 模式 / 自适应 的值从同一列开始
 
 ORDER_LABELS = {"shuffle": "随机", "list_loop": "列表循环"}
 
@@ -39,16 +43,19 @@ class NowPlaying:
     index: int
     total: int
     order: str
+    adaptation: bool = False
+
+
+def char_width(char: str) -> int:
+    """单个字符占几列。全角、宽、东亚模糊都算两列。"""
+    if unicodedata.combining(char):
+        return 0
+    return 2 if unicodedata.east_asian_width(char) in ("W", "F", "A") else 1
 
 
 def width(text: str) -> int:
-    """终端显示宽度：全角与宽字符占两列。"""
-    total = 0
-    for char in text:
-        if unicodedata.combining(char):
-            continue
-        total += 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
-    return total
+    """终端显示宽度。"""
+    return sum(char_width(char) for char in text)
 
 
 def clip(text: str, limit: int) -> str:
@@ -60,7 +67,7 @@ def clip(text: str, limit: int) -> str:
     kept: list[str] = []
     used = 0
     for char in text:
-        step = 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+        step = char_width(char)
         if used + step > limit - 1:
             break
         kept.append(char)
@@ -80,7 +87,7 @@ def _border(left: str, right: str) -> str:
 
 
 def _pair(label: str, value: str, right: str = "") -> str:
-    head = f"{' ' * INSET}{label}  "
+    head = f"{' ' * INSET}{label}{' ' * max(0, LABEL_WIDTH - width(label))}  "
     tail = f"{right}{' ' * INSET}" if right else ""
     room = WIDTH - width(head) - width(tail) - 2
     value = clip(value, max(1, room))
@@ -103,6 +110,7 @@ def draw(state: NowPlaying, warning: str = "") -> str:
             _row([("", "")]),
             _pair("歌单", state.playlist, f"第 {state.index} / {state.total} 首"),
             _pair("模式", ORDER_LABELS.get(state.order, state.order)),
+            _pair("自适应", "开" if state.adaptation else "关"),
             _row([("", "")]),
             _row([(f"{' ' * INSET}Ctrl+C 跳过        Ctrl+Q 退出", GRAY)]),
             _border("└", "┘"),
