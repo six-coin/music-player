@@ -13,6 +13,7 @@ const state = {
   autoplay: false,
   pendingSeek: null,
   failedFor: null,
+  trackMd5: null,
   startTimer: null,
   noticeTimer: null,
   pickerOpen: false,
@@ -168,6 +169,14 @@ function renderPlaylists() {
 function renderTrack() {
   const data = state.data;
   const track = data.track;
+  const md5 = track ? track.md5 : null;
+  if (md5 !== state.trackMd5) {
+    state.trackMd5 = md5;
+    const box = qs("#playing");
+    box.classList.remove("is-switching");
+    void box.offsetWidth;
+    box.classList.add("is-switching");
+  }
   qs("#track-title").textContent = track ? track.title : "";
   qs("#track-authors").textContent = track
     ? track.authors || T("player.unknown_author")

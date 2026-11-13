@@ -71,3 +71,36 @@ def test_get_supports_default(tmp_path):
 
     assert store.get("common", "theme") == "system"
     assert store.get("common", "missing", default="fallback") == "fallback"
+
+
+def test_debug_flag_defaults_off(tmp_path):
+    from app.settings import SettingsStore
+
+    store = SettingsStore(tmp_path / "settings.json")
+    store.load()
+
+    assert store.debug_enabled() is False
+
+
+def test_debug_flag_is_read_from_disk(tmp_path):
+    from app.settings import SettingsStore
+
+    store = SettingsStore(tmp_path / "settings.json")
+    store.load()
+    store.update({"common": {"debug": True}})
+
+    other = SettingsStore(tmp_path / "settings.json")
+    other.load()
+
+    assert other.debug_enabled() is True
+
+
+def test_audition_volume_is_clamped(tmp_path):
+    from app.settings import SettingsStore
+
+    store = SettingsStore(tmp_path / "settings.json")
+    store.load()
+    assert store.get("audition", "volume") == 0.05
+
+    store.update({"audition": {"volume": 3}})
+    assert store.get("audition", "volume") == 1.0

@@ -27,9 +27,9 @@
   --amber: #f59e0b;
   --amber-soft: #fef3c7;
   --amber-text: #92400e;
-  --red: #ef4444;
-  --red-soft: #fee2e2;
-  --red-text: #991b1b;
+  --red: #dc2626;
+  --red-soft: #fef2f2;
+  --red-text: #b91c1c;
 
   --shadow: rgba(15, 23, 42, 0.12);
   --shadow-strong: rgba(15, 23, 42, 0.18);
@@ -357,6 +357,10 @@ select {
 }
 
 .icon-btn {
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    transform 0.12s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -370,6 +374,10 @@ select {
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
+}
+
+.icon-btn:active:not(:disabled) {
+  transform: scale(0.92);
 }
 
 .icon-btn:hover {
@@ -704,7 +712,7 @@ input[type="checkbox"]:checked::after {
   height: 8px;
   border: solid #fff;
   border-width: 0 1.8px 1.8px 0;
-  transform: translate(-50%, -50%) rotate(42deg);
+  transform: translate(-50%, calc(-50% - 1.6px)) rotate(42deg);
 }
 
 input[type="checkbox"]:indeterminate::after {
@@ -1458,6 +1466,9 @@ input[type="checkbox"]:disabled {
 }
 
 .menu-item {
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
   display: block;
   width: 100%;
   padding: 7px 10px;
@@ -1647,12 +1658,22 @@ input[type="checkbox"]:disabled {
 
 .inline-form {
   display: flex;
+  align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
 }
 
 .inline-form .input {
   flex: 1;
+  height: 32px;
+}
+
+.inline-form .btn {
+  flex: none;
+  height: 32px;
+  padding: 0 14px;
 }
 
 .progress {
@@ -2015,12 +2036,30 @@ input[type="checkbox"]:disabled {
   z-index: 40;
   display: flex;
   flex-direction: column;
-  width: 460px;
+  width: 620px;
   max-width: 94vw;
   border-left: 1px solid var(--border);
   background: var(--panel);
   box-shadow: -14px 0 36px var(--shadow);
   animation: drawer-in 0.18s var(--ease);
+}
+
+@keyframes audition-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes drawer-out {
+  to {
+    opacity: 0;
+    transform: translateX(26px);
+  }
 }
 
 @keyframes drawer-in {
@@ -2342,6 +2381,7 @@ input[type="checkbox"]:disabled {
 }
 
 .audition {
+  animation: audition-in 0.18s var(--ease);
   position: fixed;
   right: 0;
   bottom: 0;
@@ -2375,6 +2415,44 @@ input[type="checkbox"]:disabled {
   width: 20px;
   height: 20px;
   fill: currentColor;
+}
+
+.audition-toggle .icon-pause {
+  display: none;
+}
+
+.audition-toggle[data-playing="true"] .icon-play {
+  display: none;
+}
+
+.audition-toggle[data-playing="true"] .icon-pause {
+  display: block;
+}
+
+.audition-volume {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border-soft);
+}
+
+.audition-vol-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+
+.audition-vol {
+  width: 84px;
+}
+
+.drawer.is-closing {
+  animation: drawer-out 0.16s var(--ease) forwards;
 }
 
 .audition-time {

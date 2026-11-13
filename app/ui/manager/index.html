@@ -155,6 +155,8 @@
         </div>
 
         <div class="quick" id="quick">
+          <button class="btn ghost" data-action="launch_player" data-i18n="action.open_player">打开音乐播放器</button>
+          <button class="btn ghost" data-action="launch_simple" data-i18n="action.open_simple">打开轻量音乐播放器</button>
           <button class="btn ghost" data-action="import" data-i18n="action.import_music">导入音乐</button>
           <button class="btn ghost" data-action="data_dir" data-i18n="action.open_data_dir">打开数据目录</button>
           <button class="btn ghost" data-action="integrity" data-i18n="action.integrity">完整性检查</button>
@@ -281,6 +283,11 @@
             <button class="search-clear" id="authors-search-clear" type="button" aria-label="清除" hidden>×</button>
           </div>
 
+          <div class="list-tools" id="author-tools" hidden>
+            <span class="pane-sub" id="author-empty-count"></span>
+            <button class="btn ghost small" data-action="clean_authors" data-i18n="author.clean">清理空作者</button>
+          </div>
+
           <ul class="song-list" id="author-list"></ul>
         </aside>
 
@@ -322,13 +329,20 @@
   <div class="audition" id="audition" hidden>
     <audio id="audition-audio" preload="auto"></audio>
     <div class="audition-title" id="audition-title"></div>
-    <button class="icon-btn audition-toggle" id="audition-toggle" type="button" aria-label="播放">
+    <button class="icon-btn audition-toggle" id="audition-toggle" type="button" data-playing="false" aria-label="播放">
       <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-      <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M7 4h4v16H7zM13 4h4v16h-4z"/></svg>
+      <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h4v16H7zM13 4h4v16h-4z"/></svg>
     </button>
     <span class="audition-time" id="audition-current">0:00</span>
     <input class="range audition-seek" id="audition-seek" type="range" min="0" max="1000" value="0" aria-label="进度">
     <span class="audition-time" id="audition-total">0:00</span>
+    <div class="audition-volume">
+      <svg class="audition-vol-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 9.5h3.5L12 6v12L7.5 14.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/>
+      </svg>
+      <input class="range audition-vol" id="audition-volume" type="range" min="0" max="100" step="1" value="5" aria-label="试听音量">
+      <span class="audition-time" id="audition-volume-value">5%</span>
+    </div>
     <button class="icon-btn" id="audition-close" type="button" aria-label="关闭">×</button>
   </div>
 

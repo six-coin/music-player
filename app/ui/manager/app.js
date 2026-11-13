@@ -1193,9 +1193,21 @@ function visibleAuthors() {
 
 function renderAuthorList() {
   const list = qs("#author-list");
-  const total = ((state.data && state.data.library.authors) || []).length;
+  const all = (state.data && state.data.library.authors) || [];
+  const total = all.length;
   const items = visibleAuthors();
   qs("#authors-count").textContent = T("author.total", { count: total });
+
+  const emptyCount = all.filter(function (author) {
+    return !author.count;
+  }).length;
+  const tools = qs("#author-tools");
+  if (tools) {
+    tools.hidden = emptyCount === 0;
+    qs("#author-empty-count").textContent = emptyCount
+      ? T("author.empty_count", { count: emptyCount })
+      : "";
+  }
 
   if (!items.length) {
     list.innerHTML = total
@@ -1864,6 +1876,44 @@ function openCreateAuthor() {
   });
 }
 
+function confirmCleanAuthors(count) {
+  openModal({
+    title: T("author.clean"),
+    body: '<p class="modal-note">' + esc(T("author.clean_confirm", { count: count })) + "</p>",
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("author.clean"),
+        danger: true,
+        onClick: async function () {
+          const data = await call("delete_empty_authors");
+          if (!data) return;
+          closeModal();
+          apply(data);
+        },
+      },
+    ],
+  });
+}
+
+function cleanAuthors() {
+  const all = (state.data && state.data.library.authors) || [];
+  const count = all.filter(function (author) {
+    return !author.count;
+  }).length;
+  if (!count) {
+    toast(T("author.cleaned", { count: 0 }));
+    return;
+  }
+  confirmCleanAuthors(count);
+}
+
+async function launchProgram(method) {
+  const result = await call(method);
+  if (!result) return;
+  if (result.message) toast(result.message, result.ok === true);
+}
+
 function confirmDeleteAuthor(author) {
   openModal({
     title: T("author.delete"),
@@ -1933,6 +1983,12 @@ async function auditionPlay(md5) {
     qs("#audition-current").textContent = "0:00";
   }
 
+  const configured = Number(settingValue("audition.volume"));
+  audio.volume = Number.isFinite(configured) ? Math.min(1, Math.max(0, configured)) : 0.05;
+  const volumePercent = Math.round(audio.volume * 100);
+  qs("#audition-volume").value = String(volumePercent);
+  qs("#audition-volume-value").textContent = volumePercent + "%";
+
   qs("#audition").hidden = false;
   qs("#app").classList.add("has-audition");
   const started = audio.play();
@@ -1950,14 +2006,16 @@ function auditionStop() {
   audio.load();
   state.auditionMd5 = null;
   qs("#audition").hidden = true;
+  qs("#audition-toggle").dataset.playing = "false";
   qs("#app").classList.remove("has-audition");
 }
 
 function syncAudition() {
   const audio = auditionAudio();
   const playing = Boolean(audio.src) && !audio.paused && !audio.ended;
-  qs("#audition-toggle .icon-play").hidden = playing;
-  qs("#audition-toggle .icon-pause").hidden = !playing;
+  const toggle = qs("#audition-toggle");
+  toggle.dataset.playing = playing ? "true" : "false";
+  toggle.setAttribute("aria-label", playing ? T("audition.pause") : T("audition.play"));
 
   const duration = audio.duration;
   if (Number.isFinite(duration) && duration > 0) {
@@ -2028,8 +2086,14 @@ async function openStatsDrawer(playlist) {
 function closeDrawer() {
   if (!state.drawer) return;
   state.drawer = null;
-  qs("#drawer").hidden = true;
-  qs("#drawer-body").innerHTML = "";
+  const drawer = qs("#drawer");
+  drawer.classList.add("is-closing");
+  window.setTimeout(function () {
+    if (state.drawer) return;
+    drawer.hidden = true;
+    drawer.classList.remove("is-closing");
+    qs("#drawer-body").innerHTML = "";
+  }, 160);
 }
 
 function renderDrawer(data) {
@@ -2123,6 +2187,9 @@ function settingsGeneral() {
   const common = (state.data.settings && state.data.settings.common) || {};
   const adapt = common.adaptation || {};
   const status = state.data.status || {};
+  const auditionVolume = Math.round(
+    (((state.data.settings || {}).audition || {}).volume ?? 0.05) * 100
+  );
 
   const themes = [
     ["system", T("settings.theme_system")],
@@ -2169,6 +2236,16 @@ function settingsGeneral() {
         adaptRow("min_plays", T("adaptation.min_plays"), T("adaptation.times"), 0, 1000, 1) +
         adaptRow("base", T("adaptation.base"), "", 0, 0.99, 0.01) +
         adaptRow("skip_seconds", T("adaptation.skip_seconds"), T("adaptation.seconds"), 5, 300, 1)
+    ) +
+    settingsCard(
+      T("settings.audition"),
+      settingsRow(
+        T("settings.audition_volume"),
+        T("settings.audition_volume_hint"),
+        '<div class="volume-line"><input class="range" id="audition-default" type="range" ' +
+          'min="0" max="100" step="1" value="' + auditionVolume + '">' +
+          '<span class="volume-value" id="audition-default-value">' + auditionVolume + "%</span></div>"
+      )
     ) +
     settingsCard(
       T("settings.paths"),
@@ -2311,7 +2388,16 @@ function settingsPlayer() {
 }
 
 function settingsMaintenance() {
+  const debugOn = ((state.data.settings || {}).common || {}).debug === true;
   return (
+    settingsCard(
+      T("settings.debug_section"),
+      settingsRow(
+        T("settings.debug"),
+        T("settings.debug_hint"),
+        switchMarkup('data-setting-switch="common.debug"', debugOn, T("settings.debug"))
+      )
+    ) +
     settingsCard(
       T("settings.maintenance_section"),
       settingsRow(
@@ -3467,6 +3553,9 @@ function bindEvents() {
       else if (name === "new_playlist") openCreatePlaylist();
       else if (name === "new_tag_group") openCreateTagGroup();
       else if (name === "new_author") openCreateAuthor();
+      else if (name === "clean_authors") cleanAuthors();
+      else if (name === "launch_player") launchProgram("launch_player");
+      else if (name === "launch_simple") launchProgram("launch_simple");
       else if (name === "settings") goSection("settings");
       return;
     }
@@ -4030,6 +4119,16 @@ function bindEvents() {
 
   qs("#audition-close").addEventListener("click", auditionStop);
 
+  qs("#audition-volume").addEventListener("input", function (event) {
+    const value = Number(event.target.value);
+    auditionAudio().volume = value / 100;
+    qs("#audition-volume-value").textContent = value + "%";
+  });
+
+  qs("#audition-volume").addEventListener("change", function (event) {
+    patchSetting("audition.volume", Number(event.target.value) / 100);
+  });
+
   qs("#audition-seek").addEventListener("input", function (event) {
     const audio = auditionAudio();
     if (!Number.isFinite(audio.duration) || !audio.duration) return;
@@ -4076,6 +4175,10 @@ function bindEvents() {
       await patchSetting("player.volume", Number(event.target.value) / 100);
       return;
     }
+    if (event.target.id === "audition-default") {
+      await patchSetting("audition.volume", Number(event.target.value) / 100);
+      return;
+    }
     const field = event.target.closest("[data-default]");
     if (field) {
       const value = Number(field.value);
@@ -4088,9 +4191,15 @@ function bindEvents() {
   });
 
   settingsBody.addEventListener("input", function (event) {
-    if (event.target.id !== "player-volume") return;
-    const label = qs("#player-volume-value");
-    if (label) label.textContent = event.target.value + "%";
+    if (event.target.id === "player-volume") {
+      const label = qs("#player-volume-value");
+      if (label) label.textContent = event.target.value + "%";
+      return;
+    }
+    if (event.target.id === "audition-default") {
+      const label = qs("#audition-default-value");
+      if (label) label.textContent = event.target.value + "%";
+    }
   });
 
   settingsBody.addEventListener("selectchange", async function (event) {
@@ -4122,6 +4231,12 @@ async function auditionPlay(md5) {
     qs("#audition-current").textContent = "0:00";
   }
 
+  const configured = Number(settingValue("audition.volume"));
+  audio.volume = Number.isFinite(configured) ? Math.min(1, Math.max(0, configured)) : 0.05;
+  const volumePercent = Math.round(audio.volume * 100);
+  qs("#audition-volume").value = String(volumePercent);
+  qs("#audition-volume-value").textContent = volumePercent + "%";
+
   qs("#audition").hidden = false;
   qs("#app").classList.add("has-audition");
   const started = audio.play();
@@ -4139,14 +4254,16 @@ function auditionStop() {
   audio.load();
   state.auditionMd5 = null;
   qs("#audition").hidden = true;
+  qs("#audition-toggle").dataset.playing = "false";
   qs("#app").classList.remove("has-audition");
 }
 
 function syncAudition() {
   const audio = auditionAudio();
   const playing = Boolean(audio.src) && !audio.paused && !audio.ended;
-  qs("#audition-toggle .icon-play").hidden = playing;
-  qs("#audition-toggle .icon-pause").hidden = !playing;
+  const toggle = qs("#audition-toggle");
+  toggle.dataset.playing = playing ? "true" : "false";
+  toggle.setAttribute("aria-label", playing ? T("audition.pause") : T("audition.play"));
 
   const duration = audio.duration;
   if (Number.isFinite(duration) && duration > 0) {

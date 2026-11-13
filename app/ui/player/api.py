@@ -428,7 +428,7 @@ class PlayerApi:
 
     def _should_skip(self, playlist_uid: str, md5: str) -> bool:
         playlist = self.playlists.get(playlist_uid)
-        if playlist is None or not playlist.adaptation.enabled:
+        if playlist is None or not playlist.adaptation.enabled or self.settings.debug_enabled():
             return False
         if playlist_uid != self._records_uid:
             self._reload_records()
@@ -457,7 +457,7 @@ class PlayerApi:
     def _record(self, md5: str, played_ms: int, *, natural: bool) -> None:
         uid = self.session.playlist_uid
         playlist = self.playlists.get(uid) if uid else None
-        if playlist is None or not playlist.adaptation.enabled:
+        if playlist is None or not playlist.adaptation.enabled or self.settings.debug_enabled():
             return
         if uid != self._records_uid:
             self._reload_records()

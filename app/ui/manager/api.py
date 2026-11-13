@@ -35,9 +35,10 @@ from app.models import (
     new_uid,
 )
 from app.settings import THEMES, SettingsStore
-from app.system import ffmpeg
+from app.system import ffmpeg, launcher
 from app.system import theme as theme_tool
 from app.system.media_server import MediaServer
+from app.system.single_instance import is_running
 
 SECTIONS = ("overview", "songs", "playlists", "tags", "authors", "settings")
 RECENT_LIMIT = 5
@@ -547,6 +548,20 @@ class ManagerApi:
             if self.selection and self.selection.get("uid") == uid:
                 self.selection = None
             return self._snapshot()
+
+    def delete_empty_authors(self) -> dict[str, Any]:
+        """一键清掉没有任何作品归属的作者。"""
+        with self._lock:
+            empty = [uid for uid in self.library.authors if not self.library.author_songs(uid)]
+            for uid in empty:
+                self.library.remove_author(uid)
+            if empty:
+                self.library.save()
+                if self.selection and self.selection.get("uid") in empty:
+                    self.selection = None
+            snapshot = self._snapshot()
+            snapshot["message"] = i18n.t("author.cleaned", count=len(empty))
+            return snapshot
 
     def reorder_authors(self, uids: list[str]) -> dict[str, Any]:
         with self._lock:
@@ -1178,6 +1193,22 @@ class ManagerApi:
                 "song.deleted", count=report.removed, playlists=report.playlists
             )
             return snapshot
+
+    # ---------- 启动其他程序 ----------
+
+    def launch_player(self) -> dict[str, Any]:
+        if is_running("MusicPlayerPlayer"):
+            return {"ok": False, "message": i18n.t("launch.player_running")}
+        if not launcher.spawn(paths.PLAYER_ENTRY):
+            return {"ok": False, "message": i18n.t("launch.failed")}
+        return {"ok": True}
+
+    def launch_simple(self) -> dict[str, Any]:
+        if is_running("MusicPlayerSimple"):
+            return {"ok": False, "message": i18n.t("launch.simple_running")}
+        if not launcher.spawn(paths.SIMPLE_ENTRY, console=True):
+            return {"ok": False, "message": i18n.t("launch.failed")}
+        return {"ok": True}
 
     # ---------- 试听 ----------
 

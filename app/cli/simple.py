@@ -71,6 +71,7 @@ class Deps:
     keys: Callable[[int], bytes | None] = console.read_key
     clock: Callable[[], float] = time.monotonic
     rng: random.Random = field(default_factory=random.Random)
+    debug: Callable[[], bool] = lambda: False
 
 
 # ---------- 播放循环 ----------
@@ -178,14 +179,18 @@ class Session:
             index=index,
             total=total,
             order=self._order,
-            adaptation=self._adaptation_on,
+            adaptation=self._adaptation_active(),
         )
 
     # ---------- 自适应 ----------
 
+    def _adaptation_active(self) -> bool:
+        """调试状态下一律不判也不记：manager 里随时可以关掉。"""
+        return self._adaptation_on and not self._deps.debug()
+
     def _reload_records(self) -> None:
         """每轮开始读一次统计：player 同时开着时也能看到它写下的记录。"""
-        if not self._adaptation_on:
+        if not self._adaptation_active():
             return
         try:
             self._records = self._deps.stats.load(self._uid)
@@ -198,7 +203,7 @@ class Session:
         return entry.records if entry else ""
 
     def _auto_skip(self, md5: str) -> bool:
-        if not self._adaptation_on:
+        if not self._adaptation_active():
             return False
         if not adaptation.should_skip(self._records_for(md5), self._params, self._deps.rng):
             return False
@@ -211,7 +216,7 @@ class Session:
 
     def _remember(self, md5: str, outcome: Outcome, seconds: float) -> None:
         # 自适应没开就不写统计：记录只服务于自适应，用户关掉它就别再动文件。
-        if not self._adaptation_on:
+        if not self._adaptation_active():
             return
         if outcome is Outcome.PLAYED:
             self._record(md5, skipped=False)
@@ -307,7 +312,13 @@ def _run(log_file: Path) -> int:
     try:
         with console.ConsoleSession(on_close=on_close):
             session = Session(
-                Deps(library=library, stats=stats, player=player, screen=screen),
+                Deps(
+                    library=library,
+                    stats=stats,
+                    player=player,
+                    screen=screen,
+                    debug=settings.debug_enabled,
+                ),
                 playlist,
                 params,
                 order,

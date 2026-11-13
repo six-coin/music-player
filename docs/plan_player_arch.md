@@ -264,9 +264,9 @@ class Stop:
 ```python
 @dataclass(frozen=True)
 class Hooks:
-    available: Callable[[str], bool]       # 文件在不在
-    should_skip: Callable[[str], bool]     # 自适应判定
-    on_auto_skip: Callable[[str], None]    # 记 auto_skipped
+    available: Callable[[str], bool]  # 文件在不在
+    should_skip: Callable[[str], bool]  # 自适应判定
+    on_auto_skip: Callable[[str], None]  # 记 auto_skipped
 ```
 
 session 不认识文件系统与统计，三个钩子由 api 注入；测试里换成计数器与固定返回值。

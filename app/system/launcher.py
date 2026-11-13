@@ -15,6 +15,7 @@ from loguru import logger
 from app import paths
 
 _CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+_CREATE_NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
 
 
 def interpreter(*, console: bool) -> Path:
@@ -32,7 +33,7 @@ def spawn(entry: Path, *, console: bool = False) -> bool:
             [str(interpreter(console=console)), str(entry)],
             cwd=str(paths.PROGRAM_DIR),
             close_fds=True,
-            creationflags=_CREATE_NEW_PROCESS_GROUP,
+            creationflags=_CREATE_NEW_PROCESS_GROUP | (_CREATE_NEW_CONSOLE if console else 0),
         )
     except OSError as error:
         logger.error("拉起 {} 失败：{}", entry.name, error)

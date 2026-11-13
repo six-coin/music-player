@@ -397,5 +397,22 @@
     "player.action.prev": "上一首",
     "player.action.next": "下一首",
     "player.pick.in_playlist": "当前歌单",
-    "player.notice.media_server": "无法启动本地播放服务，详见日志"
+    "player.notice.media_server": "无法启动本地播放服务，详见日志",
+    "action.open_player": "打开音乐播放器",
+    "action.open_simple": "打开轻量音乐播放器",
+    "launch.player_running": "音乐播放器已经在运行了",
+    "launch.simple_running": "轻量音乐播放器已经在运行了",
+    "launch.failed": "启动失败，请查看日志",
+    "author.clean": "清理空作者",
+    "author.empty_count": "{count} 位作者没有作品",
+    "author.clean_confirm": "删除这 {count} 位没有任何作品的作者？",
+    "author.cleaned": "已清理 {count} 位空作者",
+    "settings.audition": "试听",
+    "settings.audition_volume": "默认音量",
+    "settings.audition_volume_hint": "管理器底部试听条的初始音量，只影响管理器自己。",
+    "settings.debug_section": "调试",
+    "settings.debug": "调试状态",
+    "settings.debug_hint": "开启后，音乐播放器与轻量音乐播放器都不再记录自适应，也不会自动跳过。",
+    "audition.pause": "暂停",
+    "audition.volume": "试听音量"
 }

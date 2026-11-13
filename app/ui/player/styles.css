@@ -148,14 +148,17 @@ input:focus-visible {
   grid-template-columns: 200px minmax(0, 1fr) 264px;
   height: 100vh;
   min-height: 0;
+  transition: grid-template-columns 0.24s var(--ease);
 }
 
 .app.no-queue {
-  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-columns: 200px minmax(0, 1fr) 0px;
 }
 
 .app.no-queue .queue {
-  display: none;
+  opacity: 0;
+  border-left-color: transparent;
+  pointer-events: none;
 }
 
 /* ---------- 左栏 ---------- */
@@ -182,6 +185,9 @@ input:focus-visible {
 }
 
 .playlist-item {
+  transition:
+    background 0.14s var(--ease),
+    color 0.14s var(--ease);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -288,6 +294,10 @@ input:focus-visible {
 }
 
 .ghost-btn {
+  transition:
+    background 0.14s var(--ease),
+    border-color 0.14s var(--ease),
+    color 0.14s var(--ease);
   flex: none;
   padding: 4px 10px;
   border: 1px solid var(--border);
@@ -386,6 +396,10 @@ input:focus-visible {
 }
 
 .icon-btn {
+  transition:
+    background 0.14s var(--ease),
+    color 0.14s var(--ease),
+    transform 0.12s var(--ease);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -401,6 +415,10 @@ input:focus-visible {
 .icon-btn:hover {
   background: var(--surface-hover);
   color: var(--text);
+}
+
+.icon-btn:active:not(:disabled) {
+  transform: scale(0.92);
 }
 
 .icon-btn:disabled {
@@ -440,6 +458,11 @@ input:focus-visible {
 .icon-btn.play .icon {
   width: 22px;
   height: 22px;
+  transition: transform 0.12s var(--ease);
+}
+
+.icon-btn.play:active:not(:disabled) .icon {
+  transform: scale(0.88);
 }
 
 .icon-btn.play .icon-pause,
@@ -459,6 +482,10 @@ input:focus-visible {
 }
 
 .mode-btn {
+  transition:
+    background 0.14s var(--ease),
+    color 0.14s var(--ease),
+    border-color 0.14s var(--ease);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -579,12 +606,20 @@ input:focus-visible {
 }
 
 .btn {
+  transition:
+    background 0.14s var(--ease),
+    border-color 0.14s var(--ease),
+    transform 0.12s var(--ease);
   padding: 8px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--panel);
   color: var(--text);
   font-size: 13.5px;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .btn:hover {
@@ -607,6 +642,10 @@ input:focus-visible {
 /* ---------- 右栏 ---------- */
 
 .queue {
+  overflow: hidden;
+  transition:
+    opacity 0.18s var(--ease),
+    border-color 0.24s var(--ease);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
@@ -636,6 +675,9 @@ input:focus-visible {
 }
 
 .queue-item {
+  transition:
+    background 0.14s var(--ease),
+    color 0.14s var(--ease);
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
@@ -716,6 +758,7 @@ input:focus-visible {
 /* ---------- 弹窗 ---------- */
 
 .modal {
+  animation: fade-in 0.16s ease;
   position: fixed;
   inset: 0;
   z-index: 20;
@@ -727,6 +770,7 @@ input:focus-visible {
 }
 
 .modal-card {
+  animation: card-in 0.2s var(--ease);
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   width: 520px;
@@ -895,5 +939,50 @@ input:focus-visible {
 
   .volume-row {
     margin-top: 20px;
+  }
+}
+
+/* ---------- 动效 ---------- */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes track-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.playing.is-switching .title-row,
+.playing.is-switching .track-authors {
+  animation: track-in 0.22s var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

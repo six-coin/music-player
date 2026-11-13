@@ -192,3 +192,29 @@ def test_unique_violation_is_reported(tmp_path, music_factory):
     report = api.run_integrity()
     section = next(item for item in report["sections"] if item["key"] == "tag_issue")
     assert "只能选一个" in section["items"][0]
+
+
+def test_delete_empty_authors_keeps_used_ones(tmp_path, music_factory):
+    api = make_api(tmp_path)
+    api.create_author("有作品")
+    api.create_author("空作者")
+    used = author_uid(api, "有作品")
+    api.library.upsert_music(music_factory("a", authors=[used]))
+    api.library.save()
+
+    state = api.delete_empty_authors()
+
+    assert [author.name for author in api.library.authors.values()] == ["有作品"]
+    assert "1" in state["message"]
+
+
+def test_delete_empty_authors_is_noop_when_all_used(tmp_path, music_factory):
+    api = make_api(tmp_path)
+    api.create_author("甲")
+    uid = author_uid(api, "甲")
+    api.library.upsert_music(music_factory("a", authors=[uid]))
+    api.library.save()
+
+    api.delete_empty_authors()
+
+    assert len(api.library.authors) == 1

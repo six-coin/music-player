@@ -24,6 +24,7 @@ DEFAULTS: dict[str, Any] = {
     "common": {
         "theme": "system",
         "language": "zh-CN",
+        "debug": False,
         "adaptation": {
             "window": 100,
             "min_plays": 10,
@@ -34,6 +35,9 @@ DEFAULTS: dict[str, Any] = {
     "import": {
         "dir": "",
         "clean_audio": True,
+    },
+    "audition": {
+        "volume": 0.05,
     },
     "simple": {
         "order": "shuffle",
@@ -88,6 +92,7 @@ def clamp(raw: dict[str, Any]) -> dict[str, Any]:
     common = data["common"]
     common["theme"] = _choice(common.get("theme"), THEMES, "system")
     common["language"] = _text(common.get("language"), "zh-CN") or "zh-CN"
+    common["debug"] = _bool(common.get("debug"), False)
     adaptation = Adaptation.from_dict(common.get("adaptation"))
     adaptation.normalize()
     common["adaptation"] = adaptation.to_dict()
@@ -95,6 +100,14 @@ def clamp(raw: dict[str, Any]) -> dict[str, Any]:
     import_section = data["import"]
     import_section["dir"] = _text(import_section.get("dir"))
     import_section["clean_audio"] = _bool(import_section.get("clean_audio"), True)
+
+    audition = data["audition"]
+    audition_volume = audition.get("volume")
+    audition["volume"] = (
+        min(1.0, max(0.0, float(audition_volume)))
+        if isinstance(audition_volume, (int, float))
+        else 0.05
+    )
 
     simple = data["simple"]
     simple["order"] = _choice(simple.get("order"), SIMPLE_ORDERS, "shuffle")
@@ -172,6 +185,15 @@ class SettingsStore:
             self.data = clamp(_merge(raw, {"player": merged}))
             atomic.write_json(self.path, self.data)
         return self.data
+
+    def debug_enabled(self) -> bool:
+        """跨进程实时读取调试开关：manager 可能刚改过，内存里的旧值不算数。"""
+        try:
+            raw = atomic.read_json(self.path)
+        except (ConfigError, OSError):
+            return False
+        common = raw.get("common") if isinstance(raw, dict) else None
+        return bool(common.get("debug")) if isinstance(common, dict) else False
 
     def get(self, *keys: str, default: Any = None) -> Any:
         node: Any = self.data
