@@ -4464,14 +4464,16 @@ function bindEvents() {
       await flushNameSave();
       const on = tag.dataset.on !== "1";
       const box = tag.closest("[data-tag-group-box]");
+      if (on && box && box.dataset.unique === "1") {
+        box.querySelectorAll(".chip-toggle.is-on").forEach(function (other) {
+          if (other !== tag) {
+            other.classList.remove("is-on");
+            other.dataset.on = "0";
+          }
+        });
+      }
       tag.dataset.on = on ? "1" : "0";
       tag.classList.toggle("is-on", on);
-      tag.classList.remove("is-popping");
-      void tag.offsetWidth;
-      tag.classList.add("is-popping");
-      window.setTimeout(function () {
-        tag.classList.remove("is-popping");
-      }, 240);
       syncTagGroup(box);
       syncSongTagFlags();
 

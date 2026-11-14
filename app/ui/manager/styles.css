@@ -1263,15 +1263,9 @@ input[type="checkbox"]:disabled {
   font-size: 12.5px;
   cursor: pointer;
   transition:
-    background 0.16s var(--ease),
-    border-color 0.16s var(--ease),
-    color 0.16s var(--ease),
-    box-shadow 0.16s var(--ease),
-    transform 0.12s var(--ease);
-}
-
-.chip-toggle:active {
-  transform: scale(0.95);
+    background 0.28s ease,
+    border-color 0.28s ease,
+    color 0.28s ease;
 }
 
 .chip-toggle:hover {
@@ -1283,22 +1277,6 @@ input[type="checkbox"]:disabled {
   border-color: var(--blue);
   background: var(--blue-soft);
   color: var(--blue-text);
-}
-
-@keyframes chip-pop {
-  0% {
-    transform: scale(0.94);
-  }
-  55% {
-    transform: scale(1.05);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-.chip-toggle.is-popping {
-  animation: chip-pop 0.22s var(--ease);
 }
 
 .tag-group {
