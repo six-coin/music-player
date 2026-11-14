@@ -13,10 +13,10 @@ import os
 import webview
 from loguru import logger
 
-from app import i18n, logging_setup, paths
+from app import bootstrap, i18n, logging_setup, paths
 from app.errors import ConfigError
 from app.system import theme as theme_tool
-from app.system.single_instance import SingleInstance
+from app.system.single_instance import SingleInstance, activate_window
 from app.ui.player.api import PlayerApi
 
 INSTANCE_NAME = "MusicPlayerPlayer"
@@ -39,20 +39,27 @@ def _fit(width: int, height: int) -> tuple[int, int]:
 
 
 def _alert(message: str) -> None:
-    if os.name == "nt":
-        ctypes.windll.user32.MessageBoxW(None, message, i18n.t("player.title"), 0x40)
-    else:  # pragma: no cover
-        print(message)
+    bootstrap.info(message, i18n.t("player.title"))
 
 
 def main() -> None:
+    warnings = bootstrap.prepare()
+    if bootstrap.is_first_run():
+        # 第一次运行还没有配置：先把管理器拉起来做初始设置。
+        bootstrap.launch_manager("player")
+        return
+
     log_file = logging_setup.setup("player")
     logger.info("播放器启动，日志：{}", log_file)
+    for warning in warnings:
+        logger.warning(warning)
 
     instance = SingleInstance(INSTANCE_NAME)
     if not instance.acquire():
+        bootstrap.sync_language()
         logger.info("已有实例在运行，退出本次启动")
-        _alert(i18n.t("player.already_running"))
+        if not activate_window(i18n.t("player.title")):
+            _alert(i18n.t("player.already_running"))
         return
 
     try:
@@ -65,7 +72,7 @@ def main() -> None:
         logger.warning(warning)
 
     width, height = _fit(*api.window_size())
-    resolved = theme_tool.resolve(str(api.settings.get("common", "theme", default="system")))
+    resolved = theme_tool.resolve(str(api.settings.get("common", "theme", default="light")))
     window = webview.create_window(
         i18n.t("player.title"),
         str(paths.UI_PLAYER_DIR / "index.html"),

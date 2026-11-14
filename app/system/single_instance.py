@@ -1,7 +1,9 @@
 """单实例守卫。
 
 用命名互斥量判断同一程序是否已经在运行。管理器用它避免两个进程同时写
-``library.json``；simple 用它拒绝第二次启动。非 Windows 平台一律放行。
+``library.json``；播放器与 simple 用它拒绝第二次启动。
+
+再点一次 ``manager.bat`` 时，把已经开着的窗口提到前面，而不是开第二个。
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ from ctypes import wintypes
 
 ERROR_ALREADY_EXISTS = 183
 SYNCHRONIZE = 0x00100000
+SW_RESTORE = 9
 
 if os.name == "nt":
     _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -21,8 +24,19 @@ if os.name == "nt":
     _kernel32.OpenMutexW.restype = wintypes.HANDLE
     _kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
     _kernel32.CloseHandle.restype = wintypes.BOOL
+
+    _user32 = ctypes.WinDLL("user32", use_last_error=True)
+    _user32.FindWindowW.argtypes = (wintypes.LPCWSTR, wintypes.LPCWSTR)
+    _user32.FindWindowW.restype = wintypes.HWND
+    _user32.ShowWindow.argtypes = (wintypes.HWND, ctypes.c_int)
+    _user32.ShowWindow.restype = wintypes.BOOL
+    _user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
+    _user32.SetForegroundWindow.restype = wintypes.BOOL
+    _user32.BringWindowToTop.argtypes = (wintypes.HWND,)
+    _user32.BringWindowToTop.restype = wintypes.BOOL
 else:  # pragma: no cover - 仅用于非 Windows 上跑单元测试
     _kernel32 = None
+    _user32 = None
 
 
 class SingleInstance:
@@ -59,4 +73,18 @@ def is_running(name: str) -> bool:
     if not handle:
         return False
     _kernel32.CloseHandle(handle)
+    return True
+
+
+def activate_window(title: str) -> bool:
+    """把标题匹配的窗口提到前面。找不到就返回 False，由调用方决定是否提示。"""
+    if _user32 is None:  # pragma: no cover
+        return False
+    handle = _user32.FindWindowW(None, title)
+    if not handle:
+        return False
+    # 最小化的窗口先还原，否则 SetForegroundWindow 只会让任务栏图标闪一下。
+    _user32.ShowWindow(handle, SW_RESTORE)
+    _user32.BringWindowToTop(handle)
+    _user32.SetForegroundWindow(handle)
     return True

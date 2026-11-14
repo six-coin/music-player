@@ -19,7 +19,6 @@ const state = {
   pickerIndex: 0,
   pickerTimer: null,
   pickerCloseTimer: null,
-  systemWatch: false,
   lastCurrent: null,
 };
 
@@ -107,14 +106,3 @@ function applyTheme(theme) {
   }
 }
 
-function watchSystemTheme() {
-  if (state.systemWatch || !window.matchMedia) return;
-  state.systemWatch = true;
-  const media = window.matchMedia("(prefers-color-scheme: dark)");
-  const handler = function (event) {
-    if (state.data && state.data.theme_source === "system") {
-      applyTheme(event.matches ? "dark" : "light");
-    }
-  };
-  if (media.addEventListener) media.addEventListener("change", handler);
-}

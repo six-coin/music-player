@@ -2,6 +2,8 @@
 
 入口只调用这里的 ``main()``。窗口尺寸按屏幕比例算，最小尺寸保证三栏布局
 不被挤坏；背景色与网页 ``--bg`` 一致，避免首帧闪白。
+
+关窗后如果用户点过「立即重启」，由这里在释放单实例锁之后拉起新进程。
 """
 
 from __future__ import annotations
@@ -12,10 +14,10 @@ import os
 import webview
 from loguru import logger
 
-from app import i18n, logging_setup, paths
+from app import bootstrap, i18n, logging_setup, paths
 from app.errors import ConfigError
 from app.system import theme as theme_tool
-from app.system.single_instance import SingleInstance
+from app.system.single_instance import SingleInstance, activate_window
 from app.ui.manager.api import ManagerApi
 
 INSTANCE_NAME = "MusicPlayerManager"
@@ -38,33 +40,48 @@ def _window_box() -> tuple[int, int, tuple[int, int]]:
 
 
 def _alert(message: str) -> None:
-    if os.name == "nt":
-        ctypes.windll.user32.MessageBoxW(None, message, i18n.t("manager.title"), 0x40)
-    else:  # pragma: no cover
-        print(message)
+    bootstrap.info(message, i18n.t("manager.title"))
 
 
 def main() -> None:
+    warnings = bootstrap.prepare()
     log_file = logging_setup.setup("manager")
     logger.info("管理器启动，日志：{}", log_file)
+    for warning in warnings:
+        logger.warning(warning)
 
     instance = SingleInstance(INSTANCE_NAME)
     if not instance.acquire():
+        bootstrap.sync_language()
         logger.info("已有实例在运行，退出本次启动")
-        _alert(i18n.t("manager.already_running"))
+        if not activate_window(i18n.t("manager.title")):
+            _alert(i18n.t("manager.already_running"))
         return
 
+    api: ManagerApi | None = None
     try:
-        api = ManagerApi()
+        api = _run()
+    finally:
+        instance.release()
+
+    if api is not None and api.restart_requested:
+        bootstrap.restart_manager()
+
+
+def _run() -> ManagerApi | None:
+    first_run = bootstrap.is_first_run()
+    redirected = bootstrap.redirected_from()
+    try:
+        api = ManagerApi(first_run=first_run, redirected_from=redirected)
     except ConfigError as error:
         logging_setup.fatal(str(error))
-        return
+        return None
 
     for warning in api.warnings:
         logger.warning(warning)
 
     width, height, min_size = _window_box()
-    resolved_theme = theme_tool.resolve(str(api.settings.get("common", "theme", default="system")))
+    resolved_theme = theme_tool.resolve(str(api.settings.get("common", "theme", default="light")))
 
     window = webview.create_window(
         i18n.t("manager.title"),
@@ -81,3 +98,4 @@ def main() -> None:
 
     logger.info("窗口已创建：{}×{}", width, height)
     webview.start()
+    return api

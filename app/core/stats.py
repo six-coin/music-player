@@ -80,7 +80,7 @@ class StatsStore:
 
     def record(self, playlist_uid: str, md5: str, skipped: bool, window: int) -> None:
         """一次播放结束调用一次；窗口与锁都在这里收口。"""
-        lock_path = self.path_for(playlist_uid).with_suffix(".lock")
+        lock_path = paths.lock_for(self.path_for(playlist_uid))
         with exclusive(lock_path):
             songs = self.load(playlist_uid)
             entry = songs.setdefault(md5, SongStats())
@@ -89,7 +89,7 @@ class StatsStore:
             self.save(playlist_uid, songs)
 
     def mark_auto_skipped(self, playlist_uid: str, md5: str) -> None:
-        lock_path = self.path_for(playlist_uid).with_suffix(".lock")
+        lock_path = paths.lock_for(self.path_for(playlist_uid))
         with exclusive(lock_path):
             songs = self.load(playlist_uid)
             entry = songs.setdefault(md5, SongStats())
@@ -98,7 +98,7 @@ class StatsStore:
             self.save(playlist_uid, songs)
 
     def reset(self, playlist_uid: str) -> None:
-        lock_path = self.path_for(playlist_uid).with_suffix(".lock")
+        lock_path = paths.lock_for(self.path_for(playlist_uid))
         with exclusive(lock_path):
             self.save(playlist_uid, {})
 
@@ -110,7 +110,7 @@ class StatsStore:
         锁文件是空的，留着不占地方。
         """
         path = self.path_for(playlist_uid)
-        lock_path = path.with_suffix(".lock")
+        lock_path = paths.lock_for(path)
         with exclusive(lock_path):
             try:
                 path.unlink(missing_ok=True)
@@ -125,7 +125,7 @@ class StatsStore:
             return 0
         removed = 0
         for file in self.directory.glob("*.json"):
-            lock_path = file.with_suffix(".lock")
+            lock_path = paths.lock_for(file)
             with exclusive(lock_path):
                 try:
                     file.unlink()
@@ -138,7 +138,7 @@ class StatsStore:
         """换源时把统计从旧标识搬到新标识；新键已存在就按先后合并。"""
         if not self.path_for(playlist_uid).exists():
             return False
-        lock_path = self.path_for(playlist_uid).with_suffix(".lock")
+        lock_path = paths.lock_for(self.path_for(playlist_uid))
         with exclusive(lock_path):
             songs = self.load(playlist_uid)
             moved = songs.pop(old_md5, None)
@@ -161,7 +161,7 @@ class StatsStore:
         """删歌时把它的统计一并移除。"""
         if not self.path_for(playlist_uid).exists():
             return False
-        lock_path = self.path_for(playlist_uid).with_suffix(".lock")
+        lock_path = paths.lock_for(self.path_for(playlist_uid))
         with exclusive(lock_path):
             songs = self.load(playlist_uid)
             if md5 not in songs:
@@ -172,7 +172,7 @@ class StatsStore:
 
     def prune(self, playlist_uid: str, valid_md5s: set[str]) -> int:
         """删掉库里已经不存在的歌，返回清理条数。"""
-        lock_path = self.path_for(playlist_uid).with_suffix(".lock")
+        lock_path = paths.lock_for(self.path_for(playlist_uid))
         with exclusive(lock_path):
             songs = self.load(playlist_uid)
             stale = [md5 for md5 in songs if md5 not in valid_md5s]

@@ -115,10 +115,10 @@ def test_available_languages_use_native_names():
     languages = dict(i18n.available_languages())
 
     assert languages["zh-CN"] == "简体中文 (中国)"
-    assert languages["en-US"] == "English (United States)"
+    assert languages["en-US"] == "English (US)"
 
 
-def test_unknown_language_keeps_the_current_one():
+def test_unknown_language_falls_back_to_english():
     i18n.set_language("zh-CN")
 
-    assert i18n.set_language("xx-XX") == "zh-CN"
+    assert i18n.set_language("xx-XX") == "en-US"

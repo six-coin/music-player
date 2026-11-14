@@ -39,7 +39,6 @@ function settingsGeneral() {
   );
 
   const themes = [
-    ["system", T("settings.theme_system")],
     ["light", T("settings.theme_light")],
     ["dark", T("settings.theme_dark")],
   ];
@@ -292,6 +291,45 @@ function settingsMaintenance() {
   );
 }
 
+function settingsAbout() {
+  const data = state.data || {};
+  const pending = Boolean(data.data_dir_next && data.data_dir_next !== data.data_dir);
+
+  return settingsCard(
+    T("about.title"),
+    settingsRow(
+      T("about.version"),
+      "",
+      '<span class="path-text">' + esc(data.version || "") + "</span>"
+    ) +
+      settingsRow(
+        T("about.data_dir"),
+        pending
+          ? T("about.data_dir_pending", { path: data.data_dir_next })
+          : T("about.data_dir_hint"),
+        '<span class="path-text">' + esc(data.data_dir || "") + "</span>" +
+          '<button class="btn ghost small" data-action="about_data_dir">' +
+          esc(T("about.data_dir_change")) + "</button>" +
+          (pending
+            ? '<button class="btn primary small" data-action="about_restart">' +
+              esc(T("about.restart")) + "</button>"
+            : "")
+      ) +
+      settingsRow(
+        T("about.readme"),
+        T("about.readme_hint"),
+        '<button class="btn ghost small" data-action="about_readme">' +
+          esc(T("about.readme")) + "</button>"
+      ) +
+      settingsRow(
+        T("about.reset"),
+        T("about.reset_hint"),
+        '<button class="btn danger-ghost small" data-action="about_reset">' +
+          esc(T("about.reset")) + "</button>"
+      )
+  );
+}
+
 function renderSettings(animate) {
   qsa(".settings-tab").forEach(function (tab) {
     tab.classList.toggle("is-active", tab.dataset.settings === state.settingsTab);
@@ -302,6 +340,7 @@ function renderSettings(animate) {
   else if (state.settingsTab === "simple") body.innerHTML = settingsSimple();
   else if (state.settingsTab === "player") body.innerHTML = settingsPlayer();
   else if (state.settingsTab === "maintenance") body.innerHTML = settingsMaintenance();
+  else if (state.settingsTab === "about") body.innerHTML = settingsAbout();
   else body.innerHTML = settingsGeneral();
 
   if (animate) {
@@ -397,4 +436,55 @@ function confirmClearStats() {
       },
     ],
   });
+}
+
+/* ---------- 关于 ---------- */
+
+function openAboutReadme() {
+  call("get_readme").then(function (data) {
+    const body =
+      data && data.markdown
+        ? renderMarkdown(data.markdown)
+        : '<p class="modal-note">' + esc(T("about.readme_missing")) + "</p>";
+    openModal({
+      title: T("about.readme_title"),
+      body: body,
+      wide: true,
+      actions: [{ label: T("action.close"), primary: true, onClick: closeModal }],
+    });
+  });
+}
+
+function confirmResetSettings() {
+  openModal({
+    title: T("about.reset"),
+    body: '<p class="modal-note">' + esc(T("about.reset_confirm")) + "</p>",
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("about.reset"),
+        danger: true,
+        onClick: async function () {
+          const data = await call("reset_settings");
+          closeModal();
+          if (!data) return;
+          await loadStrings();
+          applyStrings();
+          apply(data);
+          renderSettings();
+          toast(data.message || T("about.reset_done"));
+        },
+      },
+    ],
+  });
+}
+
+async function changeDataDir() {
+  const picked = await call("browse_folder");
+  if (!picked || !picked.path) return;
+  const data = await call("set_data_dir", picked.path);
+  if (data) {
+    apply(data);
+    renderSettings();
+  }
 }

@@ -13,7 +13,8 @@
 | 文件不存在 | 自动生成一份可用内容（统计文件除外，它按需创建） |
 | 结构损坏 | `library.json` / `playlists.json` 抛 `ConfigError`，弹窗给日志路径后退出；`settings.json` 与统计文件降级继续 |
 | 未知键 | 原样保留，保存时不丢 |
-| 位置 | 全部由 `app/paths.py` 推导，基准是程序目录，与当前工作目录无关 |
+| 位置 | 全部由 `app/paths.py` 推导。数据目录默认 `%PROGRAMDATA%\six-coin\music-player`，可在设置里改，**重启后生效**；相对路径以数据目录为基准 |
+| 锁 | 放在 `%LOCALAPPDATA%\six-coin\music-player\locks\`，不跟数据混在一起 |
 
 三个程序对同一份文件的权限：
 
@@ -27,13 +28,13 @@
 
 跨进程写入一律「取锁 → 重新读盘 → 改 → 原子替换」，不信任内存里的旧值。
 
-## 1. `config/settings.json`
+## 1. `<数据目录>/settings.json`
 
 ```json
 {
     "version": 1,
     "common": {
-        "theme": "system",
+        "theme": "light",
         "language": "zh-CN",
         "debug": false,
         "adaptation": {
@@ -69,8 +70,8 @@
 
 | 字段 | 类型 | 默认 | 取值与行为 |
 |---|---|---|---|
-| `theme` | str | `system` | `system` / `light` / `dark`；其它值回退 `system`。`system` 读 Windows 的「应用模式」 |
-| `language` | str | `zh-CN` | 语言代码，必须存在同名语言包；不存在的语言不会生效，保留当前语言 |
+| `theme` | str | 系统主题 | `light` / `dark`，没有 `system`；首次启动读一次系统偏好，旧值 `system` 在读取时定成当时的浅色/深色，其它值回退 `light` |
+| `language` | str | 系统语言 | 语言代码，必须存在同名语言包；没有匹配或无法识别时回退 `en-US` |
 | `debug` | bool | `false` | 非布尔回退 `false`。为真时 player 与 simple 既不判定也不记录自适应 |
 | `adaptation.window` | int | `100` | 10–1000，越界夹取；决定每首歌保留多少条记录 |
 | `adaptation.min_plays` | int | `10` | 0–`window`，越界夹取；记录数不超过它时永不跳过 |
@@ -123,7 +124,7 @@
 | 布尔字段不是布尔 | 回退默认值 |
 | 未知键 | 原样保留 |
 
-## 2. `config/library.json`
+## 2. `<数据目录>/library.json`
 
 ```json
 {
@@ -196,9 +197,9 @@
 | `created_at` | int | `0` | 导入时间（秒） |
 | `updated_at` | int | `0` | 最近一次字段变更（秒）；概览「最近编辑」用它 |
 
-**路径不存进数据。** 文件位置恒为 `assets/music/{md5}.{ext}`。
+**路径不存进数据。** 文件位置恒为 `<数据目录>/music/{md5}.{ext}`。
 
-## 3. `config/playlists.json`
+## 3. `<数据目录>/playlists.json`
 
 ```json
 {
@@ -281,7 +282,7 @@
 
 **至少一条条件。** 删掉最后一条时 `normalize()` 会补回「包含 · 全部歌曲」，否则保存出去的文件通不过校验，下次加载会把整条歌单当成坏记录丢掉。
 
-## 4. `config/stats/<歌单标识>.json`
+## 4. `<数据目录>/stats/<歌单标识>.json`
 
 ```json
 {
@@ -310,7 +311,7 @@
 - 歌单关闭自适应时**一个字节都不写**。
 - 换源时键从旧 md5 搬到新 md5；新键已存在则按时间先后合并后截断。
 
-## 5. `config/player.json`
+## 5. `<数据目录>/player.json`
 
 ```json
 {
@@ -352,13 +353,13 @@
 | 缺键回退 | 当前语言 → `zh-CN` → 键名本身，绝不抛异常 |
 | 一致性 | 两份包的键集合与每个键的占位符集合必须完全相等（由 `tests/test_i18n.py` 守卫） |
 
-新增一种语言：把 `{代码}.json` 放进目录即可，设置页的语言选项由目录扫描得出，不需要改代码。
+新增一种语言：把 `{代码}.json` 放进目录即可，设置页的语言选项由目录扫描得出，**按文件名排序、不对中文特判**，不需要改代码。缺键回退 `en-US`。
 
 ## 8. 日志
 
 | 项 | 规定 |
 |---|---|
-| 位置 | `logs/` |
+| 位置 | `%LOCALAPPDATA%\six-coin\music-player\logs\` |
 | 文件名 | `{manager\|player\|simple}_{YYYY-MM-DD_HH-MM-SS}.log`，每次启动一个 |
 | 轮转 | 单文件 5 MB |
 | 保留 | 14 天 |
@@ -373,7 +374,7 @@
 
 | 目录 | 内容 | 删了会怎样 |
 |---|---|---|
-| `assets/music/` | 入库音频，文件名 `{md5}.{ext}` | 对应歌曲变成「文件缺失」，库记录还在 |
+| `<数据目录>/music/` | 入库音频，文件名 `{md5}.{ext}` | 对应歌曲变成「文件缺失」，库记录还在 |
 | `assets/temp/` | 清洗中间产物，导入结束即删 | 无影响；残留文件可以手动删 |
 
 `assets/` 不进版本库，也不参与完整性检查的「孤儿文件」以外的判断。孤儿文件指「文件在、库里没有记录」，修复时会送进回收站。

@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
+import os
 import random
+import tempfile
 from pathlib import Path
 
-import pytest
+# 在导入 app 之前把系统目录指到临时位置：paths 在导入时就会读环境变量。
+_ROOT = Path(tempfile.mkdtemp(prefix="musicplayer-tests-"))
+os.environ.setdefault("SIXCOIN_DATA_DIR", str(_ROOT / "data"))
+os.environ.setdefault("SIXCOIN_LOCAL_DIR", str(_ROOT / "local"))
+os.environ.setdefault("SIXCOIN_TEMP_DIR", str(_ROOT / "temp"))
 
-from app import i18n, paths
-from app.cli.simple import Deps, Session
-from app.core.adaptation import Params
-from app.core.library import Library
-from app.core.stats import StatsStore
-from app.models import Adaptation, Music, Playlist
+import pytest  # noqa: E402
+
+from app import i18n, paths  # noqa: E402
+from app.cli.simple import Deps, Session  # noqa: E402
+from app.core.adaptation import Params  # noqa: E402
+from app.core.library import Library  # noqa: E402
+from app.core.stats import StatsStore  # noqa: E402
+from app.models import Adaptation, Music, Playlist  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +28,13 @@ def fixed_language():
     i18n.set_language("zh-CN")
     yield
     i18n.set_language("zh-CN")
+
+
+@pytest.fixture(autouse=True)
+def fixed_defaults(monkeypatch):
+    """默认语言与默认外观固定下来：首次启动的判定不能跟着开发机走。"""
+    monkeypatch.setattr(i18n, "system_language", lambda: "zh-CN")
+    monkeypatch.setattr("app.system.theme.system_theme", lambda: "light")
 
 
 @pytest.fixture(autouse=True)

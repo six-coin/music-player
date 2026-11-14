@@ -11,12 +11,14 @@ import time
 from pathlib import Path
 from typing import Any
 
+from app import i18n, paths
 from app.errors import ConfigError
 from app.models import Adaptation
 from app.system import atomic
+from app.system import theme as theme_tool
 from app.system.filelock import exclusive
 
-THEMES = ("system", "light", "dark")
+THEMES = ("light", "dark")
 SIMPLE_ORDERS = ("shuffle", "list_loop")
 PLAYER_ORDERS = ("shuffle", "list_loop", "repeat_one")
 
@@ -58,7 +60,15 @@ DEFAULTS: dict[str, Any] = {
 
 
 def defaults() -> dict[str, Any]:
-    return copy.deepcopy(DEFAULTS)
+    """出厂默认值。
+
+    语言与外观不是写死的常量：第一次启动按系统语言与系统主题定一次，之后
+    以配置文件里的值为准。
+    """
+    data = copy.deepcopy(DEFAULTS)
+    data["common"]["theme"] = theme_tool.system_theme()
+    data["common"]["language"] = i18n.initial_language()
+    return data
 
 
 def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -107,8 +117,11 @@ def clamp(raw: dict[str, Any]) -> dict[str, Any]:
     data = _merge(DEFAULTS, raw if isinstance(raw, dict) else {})
 
     common = _section(data, "common")
-    common["theme"] = _choice(common.get("theme"), THEMES, "system")
-    common["language"] = _text(common.get("language"), "zh-CN") or "zh-CN"
+    # 旧配置里的 system 在这里定成当时的浅色/深色，之后不再随系统变化。
+    common["theme"] = theme_tool.resolve(common.get("theme"))
+    common["language"] = _choice(
+        common.get("language"), tuple(i18n.available()), i18n.initial_language()
+    )
     common["debug"] = _bool(common.get("debug"), False)
     adaptation = Adaptation.from_dict(common.get("adaptation"))
     adaptation.normalize()
@@ -155,7 +168,7 @@ class SettingsStore:
         self._debug_cache: tuple[float, bool] | None = None
 
     def _lock_path(self) -> Path:
-        return self.path.with_suffix(".lock")
+        return paths.lock_for(self.path)
 
     def _read_disk(self) -> dict[str, Any]:
         """锁内重读用；读不出来就按默认值，绝不抛异常。"""
@@ -186,6 +199,14 @@ class SettingsStore:
 
     def save(self) -> None:
         atomic.write_json(self.path, self.data)
+
+    def reset(self) -> dict[str, Any]:
+        """恢复出厂设置并落盘。语言与外观一起重置。"""
+        with exclusive(self._lock_path()):
+            self.data = defaults()
+            atomic.write_json(self.path, self.data)
+        self._debug_cache = None
+        return self.data
 
     def update(self, patch: dict[str, Any]) -> dict[str, Any]:
         """锁内先读盘再合并：另一个进程刚写的字段不该被内存里的旧值盖掉。"""

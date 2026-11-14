@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -15,7 +16,8 @@ from typing import Any
 import webview
 from loguru import logger
 
-from app import __version__, i18n, paths
+from app import i18n, paths
+from app import version as version_module
 from app.core import integrity, source
 from app.core.adaptation import Params, effective, params_from_dict, skip_probability, skip_rate
 from app.core.importer import commit_import, prepare_import
@@ -57,9 +59,17 @@ def _params_dict(params: Params) -> dict[str, Any]:
 
 
 class ManagerApi:
-    def __init__(self, config_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        config_dir: Path | None = None,
+        first_run: bool = False,
+        redirected_from: str = "",
+    ) -> None:
         base = config_dir or paths.CONFIG_DIR
         self.base = base
+        # 必须在 settings.load() 之前判断：它会把默认设置写到磁盘。
+        self.first_run = first_run
+        self.redirected_from = redirected_from
         self.library = Library(base / "library.json")
         self.playlists = PlaylistStore(base / "playlists.json")
         self.settings = SettingsStore(base / "settings.json")
@@ -78,7 +88,7 @@ class ManagerApi:
 
     def _load(self) -> None:
         self.warnings.extend(self.settings.load())
-        language = self.settings.get("common", "language", default=i18n.DEFAULT_LANGUAGE)
+        language = self.settings.get("common", "language", default=i18n.FALLBACK_LANGUAGE)
         i18n.set_language(str(language))
         self.warnings.extend(self.library.load())
         self.warnings.extend(self.playlists.load())
@@ -163,9 +173,12 @@ class ManagerApi:
             "languages": [
                 {"code": code, "name": name} for code, name in i18n.available_languages()
             ],
-            "theme": theme_tool.resolve(
-                str(self.settings.get("common", "theme", default="system"))
-            ),
+            "theme": theme_tool.resolve(str(self.settings.get("common", "theme", default="light"))),
+            "version": version_module.version(),
+            "first_run": self.first_run,
+            "redirected_from": self.redirected_from,
+            "data_dir": str(self.base),
+            "data_dir_next": str(paths.read_data_dir()),
             "library": self._library_payload(missing, tag_issues),
             "playlists": self._playlist_payload(),
             "settings": self.settings.data,
@@ -1394,7 +1407,7 @@ class ManagerApi:
 
     def _sync_language(self) -> None:
         """设置里的语言变了就立刻生效：文案、窗口标题一起换。"""
-        language = str(self.settings.get("common", "language", default=i18n.DEFAULT_LANGUAGE))
+        language = str(self.settings.get("common", "language", default=i18n.FALLBACK_LANGUAGE))
         if language == i18n.current():
             return
         if i18n.set_language(language) == language:
@@ -1413,6 +1426,64 @@ class ManagerApi:
             if theme in THEMES:
                 self.settings.update({"common": {"theme": theme}})
             return self._snapshot()
+
+    # ---------- 关于 ----------
+
+    def complete_first_run(self, language: str) -> dict[str, Any]:
+        """首次启动选完语言：语言落盘，外观按系统偏好定一次。"""
+        with self._lock:
+            self.settings.update({"common": {"language": i18n.set_language(str(language))}})
+            self.settings.update({"common": {"theme": theme_tool.system_theme()}})
+            i18n.set_language(str(language))
+            self.first_run = False
+            self._retitle()
+            return self._snapshot()
+
+    def get_readme(self) -> dict[str, Any]:
+        """当前语言的使用手册；没有这一份就退回英文。"""
+        language = i18n.current()
+        path = paths.PROGRAM_DIR / "docs" / "readme" / f"{language}.md"
+        if not path.is_file():
+            language = i18n.FALLBACK_LANGUAGE
+            path = paths.PROGRAM_DIR / "docs" / "readme" / f"{language}.md"
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            text = ""
+        return {"language": language, "markdown": text}
+
+    def reset_settings(self) -> dict[str, Any]:
+        """恢复出厂设置。语言与外观一起重置，界面随后整体重绘。"""
+        with self._lock:
+            self.settings.reset()
+            i18n.set_language(
+                str(self.settings.get("common", "language", default=i18n.FALLBACK_LANGUAGE))
+            )
+            self._retitle()
+            snapshot = self._snapshot()
+            snapshot["message"] = i18n.t("about.reset_done")
+            return snapshot
+
+    def set_data_dir(self, raw: str) -> dict[str, Any]:
+        """改数据目录：写指针，下次启动生效。设置文件复制一份过去。"""
+        with self._lock:
+            target = paths.resolve_user_path(str(raw))
+            if target == paths.DATA_DIR:
+                return self._snapshot()
+            try:
+                target.mkdir(parents=True, exist_ok=True)
+                destination = target / paths.SETTINGS_PATH.name
+                if not destination.exists() and paths.SETTINGS_PATH.exists():
+                    shutil.copy2(paths.SETTINGS_PATH, destination)
+                paths.write_data_dir(target)
+            except OSError as error:
+                snapshot = self._snapshot()
+                snapshot["ok"] = False
+                snapshot["message"] = i18n.t("about.data_dir_failed", error=error)
+                return snapshot
+            snapshot = self._snapshot()
+            snapshot["message"] = i18n.t("about.restart_hint")
+            return snapshot
 
     def browse_folder(self) -> dict[str, Any]:
         if self._window is None:
@@ -1452,5 +1523,5 @@ class ManagerApi:
             "log_dir": str(paths.LOG_DIR),
             "assets_dir": str(paths.ASSETS_DIR),
             "program_dir": str(paths.PROGRAM_DIR),
-            "version": __version__,
+            "version": version_module.version(),
         }

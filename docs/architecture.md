@@ -41,6 +41,8 @@ Music Player/
 │  │  ├─ queue.py                           一轮的播放顺序（洗牌与接缝）
 │  │  ├─ player_session.py                  player 的状态机：当前曲、轮次、pin、命令
 │  │  └─ naming.py                          文件名清洗与「歌名 - 作者」解析
+│  ├─ version.py                           从 pyproject.toml 读版本
+│  ├─ bootstrap.py                         迁移、首次运行、重启、提示框
 │  ├─ system/
 │  │  ├─ atomic.py                          JSON 原子读写
 │  │  ├─ filelock.py                        跨进程文件锁
@@ -55,11 +57,11 @@ Music Player/
 │  ├─ ui/manager/                           api.py（JS 桥）+ app.py（窗口）+ index.html + styles.css + js/
 │  ├─ ui/player/                            同上，多一个 player.json 的读写
 │  └─ locales/                              zh-CN.json / en-US.json
-├─ assets/music/{md5}.{ext}                 入库音频，文件名即身份
-├─ config/                                  运行期数据（不进版本库）
-├─ logs/                                    运行期日志（不进版本库）
+├─ assets/                                  随程序分发的示例音频
 └─ tests/                                   test_*.py
 ```
+
+运行期文件不在仓库里：数据目录、本地目录、临时目录都由 `paths.py` 指向系统位置，见 2.5。
 
 界面没有构建步骤。两个页面各拆成多个普通 `<script>`，共享全局作用域，加载顺序写在 `index.html` 里：
 
@@ -73,6 +75,22 @@ Music Player/
 | | `actions-*.js` | 用户动作：编辑、删除、换源、批量、试听 |
 | | `events-*.js` | 四组事件绑定，`main.js` 里的 `bindEvents()` 汇总 |
 | `ui/player/js` | `core.js` / `render.js` / `playback.js` / `picker.js` / `events.js` / `main.js` | 基础设施、渲染、播放执行、选歌弹窗、事件、启动 |
+
+## 2.5 路径、版本与首次运行
+
+| 位置 | 内容 | 默认 |
+|---|---|---|
+| 程序目录 | 代码与示例音频 | 仓库根目录 |
+| 数据目录 | 音乐库、歌单、统计、设置、播放器状态、`music/` | `%PROGRAMDATA%\six-coin\music-player` |
+| 本地目录 | `logs/`、`locks/`、`data-dir.txt` | `%LOCALAPPDATA%\six-coin\music-player` |
+| 临时目录 | 清洗音频、换源的中间文件 | `%TEMP%\six-coin\music-player` |
+
+- 数据目录可改：设置页写 `data-dir.txt`，**重启后生效**；`paths.resolve_user_path()` 的相对路径以数据目录为基准。
+- 旧版本留在程序目录里的 `config/`、`assets/music/`、`logs/` 由 `paths.migrate_legacy()` 在启动最前面搬走（`assets/temp/` 直接删）。
+- 统计与设置的锁文件放本地目录（`paths.lock_for()`），不跟数据混在一起。
+- 版本号只有 `pyproject.toml` 一处，`app/version.py` 读它。
+- 首次运行：`bootstrap.is_first_run()` 看数据目录里有没有 `settings.json`；player / simple 首次启动会拉起管理器（带 `--redirected-from`），管理器依次弹语言、使用说明，最后解释「你打开的不是这个程序」。
+- 三个入口各持一个 `Local\MusicPlayer*` 互斥量；重启按钮走「释放锁 → 拉新进程」。
 
 ## 3. 分层与依赖方向
 
@@ -101,11 +119,11 @@ manager.pyw   player.pyw   simple.py          入口
 
 | 文件 | 内容 | 谁写 |
 |---|---|---|
-| `config/library.json` | 作者、标签组、歌曲（实体） | manager |
-| `config/playlists.json` | 歌单（引用）与默认歌单 | manager |
-| `config/stats/<uid>.json` | 每个歌单的自适应记录 | manager、player、simple |
-| `config/settings.json` | 设置，四个分节 | manager 写全部，player 只写 `player` 节 |
-| `config/player.json` | 窗口尺寸、队列开合 | player |
+| `<数据目录>/library.json` | 作者、标签组、歌曲（实体） | manager |
+| `<数据目录>/playlists.json` | 歌单（引用）与默认歌单 | manager |
+| `<数据目录>/stats/<uid>.json` | 每个歌单的自适应记录 | manager、player、simple |
+| `<数据目录>/settings.json` | 设置，四个分节 | manager 写全部，player 只写 `player` 节 |
+| `<数据目录>/player.json` | 窗口尺寸、队列开合 | player |
 
 **为什么必须分开存：**
 
@@ -114,7 +132,7 @@ manager.pyw   player.pyw   simple.py          入口
 3. **设置单独一份**：三端都读，谁都不该为了读一个音量值去解析整个音乐库。
 4. **`player.json` 独立**：窗口尺寸是 player 私有的界面状态，不该进三端共享的 `settings.json`。
 
-**路径不存进数据。** 文件位置恒为 `assets/music/{md5}.{ext}`，由 `paths.music_path()` 推导。这样移动程序目录、改盘符都不会让记录失效。
+**路径不存进数据。** 文件位置恒为 `<数据目录>/music/{md5}.{ext}`，由 `paths.music_path()` 推导。这样移动程序目录、改盘符都不会让记录失效。
 
 **歌曲身份是内容的 MD5**，不是文件名。清洗开启时算的是清洗产物的 MD5，所以同一首歌的不同标签版本会得到同一个身份。
 
@@ -147,7 +165,7 @@ manager.pyw   player.pyw   simple.py          入口
 ```
 选文件 → 校验后缀 → [清洗] → 算 MD5 → 读时长      ← 准备（锁外，秒级）
                     ↓
-            落盘 assets/music → 写内存库 → 存盘     ← 提交（锁内，毫秒级）
+            落盘 <数据目录>/music → 写内存库 → 存盘   ← 提交（锁内，毫秒级）
 ```
 
 分两段是为了并发：管理器用一个后台线程导入，界面线程同时还要出快照。准备阶段不持锁，提交阶段持锁——既不长时间挡住界面，也不会让别的线程撞上「字典在迭代时被改变」。`importer.prepare_import()` / `commit_import()` 是两个入口，`import_file()` 把两者串起来给测试与单文件场景用。
@@ -349,7 +367,7 @@ uv run ruff format --check .
 |---|---|---|
 | 3.1 选型 | 播放器也用 pywebview，不用 Qt | 与管理器共用同一套 HTML/CSS 与设计令牌，改样式刷新即可见；播放器没有需要原生窗口的场景，引入 Qt 等于多一套界面技术栈和 150 MB 依赖 |
 | 3.2 窗口尺寸 | 播放器固定 960×620、最小 760×480，不按屏幕 85% | 播放器是常驻小窗，铺满屏幕反而难用；尺寸记在 `player.json` 里 |
-| 1.6 目录 | 多一个 `config/player.json` | 窗口尺寸与队列开合是 player 私有的界面状态，不该进三端共享的 `settings.json` |
+| 1.6 目录 | 多一个 `<数据目录>/player.json` | 窗口尺寸与队列开合是 player 私有的界面状态，不该进三端共享的 `settings.json` |
 | 3.x 界面 | 轻量音乐播放器没有 `ui/`，界面由 `cli/` 承担 | 命令行没有 DOM，按「输入 / 渲染 / 编排」切分更合适；启动速度是这类工具的核心体验 |
 | 2.10 本地化 | 轻量音乐播放器的控制台输出不走 i18n，固定中文 | 输出只给本机用户看，切换语言没有意义；它的文案不进语言包 |
 | 3.10 键盘 | 不做硬件媒体键与全局热键 | 只服务单机听歌，窗口内按键够用，也避免抢别的程序的键 |

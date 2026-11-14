@@ -15,7 +15,7 @@ def test_first_load_creates_file_with_defaults(tmp_path):
 
     assert warnings == []
     assert path.exists()
-    assert store.data["common"]["theme"] == "system"
+    assert store.data["common"]["theme"] == "light"
     assert store.data["simple"]["order"] == "shuffle"
     assert store.data["simple"]["volume"] == 0.2
     assert store.data["player"]["volume"] == 0.2
@@ -33,7 +33,7 @@ def test_values_are_clamped(tmp_path):
         }
     )
 
-    assert store.data["common"]["theme"] == "system"
+    assert store.data["common"]["theme"] == "light"
     assert store.data["common"]["adaptation"]["window"] == 10
     assert store.data["common"]["adaptation"]["min_plays"] == 10
     assert store.data["common"]["adaptation"]["base"] == 0.99
@@ -63,14 +63,14 @@ def test_broken_json_falls_back_to_defaults(tmp_path):
     warnings = store.load()
 
     assert warnings
-    assert store.data["common"]["theme"] == "system"
+    assert store.data["common"]["theme"] == "light"
 
 
 def test_get_supports_default(tmp_path):
     store = SettingsStore(tmp_path / "settings.json")
     store.load()
 
-    assert store.get("common", "theme") == "system"
+    assert store.get("common", "theme") == "light"
     assert store.get("common", "missing", default="fallback") == "fallback"
 
 
@@ -131,7 +131,7 @@ def test_broken_section_is_replaced_by_defaults(tmp_path):
     warnings = store.load()
 
     assert warnings == []
-    assert store.data["common"]["theme"] == "system"
+    assert store.data["common"]["theme"] == "light"
     assert store.data["player"]["volume"] == 0.2
     assert store.data["simple"]["order"] == "shuffle"
 

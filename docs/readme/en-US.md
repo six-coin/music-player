@@ -23,7 +23,7 @@ Double-click `setup.bat`. It checks for uv, creates the virtual environment and 
 | VLC | Simple Player only | Install the 64-bit build; the app finds it on its own |
 | FFmpeg | Optional | Cleans audio on import and reads durations; playback works without it |
 
-Moving to another machine: copy the whole folder and run `setup.bat` there once. Copy `config/` and `assets/` along with it and your library and playlists come with you.
+Moving to another machine: copy the program folder and run `setup.bat` there once. Copy `%PROGRAMDATA%\six-coin\music-player` to the same place and your library, playlists and audio come with you.
 
 ## 2. Starting
 
@@ -35,6 +35,8 @@ Moving to another machine: copy the whole folder and run `setup.bat` there once.
 | `setup.bat` | Installs or updates the runtime |
 
 Each program allows a single instance. Double-clicking again while one is open shows "already running" and exits; no second window appears.
+
+On the **first run**, whichever entry point you double-click opens the manager instead: pick the interface language (the Windows UI language by default, English when there is no matching locale), then read the manual. If you started `player.bat` or `simple.bat`, one extra note explains that the manager is what just opened. Close it and start your original entry point again when you are done.
 
 Closing the window quits. Next time the manager opens on the overview, and the player returns to the last playlist and position, paused.
 
@@ -307,15 +309,20 @@ Five pages; changes apply immediately and there is no Save button.
 
 | Page | Contents |
 |---|---|
-| General | Theme (follow system / light / dark), language (简体中文 / English), adaptive defaults, preview volume, data and log folders |
+| General | Theme (light / dark only, no follow-system option), language (sorted by language code), adaptive defaults, preview volume, data and log folders |
 | Simple player | Play mode, default volume, default playlist (read-only, with a link) |
 | Player | Default volume, play mode, remember position |
 | Import | Default import folder, clean audio on import, FFmpeg and ffprobe status |
 | Maintenance | Debug mode, integrity check (quick / deep), clean orphan files, clear all statistics, open data and log folders |
+| About | Version, data folder (changeable; restart to apply, with a "Restart now" button), user manual, reset all settings |
 
 Switching the language takes effect immediately: labels and the window title change together. The Music Player and Simple Player read the language at startup, so restart them to follow a change.
 
+"Reset all settings" also restores language and appearance; the library, playlists and statistics are untouched. Changing the data folder only copies `settings.json` to the new folder; audio and statistics are not moved.
+
 ## 14. Files and folders
+
+The program folder holds code and the sample audio shipped with it; runtime files live in system folders.
 
 ```
 Music Player\
@@ -328,23 +335,29 @@ Music Player\
 │  ├─ ui\manager\                            manager UI
 │  ├─ ui\player\                             player UI
 │  └─ locales\                               language packs
-├─ assets\
-│  ├─ music\                                 imported audio, file name is the MD5
-│  └─ temp\                                  intermediate cleaning output
-├─ config\                                   runtime data
-│  ├─ settings.json                          settings
-│  ├─ library.json                           artists, tag groups, songs
-│  ├─ playlists.json                         playlists and the default one
-│  ├─ player.json                            window size, queue visibility
-│  └─ stats\<playlist id>.json                adaptive statistics per playlist
-├─ logs\                                     one log file per start
+├─ assets\                                   sample audio shipped with the program
 ├─ docs\                                     documentation
 └─ tests\                                    tests
+
+%PROGRAMDATA%\six-coin\music-player\         data folder (configurable)
+├─ settings.json                             settings
+├─ library.json                              artists, tag groups, songs
+├─ playlists.json                            playlists and the default one
+├─ player.json                               window size, queue visibility
+├─ stats\<playlist id>.json                   adaptive statistics per playlist
+└─ music\<md5>.<ext>                          imported audio, file name is the MD5
+
+%LOCALAPPDATA%\six-coin\music-player\
+├─ logs\                                     one log file per start
+├─ locks\                                    locks
+└─ data-dir.txt                              data folder pointer
+
+%TEMP%\six-coin\music-player\               intermediate cleaning and source-replacement output
 ```
 
-`config\`, `logs\` and `assets\` are not in version control. Deleting `config\` wipes the library and all settings; deleting files from `assets\music\` turns those songs into "File missing". To back up, copy the whole folder.
+Deleting `settings.json` restores every setting; deleting `library.json` wipes the library; deleting files from `music\` turns those songs into "File missing". To back up, copy the whole data folder.
 
-Log files are named by start time, rotate at 5 MB and are kept for 14 days. When troubleshooting, read the newest one first.
+Log files are named by start time, rotate at 5 MB and are kept for 14 days. When troubleshooting, read the newest one first. The old `config\`, `assets\music\` and `logs\` folders in the program directory are moved to the locations above the first time the new version starts.
 
 ## 15. Troubleshooting
 

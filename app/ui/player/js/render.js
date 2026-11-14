@@ -5,7 +5,6 @@ function apply(data) {
   if (!data || !data.ok) return;
   state.data = data;
   applyTheme(data.theme);
-  if (data.theme_source === "system") watchSystemTheme();
 
   qs("#app").classList.toggle("no-queue", !data.queue.visible);
   renderPlaylists();

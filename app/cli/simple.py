@@ -20,7 +20,7 @@ from typing import Protocol
 
 from loguru import logger
 
-from app import logging_setup, paths
+from app import bootstrap, logging_setup, paths
 from app.cli import console, render
 from app.cli.console import Action
 from app.core import adaptation
@@ -240,9 +240,18 @@ class Session:
 
 
 def main() -> int:
+    warnings = bootstrap.prepare()
+    if bootstrap.is_first_run():
+        # 第一次运行还没有配置：先把管理器拉起来做初始设置。
+        bootstrap.launch_manager("simple")
+        _say("这是第一次运行，正在打开管理器完成初始设置……")
+        return 0
+
     log_file = logging_setup.setup("simple")
     _install_excepthook()
     logger.info("simple 启动，日志：{}", log_file)
+    for warning in warnings:
+        logger.warning(warning)
 
     instance = SingleInstance(INSTANCE_NAME)
     if not instance.acquire():

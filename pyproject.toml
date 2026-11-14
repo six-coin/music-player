@@ -1,7 +1,7 @@
 [project]
 name = "music-player"
-version = "1.0.0.dev1"
-description = "本地音乐库管理器与播放器。"
+version = "1.0.0.dev2"
+description = "A local music library manager plus two players: the manager imports, organizes and configures; the players only play. Windows desktop app, double-click to run."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -24,8 +24,7 @@ addopts = "-q"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-# 这两个目录只是重构前的参考材料，不参与本项目的静态检查。
-extend-exclude = ["music-player-manager", "music-player-simple"]
+extend-exclude = []
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]

@@ -93,7 +93,7 @@ class PlayerApi:
     def _load(self) -> None:
         self._backup_broken_settings()
         self.warnings.extend(self.settings.load())
-        language = self.settings.get("common", "language", default=i18n.DEFAULT_LANGUAGE)
+        language = self.settings.get("common", "language", default=i18n.FALLBACK_LANGUAGE)
         i18n.set_language(str(language))
         self.warnings.extend(self.library.load())
         self.warnings.extend(self.playlists.load())
@@ -324,10 +324,7 @@ class PlayerApi:
         return {
             "ok": True,
             "language": i18n.current(),
-            "theme": theme_tool.resolve(
-                str(self.settings.get("common", "theme", default="system"))
-            ),
-            "theme_source": str(self.settings.get("common", "theme", default="system")),
+            "theme": theme_tool.resolve(str(self.settings.get("common", "theme", default="light"))),
             "mode": state["mode"],
             "playlist_uid": state["playlist_uid"],
             "playlists": [
