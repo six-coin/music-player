@@ -6,17 +6,17 @@
 
 一句话：三个进程共用一个 JSON 音乐库，管理器写、播放器只读，界面全部是静态 HTML + 无框架 JS。
 
-| 约束                                          | 原因                               | 谁在守                                                                                                      |
-|---------------------------------------------|----------------------------------|----------------------------------------------------------------------------------------------------------|
-| `core` 不导入任何界面库                             | 队列与自适应要能被纯 pytest 覆盖，也要能被三个入口共用  | `test_source_hygiene.py::test_core_has_no_ui_imports`                                                    |
-| `system` 不导入界面库                             | 系统能力是基础设施，不该知道谁在调用               | `test_source_hygiene.py::test_system_has_no_ui_imports`                                                  |
-| 工作目录钉在程序目录                             | cwd 会影响相对路径、文件对话框与第三方库的临时文件，只许在一处定死 | `test_source_hygiene.py::test_working_directory_is_pinned_in_one_place`                    |
-| 入口文件 < 30 行                                 | 装配集中在一处                          | `test_source_hygiene.py::test_manager_entry_stays_thin`、`::test_player_entry_stays_thin`                 |
-| player 不写 `library.json` / `playlists.json` | 播放器不是编辑器；两个进程同时改库必然丢数据           | `test_player_api.py::test_player_leaves_library_untouched`                                               |
-| 队列永远是完整歌单                                   | 队列是承诺，不是装饰                       | `test_player_session.py::test_queue_shows_the_whole_playlist_with_states`                                |
-| 两份 `styles.css` 的设计令牌一致                     | 两个窗口必须看起来是同一个程序                  | `test_player_api.py::test_ui_tokens_match`                                                               |
-| 非法参数不抛异常                                    | 网页收到 Python traceback 是最难排查的一类故障 | `test_player_api.py::test_invalid_arguments_do_not_raise`、`test_api.py::test_invalid_section_is_ignored` |
-| 两份语言包同键同占位符                                 | 缺键会在界面上露出键名                      | `test_i18n.py::test_every_locale_has_the_same_keys`、`::test_placeholders_match_the_default_language`     |
+| 约束                                          | 原因                                  | 谁在守                                                                                                      |
+|---------------------------------------------|-------------------------------------|----------------------------------------------------------------------------------------------------------|
+| `core` 不导入任何界面库                             | 队列与自适应要能被纯 pytest 覆盖，也要能被三个入口共用     | `test_source_hygiene.py::test_core_has_no_ui_imports`                                                    |
+| `system` 不导入界面库                             | 系统能力是基础设施，不该知道谁在调用                  | `test_source_hygiene.py::test_system_has_no_ui_imports`                                                  |
+| 工作目录钉在程序目录                                  | cwd 会影响相对路径、文件对话框与第三方库的临时文件，只许在一处定死 | `test_source_hygiene.py::test_working_directory_is_pinned_in_one_place`                                  |
+| 入口文件 < 30 行                                 | 装配集中在一处                             | `test_source_hygiene.py::test_manager_entry_stays_thin`、`::test_player_entry_stays_thin`                 |
+| player 不写 `library.json` / `playlists.json` | 播放器不是编辑器；两个进程同时改库必然丢数据              | `test_player_api.py::test_player_leaves_library_untouched`                                               |
+| 队列永远是完整歌单                                   | 队列是承诺，不是装饰                          | `test_player_session.py::test_queue_shows_the_whole_playlist_with_states`                                |
+| 两份 `styles.css` 的设计令牌一致                     | 两个窗口必须看起来是同一个程序                     | `test_player_api.py::test_ui_tokens_match`                                                               |
+| 非法参数不抛异常                                    | 网页收到 Python traceback 是最难排查的一类故障    | `test_player_api.py::test_invalid_arguments_do_not_raise`、`test_api.py::test_invalid_section_is_ignored` |
+| 两份语言包同键同占位符                                 | 缺键会在界面上露出键名                         | `test_i18n.py::test_every_locale_has_the_same_keys`、`::test_placeholders_match_the_default_language`     |
 
 ## 2. 目录结构
 
@@ -138,25 +138,25 @@ manager.pyw   player.pyw   simple.py          入口
 
 ## 5. 模块职责
 
-| 模块               | 只做                             | 不做             |
-|------------------|--------------------------------|----------------|
-| `paths`          | 由 `__file__` 推导绝对路径、解析配置里的相对路径 | 不判断文件是否存在、不建目录 |
-| `settings`       | 读盘、夹取、合并、原子写                   | 不缓存界面状态        |
-| `models`         | 结构、归一化、校验、`to_dict` 只输出约定键     | 不读写文件          |
-| `i18n`           | 扫目录、查表、填占位符                    | 不关心调用者是谁       |
-| `library`        | 实体读写与查询、引用统计                   | 不解析歌单、不判约束是否阻断 |
-| `playlists`      | 歌单读写、条件求值、环检测                  | 不写统计、不碰界面      |
-| `adaptation`     | 概率公式、记录串的追加与截断                 | 不读文件           |
-| `stats`          | 一歌单一文件，锁内读改写                   | 不算概率           |
-| `importer`       | 准备（清洗、MD5、时长）与提交（落盘、写库）两段      | 不弹窗、不报进度       |
-| `source`         | 换源与删除的多文件事务，失败回滚               | 不判断该不该做        |
+| 模块               | 只做                                  | 不做             |
+|------------------|-------------------------------------|----------------|
+| `paths`          | 由 `__file__` 推导绝对路径、解析配置里的相对路径      | 不判断文件是否存在、不建目录 |
+| `settings`       | 读盘、夹取、合并、原子写                        | 不缓存界面状态        |
+| `models`         | 结构、归一化、校验、`to_dict` 只输出约定键          | 不读写文件          |
+| `i18n`           | 扫目录、查表、填占位符                         | 不关心调用者是谁       |
+| `library`        | 实体读写与查询、引用统计                        | 不解析歌单、不判约束是否阻断 |
+| `playlists`      | 歌单读写、条件求值、环检测                       | 不写统计、不碰界面      |
+| `adaptation`     | 概率公式、记录串的追加与截断                      | 不读文件           |
+| `stats`          | 一歌单一文件，锁内读改写                        | 不算概率           |
+| `importer`       | 准备（清洗、MD5、时长）与提交（落盘、写库）两段           | 不弹窗、不报进度       |
+| `source`         | 换源与删除的多文件事务，失败回滚                    | 不判断该不该做        |
 | `integrity`      | 检查与按类别修复；深检额外重算 MD5、用 ffprobe 查码率虚标 | 不做二次确认         |
-| `queue`          | 一轮怎么排（洗牌、接缝、按名排序）              | 不知道「播到哪」       |
-| `player_session` | 当前歌单、轮次、索引、模式、pin、命令           | 不读文件、不碰文案与界面   |
-| `ui/*/api.py`    | 快照组装、调用翻译、写盘                   | 不实现队列规则、不做业务校验 |
-| `ui/*/app.py`    | 建窗口、算尺寸、主题落地、关闭保存              | 不碰业务           |
-| `js/render-*`    | 把快照画成 DOM                      | 不决定播哪首、不改业务数据  |
-| `js/playback`    | 执行 `command`、统计真实播放秒数          | 不决定播哪首         |
+| `queue`          | 一轮怎么排（洗牌、接缝、按名排序）                   | 不知道「播到哪」       |
+| `player_session` | 当前歌单、轮次、索引、模式、pin、命令                | 不读文件、不碰文案与界面   |
+| `ui/*/api.py`    | 快照组装、调用翻译、写盘                        | 不实现队列规则、不做业务校验 |
+| `ui/*/app.py`    | 建窗口、算尺寸、主题落地、关闭保存                   | 不碰业务           |
+| `js/render-*`    | 把快照画成 DOM                           | 不决定播哪首、不改业务数据  |
+| `js/playback`    | 执行 `command`、统计真实播放秒数               | 不决定播哪首         |
 
 ## 6. 关键流程
 
@@ -296,14 +296,14 @@ next / ended / failed
 
 ## 9. 错误处理
 
-| 场景                                     | 策略                                                                           |
-|----------------------------------------|------------------------------------------------------------------------------|
-| `library.json` / `playlists.json` 结构损坏 | `ConfigError` → 记日志 → 弹窗给日志路径 → 退出，不静默重建                                     |
-| `settings.json` 缺字段、越界、分节被写成标量         | 读时夹取、整节回退默认值，记 warning，继续运行                                                  |
-| 单条记录字段非法                               | 跳过该条，记 warning，其余照常                                                          |
-| 导入单个文件失败                               | 记入批次错误清单，继续处理下一个                                                             |
-| 播放失败 / 文件缺失                            | 跳过 + 队列标灰 + 一行提示，不中断整个队列                                                     |
-| 写盘失败                                   | Toast + 日志，界面保持原值，不假装成功                                                      |
+| 场景                                     | 策略                                                                                          |
+|----------------------------------------|---------------------------------------------------------------------------------------------|
+| `library.json` / `playlists.json` 结构损坏 | `ConfigError` → 记日志 → 弹窗给日志路径 → 退出，不静默重建                                                    |
+| `settings.json` 缺字段、越界、分节被写成标量         | 读时夹取、整节回退默认值，记 warning，继续运行                                                                 |
+| 单条记录字段非法                               | 跳过该条，记 warning，其余照常                                                                         |
+| 导入单个文件失败                               | 记入批次错误清单，继续处理下一个                                                                            |
+| 播放失败 / 文件缺失                            | 跳过 + 队列标灰 + 一行提示，不中断整个队列                                                                    |
+| 写盘失败                                   | Toast + 日志，界面保持原值，不假装成功                                                                     |
 | 未捕获异常                                  | `sys.excepthook` 记录 → `logger.complete()` → 原生 `MessageBoxW` → `os._exit(1)`；弹窗文案固定中文，不查语言包 |
 
 原则：**能降级的降级，不能降级的必须留下可读的原因。任何静默失败都算缺陷。**
@@ -385,7 +385,7 @@ uv run ruff format --check .
 | 3.2 窗口尺寸   | 播放器固定 960×620、最小 760×480，不按屏幕 85% | 播放器是常驻小窗，铺满屏幕反而难用；尺寸记在 `player.json` 里                                       |
 | 1.6 目录     | 多一个 `<数据目录>/player.json`          | 窗口尺寸与队列开合是 player 私有的界面状态，不该进三端共享的 `settings.json`                           |
 | 3.x 界面     | 轻量音乐播放器没有 `ui/`，界面由 `cli/` 承担     | 命令行没有 DOM，按「输入 / 渲染 / 编排」切分更合适；启动速度是这类工具的核心体验                                |
-| 2.10 本地化   | 异常路径与内部日志固定中文，不进语言包              | 崩溃弹窗、日志、完整性报告只给本机用户看，且崩溃时语言包本身可能读不出来；查表失败会让弹窗里只剩一个键名                                              |
+| 2.10 本地化   | 异常路径与内部日志固定中文，不进语言包               | 崩溃弹窗、日志、完整性报告只给本机用户看，且崩溃时语言包本身可能读不出来；查表失败会让弹窗里只剩一个键名                         |
 | 3.10 键盘    | 不做硬件媒体键与全局热键                      | 只服务单机听歌，窗口内按键够用，也避免抢别的程序的键                                                   |
 | 3.10.2 快捷键 | 不设 `Ctrl+S`                       | 全自动保存，每次改动都已落盘                                                               |
 | 3.3.4 关闭握手 | 关闭时不等网页回话，直接用内存里最多 2 秒旧的播放位置      | 在 `closing` 里等网页回话会死锁；用 2 秒的陈旧值换掉一次死锁风险                                      |

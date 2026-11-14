@@ -208,14 +208,14 @@ Double-click and the default playlist starts. No menu, no picker. Everything is 
 
 The console draws a single box: title, artist, playlist with "N / M", play mode, the adaptive switch, and a key hint on the last line.
 
-| Behaviour         | Detail                                                                  |
-|-------------------|-------------------------------------------------------------------------|
-| Play modes        | Shuffle or list loop, from the manager's Simple player page             |
+| Behaviour         | Detail                                                                              |
+|-------------------|-------------------------------------------------------------------------------------|
+| Play modes        | Shuffle or list loop, from the manager's Simple player page                         |
 | Volume            | The program never sets it: VLC uses its own level, adjustable from the system mixer |
-| Skip              | `Ctrl+C` moves to the next song without quitting                        |
-| Quit              | `Ctrl+Q`; `Alt+F4` and the window's × also exit cleanly                 |
-| Adaptive skipping | Uses the default playlist's configuration; the screen only shows on/off |
-| Language          | Follows the language chosen in the manager; read once at startup        |
+| Skip              | `Ctrl+C` moves to the next song without quitting                                    |
+| Quit              | `Ctrl+Q`; `Alt+F4` and the window's × also exit cleanly                             |
+| Adaptive skipping | Uses the default playlist's configuration; the screen only shows on/off             |
+| Language          | Follows the language chosen in the manager; read once at startup                    |
 
 Exit codes: `0` normal, `1` startup failure (no VLC, empty default playlist…), `2` fatal error while running.
 
@@ -223,15 +223,15 @@ Exit codes: `0` normal, `1` startup failure (no VLC, empty default playlist…),
 
 Reachable from "To review" on the overview and from Settings · Library manager · Maintenance. The quick check does not read audio; the deep check recomputes every file's MD5, then verifies the bitrate with ffprobe, reports progress by bytes, and can be cancelled.
 
-| Category          | What is checked                                                                 | Auto-fix                               |
-|-------------------|---------------------------------------------------------------------------------|----------------------------------------|
-| Missing files     | Record exists, file does not                                                    | No — re-import or replace the source   |
-| Orphan files      | File exists, no record                                                          | Yes — sent to the Recycle Bin          |
-| Content mismatch  | Deep check finds an MD5 that differs from the record                            | No                                     |
+| Category          | What is checked                                                                                                                                | Auto-fix                               |
+|-------------------|------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------|
+| Missing files     | Record exists, file does not                                                                                                                   | No — re-import or replace the source   |
+| Orphan files      | File exists, no record                                                                                                                         | Yes — sent to the Recycle Bin          |
+| Content mismatch  | Deep check finds an MD5 that differs from the record                                                                                           | No                                     |
 | Fake quality      | The bitrate declared in the file header is far above the effective bitrate (size ÷ duration), or a bitrate written in the title does not match | No — find another source               |
-| Broken references | A song points at a missing artist or tag; a playlist points at a missing object | Yes — the stale references are dropped |
-| Tag constraints   | A required group is empty, a single group has several tags                      | No — jumps to that song                |
-| Stale statistics  | Statistics mention songs that are gone                                          | Yes — pruned against the library       |
+| Broken references | A song points at a missing artist or tag; a playlist points at a missing object                                                                | Yes — the stale references are dropped |
+| Tag constraints   | A required group is empty, a single group has several tags                                                                                     | No — jumps to that song                |
+| Stale statistics  | Statistics mention songs that are gone                                                                                                         | Yes — pruned against the library       |
 
 Fixes run per category, or all fixable ones at once. They only delete data that no longer has an owner, so there is no second confirmation; orphan files go to the Recycle Bin and can be restored.
 
@@ -264,13 +264,13 @@ Manager: `Esc` closes a dialog, drawer or context menu; `Tab` cycles inside dial
 
 Five pages; changes apply immediately and there is no Save button.
 
-| Page          | Contents                                                                                                                                        |
-|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| General         | Theme (light / dark only, no follow-system option), language (sorted by language code), adaptive defaults (window, minimum plays, skip base, skip threshold) |
+| Page            | Contents                                                                                                                                                                                                  |
+|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| General         | Theme (light / dark only, no follow-system option), language (sorted by language code), adaptive defaults (window, minimum plays, skip base, skip threshold)                                              |
 | Library manager | Preview volume, import (default folder, clean audio on import, FFmpeg and ffprobe status), maintenance (integrity check, clean orphan files, clear all statistics, open data and log folders, debug mode) |
-| Simple player   | Play mode, default playlist (read-only, with a link)                                                                                            |
-| Player          | Default volume, play mode, remember position                                                                                                    |
-| About           | Data folder (an input box with "Change" and "Reset"), user manual, reset all settings, version                                                  |
+| Simple player   | Play mode, default playlist (read-only, with a link)                                                                                                                                                      |
+| Player          | Default volume, play mode, remember position                                                                                                                                                              |
+| About           | Data folder (an input box with "Change" and "Reset"), user manual, reset all settings, version                                                                                                            |
 
 The skip base is a percentage from 1 to 99: the real probability is base × the song's recent skip rate.
 
