@@ -18,13 +18,20 @@ from loguru import logger
 from app import i18n, paths
 from app import version as version_module
 from app.core import integrity, source
-from app.core.adaptation import Params, effective, params_from_dict, skip_probability, skip_rate
+from app.core.adaptation import (
+    Params,
+    base_percent,
+    effective,
+    params_from_dict,
+    skip_probability,
+    skip_rate,
+)
 from app.core.importer import commit_import, prepare_import
 from app.core.library import Library
 from app.core.naming import parse_filename
 from app.core.playlists import PlaylistStore
 from app.core.stats import StatsStore
-from app.errors import ActionError
+from app.errors import ActionError, PlaylistCycleError
 from app.models import (
     FILTER_MODES,
     FILTER_TARGETS,
@@ -53,8 +60,14 @@ def _params_dict(params: Params) -> dict[str, Any]:
         "window": params.window,
         "min_plays": params.min_plays,
         "base": params.base,
+        "base_percent": base_percent(params.base),
         "skip_seconds": params.skip_seconds,
     }
+
+
+def _join_names(items: list[str]) -> str:
+    """列举分隔符跟着界面语言走：中文用顿号，英文用逗号。"""
+    return i18n.t("list.separator").join(items)
 
 
 class ManagerApi:
@@ -239,7 +252,7 @@ class ManagerApi:
     ) -> dict[str, Any]:
         payload = music.to_dict()
         payload["title"] = music.title
-        payload["authors_text"] = "、".join(self.library.music_authors(music))
+        payload["authors_text"] = _join_names(self.library.music_authors(music))
         payload["missing"] = music.md5 in missing
         payload["tag_issue"] = music.md5 in tag_issues
         return payload
@@ -252,15 +265,37 @@ class ManagerApi:
         for playlist in self.playlists.all():
             payload = playlist.to_dict()
             payload["title"] = playlist.name or i18n.t("overview.default_playlist")
+            payload["error"] = ""
+            payload["error_detail"] = None
             try:
                 content = self.playlists.resolve(playlist.uid, self.library)
                 payload["count"] = len(content.md5s)
-                payload["error"] = ""
-            except Exception as error:  # 循环引用不该让整个快照失败
+            except PlaylistCycleError as error:  # 循环引用不该让整个快照失败
                 payload["count"] = 0
                 payload["error"] = str(error)
+                payload["error_detail"] = self._cycle_detail(error)
+            except Exception as error:
+                payload["count"] = 0
+                payload["error"] = str(error)
+                payload["error_detail"] = {"kind": "error", "chain": [], "text": str(error)}
             result.append(payload)
         return sorted(result, key=lambda item: (not item["builtin"], item["title"]))
+
+    def _playlist_title(self, uid: str) -> str:
+        playlist = self.playlists.get(uid)
+        if playlist is None:
+            return uid[:8]
+        return playlist.name or i18n.t("overview.default_playlist")
+
+    def _cycle_detail(self, error: PlaylistCycleError) -> dict[str, Any]:
+        """把循环链里的 uid 换成歌单名，界面直接画成卡片。"""
+        chain = [self._playlist_title(uid) for uid in error.chain]
+        return {"kind": "cycle", "chain": chain, "text": " → ".join(chain) or str(error)}
+
+    def _cycle_message(self, error: PlaylistCycleError) -> str:
+        """给弹窗用的一句话；链里的 uid 换成歌单名。"""
+        chain = " → ".join(self._playlist_title(uid) for uid in error.chain)
+        return i18n.t("playlist.cycle_message", chain=chain or str(error))
 
     def _counts(self) -> dict[str, int]:
         counts = self.library.counts()
@@ -283,7 +318,7 @@ class ManagerApi:
                 "kind": "music",
                 "md5": music.md5,
                 "title": music.title,
-                "subtitle": "、".join(self.library.music_authors(music)),
+                "subtitle": _join_names(self.library.music_authors(music)),
                 "at": music.created_at,
             }
             for music in musics[:RECENT_LIMIT]
@@ -294,7 +329,7 @@ class ManagerApi:
                 "kind": "music",
                 "md5": music.md5,
                 "title": music.title,
-                "subtitle": "、".join(self.library.music_authors(music)),
+                "subtitle": _join_names(self.library.music_authors(music)),
                 "at": music.updated_at or music.created_at,
             }
             for music in self.library.musics.values()
@@ -513,7 +548,7 @@ class ManagerApi:
                 return self._snapshot()
             songs = self.library.tag_group_songs(uid)
             if songs and not force:
-                names = "、".join(music.title for music in songs[:3])
+                names = _join_names([music.title for music in songs[:3]])
                 return self._fail("tag.group_referenced", count=len(songs), names=names)
             if songs:
                 group_tags = {tag.uid for tag in group.tags}
@@ -603,7 +638,7 @@ class ManagerApi:
                 return self._snapshot()
             songs = self.library.author_songs(uid)
             if songs and not force:
-                names = "、".join(music.title for music in songs[:3])
+                names = _join_names([music.title for music in songs[:3]])
                 return self._fail("author.referenced", count=len(songs), names=names)
             for music in songs:
                 music.authors = [item for item in music.authors if item != uid]
@@ -729,7 +764,7 @@ class ManagerApi:
             if referrers:
                 snapshot = self._snapshot()
                 snapshot["ok"] = False
-                snapshot["message"] = i18n.t("playlist.referenced", names="、".join(referrers))
+                snapshot["message"] = i18n.t("playlist.referenced", names=_join_names(referrers))
                 return snapshot
             self.playlists.remove(uid)
             self.playlists.save()
@@ -745,7 +780,7 @@ class ManagerApi:
                 continue
             for condition in playlist.filters:
                 if condition.target == "playlist" and uid in condition.values:
-                    names.append(playlist.name or i18n.t("overview.default_playlist"))
+                    names.append(self._playlist_title(playlist.uid))
                     break
         return names
 
@@ -854,8 +889,11 @@ class ManagerApi:
         with self._lock:
             try:
                 content = self.playlists.resolve(uid, self.library)
+            except PlaylistCycleError as error:
+                return {"ok": False, "message": self._cycle_message(error), "items": []}
             except Exception as error:
-                return {"ok": False, "message": str(error), "items": []}
+                logger.error("解析歌单失败：{}（{}）", uid, error)
+                return {"ok": False, "message": f"解析歌单失败：{error}", "items": []}
             missing = set(self.library.missing_files())
             tag_issues = set(self.library.tag_violations())
             items = [
@@ -905,8 +943,11 @@ class ManagerApi:
             params = effective(playlist.adaptation, defaults)
             try:
                 content = self.playlists.resolve(uid, self.library)
+            except PlaylistCycleError as error:
+                return {"ok": False, "message": self._cycle_message(error), "rows": []}
             except Exception as error:
-                return {"ok": False, "message": str(error), "rows": []}
+                logger.error("解析歌单失败：{}（{}）", uid, error)
+                return {"ok": False, "message": f"解析歌单失败：{error}", "rows": []}
 
             summary = self.stats.summary(uid)
             rows: list[dict[str, Any]] = []
@@ -924,6 +965,7 @@ class ManagerApi:
                         "skips": records.count("1"),
                         "rate": skip_rate(records),
                         "auto_skipped": int(item.get("auto_skipped", 0) or 0),
+                        "full_plays": int(item.get("full_plays", 0) or 0),
                         "probability": skip_probability(records, params),
                     }
                 )
@@ -970,6 +1012,7 @@ class ManagerApi:
                 "skips": records.count("1"),
                 "rate": skip_rate(records),
                 "auto_skipped": int(summary.get("auto_skipped", 0) or 0),
+                "full_plays": int(summary.get("full_plays", 0) or 0),
                 "probability": skip_probability(records, params),
             }
 
@@ -1121,12 +1164,16 @@ class ManagerApi:
                     )
                 except Exception as error:
                     logger.exception("导入提交失败：{}", path)
-                    task["errors"].append(f"{path.name}：{error}")
+                    task["errors"].append(f"{path.name}：导入失败（{error}）")
                 else:
                     if outcome.error:
                         task["errors"].append(f"{path.name}：{outcome.error}")
                     elif outcome.duplicate:
-                        task["errors"].append(f"{path.name}：{i18n.t('import.duplicate')}")
+                        existing = self.library.musics.get(prepared.md5)
+                        key = "import.duplicate" if existing else "import.duplicate_unknown"
+                        task["errors"].append(
+                            f"{path.name}：" + i18n.t(key, title=existing.title if existing else "")
+                        )
                     else:
                         task["imported"].append(outcome.music.md5)
                         self.library.save()
@@ -1205,7 +1252,7 @@ class ManagerApi:
             return
         except Exception as error:  # 未预料的失败也要让界面能退出进度框
             logger.exception("换源准备失败")
-            self._finish_task(task_id, error=str(error))
+            self._finish_task(task_id, error=f"换源失败：{error}")
             return
 
         with self._lock:
@@ -1228,7 +1275,7 @@ class ManagerApi:
                 return
             except Exception as error:
                 logger.exception("换源失败")
-                self._finish_task(task_id, error=str(error))
+                self._finish_task(task_id, error=f"换源失败：{error}")
                 return
             self.selection = {"kind": "music", "uid": report.new_md5}
             self.section = "songs"
@@ -1322,7 +1369,8 @@ class ManagerApi:
             os.startfile(str(path))
             return {"ok": True}
         except (OSError, AttributeError) as error:  # 非 Windows 上没有 os.startfile
-            return {"ok": False, "message": str(error)}
+            logger.error("打开目录失败：{}（{}）", path, error)
+            return {"ok": False, "message": f"无法打开目录：{error}"}
 
     def open_data_dir(self) -> dict[str, Any]:
         return self._open_dir(paths.CONFIG_DIR)
@@ -1377,7 +1425,7 @@ class ManagerApi:
                     report = integrity.check(self.library, self.playlists, self.stats)
         except Exception as error:
             logger.exception("完整性检查失败")
-            self._finish_task(task_id, error=str(error))
+            self._finish_task(task_id, error=f"完整性检查失败：{error}")
             return
         self._task_patch(
             task_id,

@@ -104,28 +104,44 @@ function initSelects() {
 function setupSortSelect() {
   const select = qs("#songs-sort");
   if (!select) return;
-  select.querySelector(".select-menu").innerHTML = [
-    { value: "title", label: T("songs.sort_title") },
-    { value: "created", label: T("songs.sort_created") },
-    { value: "duration", label: T("songs.sort_duration") },
-    { value: "author", label: T("songs.sort_author") },
-  ]
-    .map(function (option) {
-      return (
-        '<button class="select-option' + (option.value === state.sort ? " active" : "") +
-        '" type="button" role="option" data-value="' + option.value + '">' +
-        esc(option.label) + "</button>"
-      );
-    })
-    .join("");
-  select.dataset.value = state.sort;
-  select.querySelector(".select-value").textContent = T(
-    "songs.sort_" + (state.sort === "created" ? "created" : state.sort)
-  );
+  refreshSortSelect();
+  if (select.dataset.bound === "1") return;
+  select.dataset.bound = "1";
   select.addEventListener("selectchange", function (event) {
     state.sort = event.detail.value;
     renderSongList();
   });
+}
+
+function sortOptions() {
+  return [
+    { value: "title", label: T("songs.sort_title") },
+    { value: "created", label: T("songs.sort_created") },
+    { value: "duration", label: T("songs.sort_duration") },
+    { value: "author", label: T("songs.sort_author") },
+  ];
+}
+
+/* 只重建文案，不动事件绑定：切换语言时要能再调一次，否则下拉框会一直停在
+   建它时那种语言里。 */
+function refreshSortSelect() {
+  const select = qs("#songs-sort");
+  if (!select) return;
+  const options = sortOptions();
+  select.querySelector(".select-menu").innerHTML = options
+    .map(function (option) {
+      return (
+        '<button class="select-option' + (option.value === state.sort ? " active" : "") +
+        '" type="button" role="option" data-value="' + esc(option.value) + '">' +
+        esc(option.label) + "</button>"
+      );
+    })
+    .join("");
+  const current = options.find(function (option) {
+    return option.value === state.sort;
+  }) || options[0];
+  select.dataset.value = current.value;
+  select.querySelector(".select-value").textContent = current.label;
 }
 /* ---------- 菜单 ---------- */
 
@@ -202,9 +218,11 @@ function openMenu(anchor, items) {
 /* ---------- 弹窗 ---------- */
 
 let modalDismissible = true;
+/* 点遮罩是否关闭：导入这类「正在干活」的弹窗必须由用户按按钮关，不能误触空白。 */
+let modalBackdropClosable = true;
 let modalTimer = null;
 
-function closeModal() {
+function closeModal(after) {
   if (!modalDismissible) return;
   const modal = qs("#modal");
   if (modal.hidden) return;
@@ -217,6 +235,8 @@ function closeModal() {
     modal.classList.remove("is-closing");
     qs("#modal-body").innerHTML = "";
     qs("#modal-actions").innerHTML = "";
+    // 关完再开下一个弹窗：先让淡出走完，接上的那个才会重新播一遍入场。
+    if (typeof after === "function") after();
   }, 160);
 }
 
@@ -252,6 +272,7 @@ function openModal(options) {
 
   card.classList.toggle("wide", Boolean(options.wide));
   modalDismissible = options.dismissible !== false;
+  modalBackdropClosable = options.backdropDismissible !== false;
   qs("#modal-close").hidden = !modalDismissible;
   modal.hidden = false;
   card.focus();

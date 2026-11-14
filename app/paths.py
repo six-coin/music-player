@@ -13,7 +13,8 @@
 | 临时目录 | 清洗音频、换源的中间文件 | ``%TEMP%\\six-coin\\music-player`` |
 
 数据目录可在设置里改，落点恒以项目代号结尾；改完在下次启动时把旧目录的内容
-搬过去，指针跟着改。配置里的相对路径以数据目录为基准，与当前工作目录无关。
+搬过去，指针跟着改。配置里的相对路径以数据目录为基准，与当前工作目录无关；
+工作目录本身在导入本模块时就被钉在程序目录，见 :func:`use_program_dir_as_cwd`。
 """
 
 from __future__ import annotations
@@ -28,6 +29,24 @@ PROJECT = "music-player"
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 PROGRAM_DIR = PACKAGE_DIR.parent
+
+
+def use_program_dir_as_cwd() -> None:
+    """把进程的工作目录钉在程序根目录。
+
+    双击 ``.bat`` 时 cwd 一般已经是程序目录，但从任务栏、计划任务、另一个进程
+    拉起时不一定。工作目录会悄悄影响相对路径、文件对话框与第三方库的临时文件，
+    所以这里统一收口一次，之后全进程不再变。路径计算本身不依赖它——内部路径
+    一律由本模块给出绝对路径。
+    """
+    try:
+        os.chdir(PROGRAM_DIR)
+    except OSError:
+        # 目录被删掉或没有权限时保持原样：cwd 只是便利，不该拦住启动。
+        pass
+
+
+use_program_dir_as_cwd()
 
 _ENV_DATA = "SIXCOIN_DATA_DIR"
 _ENV_LOCAL = "SIXCOIN_LOCAL_DIR"
@@ -182,17 +201,18 @@ def _move_contents(source: Path, target: Path) -> tuple[list[str], int]:
 
 
 def _reconcile_data_dir() -> None:
-    """启动时把数据目录收敛到最终位置。
+    """启动时执行上次「更改数据目录」留下的搬迁。
 
-    两件事：执行上次「更改数据目录」留下的搬迁，以及修正历史版本里没补项目
-    代号的指针。两者都是「把旧目录的内容搬到新目录，再改指针」，走同一段代码。
+    只在有 ``data-dir.pending`` 时动手：把旧目录的内容搬到新目录，再改指针。
     测试用 ``SIXCOIN_DATA_DIR`` 指定了目录，一律不碰。
     """
     global MIGRATION_WARNINGS, MIGRATED_ITEMS
     if os.environ.get(_ENV_DATA, "").strip():
         return
+    target = pending_data_dir()
+    if target is None:
+        return
     source = read_data_dir()
-    target = pending_data_dir() or normalize_data_dir(str(source))
     if target == source:
         clear_pending_data_dir()
         return

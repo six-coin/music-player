@@ -171,7 +171,8 @@ function bindShellEvents() {
   });
   qs("#modal-close").addEventListener("click", closeModal);
   qs("#modal").addEventListener("click", function (event) {
-    if (event.target === qs("#modal")) closeModal();
+    // 只有点遮罩本身才算「点空白」；导入弹窗明确不允许这样关。
+    if (event.target === qs("#modal") && modalBackdropClosable) closeModal();
   });
 
   document.addEventListener("keydown", function (event) {

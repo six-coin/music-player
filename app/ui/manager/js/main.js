@@ -6,33 +6,48 @@ function bindEvents() {
   bindPanelEvents();
 }
 
+/* 首次运行的语言选择器：和设置页「通用 · 语言」用的是同一个分段控件，
+   不再用原生 select——它的弹出层由系统绘制，深色模式下根本没法看。 */
+function firstRunLanguages(active) {
+  const languages = (state.data && state.data.languages) || [];
+  if (!languages.length) return "";
+  return (
+    '<div class="seg seg--block" id="firstrun-language">' +
+    languages
+      .map(function (item) {
+        return (
+          '<button class="seg-item' + (item.code === active ? " is-active" : "") +
+          '" type="button" data-language="' + esc(item.code) + '">' +
+          esc(item.name) + "</button>"
+        );
+      })
+      .join("") +
+    "</div>"
+  );
+}
+
+function firstRunLanguage() {
+  const active = qs("#firstrun-language .seg-item.is-active");
+  return active ? active.dataset.language : state.data.language;
+}
+
 async function runFirstRun() {
   const data = state.data;
-  const options = (data.languages || [])
-    .map(function (item) {
-      return (
-        '<option value="' + esc(item.code) + '"' +
-        (item.code === data.language ? " selected" : "") +
-        ">" + esc(item.name) + "</option>"
-      );
-    })
-    .join("");
 
   openModal({
     title: T("firstrun.title"),
     dismissible: false,
     body:
       '<p class="modal-note" data-i18n="firstrun.text">' + esc(T("firstrun.text")) + "</p>" +
-      '<label class="field-label" for="firstrun-language" data-i18n="firstrun.title">' +
-      esc(T("firstrun.title")) + "</label>" +
-      '<select class="input" id="firstrun-language">' + options + "</select>",
+      '<div class="field-label firstrun-label" data-i18n="firstrun.title">' +
+      esc(T("firstrun.title")) + "</div>" +
+      firstRunLanguages(data.language),
     actions: [
       {
         label: T("firstrun.start"),
         primary: true,
         onClick: async function () {
-          const select = qs("#firstrun-language");
-          const snapshot = await call("complete_first_run", select ? select.value : data.language);
+          const snapshot = await call("complete_first_run", firstRunLanguage());
           closeModal();
           if (snapshot) {
             await loadStrings();
@@ -43,17 +58,23 @@ async function runFirstRun() {
         },
       },
     ],
+    onMount: function () {
+      const host = qs("#firstrun-language");
+      if (!host) return;
+      host.addEventListener("click", function (event) {
+        const button = event.target.closest("[data-language]");
+        if (!button) return;
+        // 选一下就立刻切成那种语言：用户不必先点「开始使用」才能看懂界面。
+        qsa("#firstrun-language .seg-item").forEach(function (node) {
+          node.classList.toggle("is-active", node === button);
+        });
+        previewLanguage(button.dataset.language);
+      });
+    },
   });
 
-  // 下拉框一改就把界面切成那种语言：用户不必先点「开始使用」才能看懂界面。
   const start = qs("#modal-actions .btn");
   if (start) start.dataset.i18n = "firstrun.start";
-  const select = qs("#firstrun-language");
-  if (select) {
-    select.addEventListener("change", function () {
-      previewLanguage(select.value);
-    });
-  }
 }
 
 async function previewLanguage(code) {
@@ -84,8 +105,10 @@ async function showFirstRunReadme(redirected) {
         label: T("firstrun.readme_close"),
         primary: true,
         onClick: function () {
-          closeModal();
-          if (redirected) showRedirectNote(redirected);
+          // 关掉再开下一个：直接换内容会把「淡出」这一步吃掉，看起来像闪了一下。
+          closeModal(function () {
+            if (redirected) showRedirectNote(redirected);
+          });
         },
       },
     ],

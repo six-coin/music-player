@@ -160,9 +160,12 @@ function emptyList(kind, title, hint, action) {
 
 function apply(data) {
   if (!data) return;
+  const previousLanguage = state.data ? state.data.language : null;
   state.data = data;
 
   if (data.language) document.documentElement.lang = data.language;
+  // 语言变了：下拉框的选项文案是建菜单时写进去的，必须跟着重建一次。
+  if (data.language && data.language !== previousLanguage) refreshSortSelect();
   applyTheme(data.theme);
   applyNav(data.section || "overview");
 

@@ -26,13 +26,17 @@ function animateDetail(id) {
   pane.classList.add("is-entering");
 }
 
+/* 切换条目时分两步：先只把列表的高亮挪过去，等新快照回来再画详情并播入场动画。
+   如果先连详情一起画，用户会看到目标内容「啪」地出现，然后才从头播动画——
+   看起来就是闪一下。 */
 async function selectMusic(md5) {
   const same = state.activeKind === "music" && state.active === md5;
   state.active = md5;
   state.activeKind = "music";
   state.selection = new Set([md5]);
   state.anchor = md5;
-  renderSongs();
+  renderSongList();
+  renderSelectionBar();
   const data = await call("select_item", "music", md5);
   if (!data) return;
   apply(data);
@@ -43,7 +47,7 @@ async function selectPlaylist(uid) {
   const same = state.activeKind === "playlist" && state.active === uid;
   state.active = uid;
   state.activeKind = "playlist";
-  renderPlaylists();
+  renderPlaylistList();
   const data = await call("select_item", "playlist", uid);
   if (!data) return;
   apply(data);
@@ -54,7 +58,7 @@ async function selectTagGroup(uid) {
   const same = state.activeKind === "tag_group" && state.active === uid;
   state.active = uid;
   state.activeKind = "tag_group";
-  renderTags();
+  renderTagList();
   const data = await call("select_item", "tag_group", uid);
   if (!data) return;
   apply(data);
@@ -65,7 +69,7 @@ async function selectAuthor(uid) {
   const same = state.activeKind === "author" && state.active === uid;
   state.active = uid;
   state.activeKind = "author";
-  renderAuthors();
+  renderAuthorList();
   const data = await call("select_item", "author", uid);
   if (!data) return;
   apply(data);

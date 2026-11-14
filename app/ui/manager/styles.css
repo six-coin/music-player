@@ -1151,6 +1151,17 @@ input[type="checkbox"]:disabled {
   padding-bottom: 2px;
 }
 
+/* 作者的作品列表：行是整块可点的「按钮」，最后一行离下边框要留出与别处
+   一致的呼吸空间，行内左侧也要比纯文字列表多缩进一点。 */
+.detail-pane .card.card--works {
+  padding-bottom: 10px;
+}
+
+.entry-list--works .entry-row {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
 .field-row {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
@@ -1337,6 +1348,96 @@ input[type="checkbox"]:disabled {
   font-size: 12.5px;
 }
 
+/* 错误卡片：浅色是红框 + 淡红底 + 红字；深色反过来用红底白字，
+   这样在暗色界面里也能一眼看出「这里坏了」。 */
+.error-card {
+  margin: 12px 0 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--red);
+  border-radius: var(--radius);
+  background: var(--red-soft);
+  color: var(--red-text);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.error-card-title {
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.error-card-text {
+  margin: 0;
+  word-break: break-word;
+}
+
+.error-card-hint {
+  margin: 6px 0 0;
+  opacity: 0.82;
+}
+
+[data-theme="dark"] .error-card {
+  border-color: transparent;
+  background: var(--red);
+  color: #ffffff;
+}
+
+/* 删除确认里的从属关系清单：最多三项，多的只报数量。 */
+.deps {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.deps-title {
+  margin: 0 0 6px;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.deps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.deps-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12.5px;
+}
+
+.dep-kind {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.dep-name {
+  overflow: hidden;
+  color: var(--text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.deps-more {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .entry-list {
   margin: 0;
   padding: 10px 0 0;
@@ -1472,6 +1573,21 @@ input[type="checkbox"]:disabled {
   background: var(--panel);
   color: var(--text-strong);
   box-shadow: 0 1px 3px var(--shadow);
+}
+
+/* 撑满一行的分段控件（首次运行的语言选择）：语言名长短不一，平分宽度，
+   放不下就省略，别把弹窗顶宽。 */
+.seg--block {
+  display: flex;
+  width: 100%;
+}
+
+.seg--block .seg-item {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* ---------- 空状态 ---------- */
@@ -2195,12 +2311,14 @@ input[type="checkbox"]:disabled {
 .drawer-body {
   flex: 1;
   min-height: 0;
-  padding: 12px 18px 24px;
+  /* 顶部不留内边距：粘性表头要贴在滚动容器顶端，留一条缝的话滚动内容会从
+     表头上方穿过去。上边距交给第一个子元素自己给。 */
+  padding: 0 18px 24px;
   overflow-y: auto;
 }
 
 .drawer-note {
-  margin: 0 0 10px;
+  margin: 12px 0 10px;
   color: var(--text-soft);
   font-size: 12.5px;
   line-height: 1.7;
@@ -2215,6 +2333,7 @@ input[type="checkbox"]:disabled {
 .drawer-table th {
   position: sticky;
   top: 0;
+  z-index: 1;
   padding: 6px 6px;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
@@ -2390,18 +2509,10 @@ input[type="checkbox"]:disabled {
   width: 190px;
 }
 
-/* 原生下拉框（首次启动的语言选择）：字体跟正文一致，展开的列表也跟着主题走。 */
-select.input {
-  font-family: inherit;
-}
-
-select option {
-  background: var(--panel);
-  color: var(--text);
-}
-
-[data-theme="dark"] select {
-  color-scheme: dark;
+/* 首次运行的语言选择：标题与分段控件之间留 2px，别贴在一起。 */
+.firstrun-label {
+  display: block;
+  margin-bottom: 2px;
 }
 
 /* 路径类输入框比普通数字框宽一档：路径长，190px 只看得见盘符。 */

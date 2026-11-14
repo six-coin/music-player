@@ -90,7 +90,8 @@ function bindPlaylistEvents() {
     const field = event.target.closest("[data-adapt]");
     if (field) {
       const key = field.dataset.adapt;
-      const value = key === "base" ? Number(field.value) : parseInt(field.value, 10);
+      // 跳过基数在输入框里是百分比，存下去要换算成比例。
+      const value = key === "base" ? Number(field.value) / 100 : parseInt(field.value, 10);
       if (!Number.isFinite(value)) {
         renderPlaylistDetail();
         return;

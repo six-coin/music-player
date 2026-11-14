@@ -102,8 +102,11 @@ function bindLibraryEvents() {
 
     const remove = event.target.closest("[data-tag-remove]");
     if (remove) {
-      const data = await call("remove_tag", group.uid, remove.dataset.tagRemove);
-      if (data) apply(data);
+      // 小标签也会从歌上摘掉，必须先确认并说明影响范围。
+      const tag = (group.tags || []).find(function (item) {
+        return item.uid === remove.dataset.tagRemove;
+      });
+      if (tag) confirmDeleteTag(group, tag);
       return;
     }
 

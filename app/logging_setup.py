@@ -5,6 +5,10 @@
 
 ``.pyw`` 进程没有控制台，所以致命错误必须弹窗。弹窗统一三段：出了什么事、
 发生时间、日志在哪。
+
+崩溃路径**不走语言包**：语言包读不出来、语言键写错、i18n 还没初始化，都恰好是
+崩溃时可能发生的事；这时候再去查表，弹窗里就只剩一个键名（``fatal.unexpected``
+这种）。这里的文案固定中文，属于「异常路径不本地化」的约定。
 """
 
 from __future__ import annotations
@@ -18,7 +22,11 @@ from pathlib import Path
 
 from loguru import logger
 
-from app import i18n, paths
+from app import paths
+
+_CRASH_TITLE = "程序错误"
+_CRASH_TIME = "时间"
+_CRASH_LOG = "日志"
 
 _log_file: Path | None = None
 
@@ -55,7 +63,12 @@ def _excepthook(exc_type, exc_value, exc_traceback) -> None:
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
     logger.opt(exception=(exc_type, exc_value, exc_traceback)).critical("未捕获的异常")
-    fatal(i18n.t("fatal.unexpected", error=f"{exc_type.__name__}: {exc_value}"))
+    fatal(unexpected_text(exc_type, exc_value))
+
+
+def unexpected_text(exc_type, exc_value) -> str:
+    """崩溃弹窗的第一行；固定中文，不查语言包。"""
+    return f"程序遇到未处理的错误：{exc_type.__name__}: {exc_value}"
 
 
 def _thread_excepthook(args: threading.ExceptHookArgs) -> None:
@@ -74,7 +87,7 @@ def fatal(message: str) -> None:
 
     if os.name == "nt":
         try:
-            ctypes.windll.user32.MessageBoxW(None, crash_text(message), i18n.t("fatal.title"), 0x10)
+            ctypes.windll.user32.MessageBoxW(None, crash_text(message), _CRASH_TITLE, 0x10)
         except Exception:  # 弹窗失败时只能静默退出
             pass
     os._exit(1)
@@ -84,8 +97,4 @@ def crash_text(message: str) -> str:
     """崩溃弹窗的正文：错误、时间、日志位置。"""
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     where = str(_log_file or paths.LOG_DIR)
-    return (
-        f"{message}\n\n"
-        f"{i18n.t('fatal.time_line', value=stamp)}\n"
-        f"{i18n.t('fatal.log_line', value=where)}"
-    )
+    return f"{message}\n\n{_CRASH_TIME}：{stamp}\n{_CRASH_LOG}：{where}"

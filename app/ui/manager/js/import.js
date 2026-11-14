@@ -27,6 +27,7 @@ function openImportModal(taskId) {
     title: T("import.title"),
     body: progressMarkup(),
     dismissible: false,
+    backdropDismissible: false,
     actions: [],
   });
   runImportTask(taskId, []);
@@ -314,6 +315,7 @@ async function runWizardImport() {
     title: T("import.wizard_title"),
     body: progressMarkup(),
     dismissible: false,
+    backdropDismissible: false,
     actions: [],
   });
   runImportTask(started.task_id, Array.from(wizard.tags));

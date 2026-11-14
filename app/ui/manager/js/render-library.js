@@ -252,10 +252,10 @@ function renderAuthorDetail() {
     'maxlength="2000" placeholder="' + esc(T("author.description_placeholder")) + '">' +
     esc(author.description || "") + "</textarea></div></div></section>" +
 
-    '<section class="card card--list"><div class="card-tools"><h3 class="card-title">' +
+    '<section class="card card--list card--works"><div class="card-tools"><h3 class="card-title">' +
     esc(T("author.songs")) + '</h3><span class="detail-hint">' +
     esc(T("author.count", { count: songs.length })) + "</span></div>" +
-    '<ul class="entry-list">' + rows + "</ul></section>";
+    '<ul class="entry-list entry-list--works">' + rows + "</ul></section>";
 }
 
 function renderAuthors() {

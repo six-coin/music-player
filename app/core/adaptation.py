@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from app.models import (
     BASE_MAX,
+    BASE_MIN,
     SKIP_SECONDS_MAX,
     SKIP_SECONDS_MIN,
     WINDOW_MAX,
@@ -62,7 +63,7 @@ def params_from_dict(data: object) -> Params:
     return Params(
         window=window,
         min_plays=_as_int(raw.get("min_plays"), DEFAULT_MIN_PLAYS, 0, window),
-        base=_as_float(raw.get("base"), DEFAULT_BASE, 0.0, BASE_MAX),
+        base=_as_float(raw.get("base"), DEFAULT_BASE, BASE_MIN, BASE_MAX),
         skip_seconds=_as_int(
             raw.get("skip_seconds"), DEFAULT_SKIP_SECONDS, SKIP_SECONDS_MIN, SKIP_SECONDS_MAX
         ),
@@ -86,6 +87,16 @@ def effective(adaptation: Adaptation, defaults: Params) -> Params:
 def sanitize(records: str) -> str:
     """只保留 0/1，防止手改文件带进非法字符。"""
     return "".join(char for char in records if char in "01")
+
+
+def base_percent(base: float) -> int:
+    """存储用的比例 → 界面上的整数百分比（1–99）。"""
+    return min(99, max(1, round(float(base) * 100)))
+
+
+def base_from_percent(percent: float) -> float:
+    """界面上的整数百分比 → 存储用的比例；越界夹取，不做隐式取整。"""
+    return min(BASE_MAX, max(BASE_MIN, float(percent) / 100.0))
 
 
 def skip_probability(records: str, params: Params) -> float:

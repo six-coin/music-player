@@ -44,23 +44,6 @@ Closing the window quits. Next time the manager opens on the overview, and the p
 
 The manager has three columns: navigation on the left, a list in the middle, details on the right.
 
-```
-┌──────┬────────────────────┬──────────────────────────────┐
-│ nav  │ list               │ detail                        │
-│      │                    │                               │
-│ Over │ title + count + new│ editor (cards)                │
-│ Songs│ search             │                               │
-│ Play │ ─────────────      │                               │
-│ Tags │ rows…              │                               │
-│ Art. │                    │                               │
-│      │                    │                               │
-│ ──── │                    │                               │
-│ Set. │ selection bar      │                               │
-├──────┴────────────────────┴──────────────────────────────┤
-│ preview bar (only while previewing)                       │
-└─────────────────────────────────────────────────────────┘
-```
-
 | Area        | Contents                                                                        |
 |-------------|---------------------------------------------------------------------------------|
 | Navigation  | Overview, Songs, Playlists, Tags, Artists, with Settings at the bottom          |
@@ -90,7 +73,7 @@ The wizard:
 Rules:
 
 - "Title - Artist1, Artist2" in a filename is split automatically; unknown artists are created.
-- Deduplication is by content: importing the same audio twice reports "Already in the library" and skips it.
+- Deduplication is by content: importing the same audio twice skips it, and the failure list says "same file as «Title» (identical MD5)". Cleaning strips tag differences, so two files that look different can still land on the same MD5.
 - Audio is stored as `assets\music\{md5}.{ext}`; your original file is left alone.
 - Cleaning (on by default) re-muxes with FFmpeg and drops metadata, so different tagged copies of one song are recognized as the same song. Without FFmpeg the import fails with a message; turn cleaning off in Settings.
 - One failing file does not stop the batch; successes and failures are listed at the end.
@@ -174,7 +157,7 @@ Adaptive skipping filters out songs you keep skipping. It is configured **per pl
 |----------------|---------|----------|-----------------------------------------|
 | History window | 100     | 10–1000  | How many recent plays are kept per song |
 | Minimum plays  | 10      | 0–window | Never skip below this many records      |
-| Skip base      | 0.95    | 0–0.99   | Probability ceiling                     |
+| Skip base      | 95%     | 1–99%    | Probability ceiling                     |
 | Skip threshold | 30      | 5–300 s  | Switching away sooner counts as a skip  |
 
 The rule, for song M in playlist P:
@@ -191,35 +174,20 @@ What gets recorded:
 | Situation                                                  | Record                                    |
 |------------------------------------------------------------|-------------------------------------------|
 | Skipped before the threshold (Next / `Ctrl+C`)             | `1`                                       |
-| Skipped after the threshold                                | `0`                                       |
-| Played to the end                                          | `0`                                       |
+| Skipped after the threshold                                | `0`, full plays +1                        |
+| Played to the end                                          | `0`, full plays +1                        |
 | Skipped automatically                                      | nothing; only the auto-skip counter grows |
 | Previous, clicking the queue, switching playlist, quitting | nothing                                   |
 
 Automatic skipping is **silent**: no toast, no flash, the player simply moves on and marks that row as played.
 
-While "Maintenance · Debug mode" is on, neither player decides nor records anything — useful when troubleshooting.
+"Full plays" is how many times a song was played past the threshold without being switched away **in that playlist**. It is shown in the statistics drawer and never used for the decision.
+
+While "Library manager → Maintenance · Debug mode" is on, neither player decides nor records anything — useful when troubleshooting.
 
 ## 9. Music Player
 
 Three columns: playlists on the left, the current track in the middle, the queue on the right. All settings live in the manager; the player only reads them.
-
-```
-┌──────────────┬────────────────────────────────┬──────────────┐
-│ Playlists    │ Now playing                    │ Up next      │
-│              │                                │              │
-│ Default   37 │   Experience                   │ 1  Yellow    │
-│ Late night12 │   Ludovico Einaudi             │ 2  Aware     │
-│ Commute   28 │                                │ 3  Eternity  │
-│              │   00:42 ─────●──────── 05:44    │ 4  Rapture   │
-│              │                                │              │
-│              │      ⏮    ▶    ⏭   🔀 🔁 🔂     │              │
-│              │                                │              │
-│              │   🔊 ───────●────  80%          │              │
-│              │                                │              │
-│ Mode: shuffle│                                │              │
-└──────────────┴────────────────────────────────┴──────────────┘
-```
 
 | Behaviour                        | Detail                                                           |
 |----------------------------------|------------------------------------------------------------------|
@@ -238,40 +206,29 @@ Closing the window quits. Reopening returns to the last playlist and position, p
 
 Double-click and the default playlist starts. No menu, no picker. Everything is configured in the manager; this program only reads.
 
-```
-┌────────────────────────────────────────────────┐
-│  Now playing                                   │
-│                                                │
-│  Experience                                    │
-│  Ludovico Einaudi                              │
-│                                                │
-│  Playlist  Default playlist          3 / 37    │
-│  Mode      Shuffle                             │
-│  Adaptive  On                                  │
-│                                                │
-│  Ctrl+C skip        Ctrl+Q quit                │
-└────────────────────────────────────────────────┘
-```
+The console draws a single box: title, artist, playlist with "N / M", play mode, the adaptive switch, and a key hint on the last line.
 
 | Behaviour         | Detail                                                                  |
 |-------------------|-------------------------------------------------------------------------|
 | Play modes        | Shuffle or list loop, from the manager's Simple player page             |
-| Volume            | Read once at startup; later changes do not affect a running player      |
+| Volume            | The program never sets it: VLC uses its own level, adjustable from the system mixer |
 | Skip              | `Ctrl+C` moves to the next song without quitting                        |
 | Quit              | `Ctrl+Q`; `Alt+F4` and the window's × also exit cleanly                 |
 | Adaptive skipping | Uses the default playlist's configuration; the screen only shows on/off |
+| Language          | Follows the language chosen in the manager; read once at startup        |
 
 Exit codes: `0` normal, `1` startup failure (no VLC, empty default playlist…), `2` fatal error while running.
 
 ## 11. Integrity check
 
-Reachable from "To review" on the overview and from Settings · Maintenance. The quick check does not read audio; the deep check recomputes every file's MD5, reports progress by bytes, and can be cancelled.
+Reachable from "To review" on the overview and from Settings · Library manager · Maintenance. The quick check does not read audio; the deep check recomputes every file's MD5, then verifies the bitrate with ffprobe, reports progress by bytes, and can be cancelled.
 
 | Category          | What is checked                                                                 | Auto-fix                               |
 |-------------------|---------------------------------------------------------------------------------|----------------------------------------|
 | Missing files     | Record exists, file does not                                                    | No — re-import or replace the source   |
 | Orphan files      | File exists, no record                                                          | Yes — sent to the Recycle Bin          |
 | Content mismatch  | Deep check finds an MD5 that differs from the record                            | No                                     |
+| Fake quality      | The bitrate declared in the file header is far above the effective bitrate (size ÷ duration), or a bitrate written in the title does not match | No — find another source               |
 | Broken references | A song points at a missing artist or tag; a playlist points at a missing object | Yes — the stale references are dropped |
 | Tag constraints   | A required group is empty, a single group has several tags                      | No — jumps to that song                |
 | Stale statistics  | Statistics mention songs that are gone                                          | Yes — pruned against the library       |
@@ -309,14 +266,15 @@ Five pages; changes apply immediately and there is no Save button.
 
 | Page          | Contents                                                                                                                                        |
 |---------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| General       | Theme (light / dark only, no follow-system option), language (sorted by language code), adaptive defaults, preview volume, data and log folders |
-| Simple player | Play mode, default volume, default playlist (read-only, with a link)                                                                            |
-| Player        | Default volume, play mode, remember position                                                                                                    |
-| Import        | Default import folder, clean audio on import, FFmpeg and ffprobe status                                                                         |
-| Maintenance   | Debug mode, integrity check (quick / deep), clean orphan files, clear all statistics, open data and log folders                                 |
-| About         | Data folder (an input box with "Change" and "Reset"), user manual, reset all settings, version                                                  |
+| General         | Theme (light / dark only, no follow-system option), language (sorted by language code), adaptive defaults (window, minimum plays, skip base, skip threshold) |
+| Library manager | Preview volume, import (default folder, clean audio on import, FFmpeg and ffprobe status), maintenance (integrity check, clean orphan files, clear all statistics, open data and log folders, debug mode) |
+| Simple player   | Play mode, default playlist (read-only, with a link)                                                                                            |
+| Player          | Default volume, play mode, remember position                                                                                                    |
+| About           | Data folder (an input box with "Change" and "Reset"), user manual, reset all settings, version                                                  |
 
-Switching the language takes effect immediately: labels and the window title change together. The Music Player and Simple Player read the language at startup, so restart them to follow a change.
+The skip base is a percentage from 1 to 99: the real probability is base × the song's recent skip rate.
+
+Switching the language takes effect immediately: labels, the window title and the sort dropdown change together. The Music Player and Simple Player read the language at startup, so restart them to follow a change.
 
 "Reset all settings" also restores language and appearance; the library, playlists and statistics are untouched. A data folder change appends `music-player` automatically and applies after a restart, moving the old contents (audio included); existing files in the target are never overwritten.
 
@@ -367,7 +325,7 @@ Log files are named by start time, rotate at 5 MB and are kept for 14 days. When
 
 **Import says the format is unsupported.** Only `.mp3` and `.m4a` are accepted; convert anything else first.
 
-**Import says FFmpeg was not found.** Cleaning needs it. Install it, add it to `PATH`, then press "Check again" in Settings · Import — or turn "Clean audio on import" off.
+**Import says FFmpeg was not found.** Cleaning needs it. Install it, add it to `PATH`, then press "Check again" in Settings · Library manager · Import — or turn "Clean audio on import" off.
 
 **The player opens but there is no sound.** Check whether the song is marked "File missing" — the file was moved or renamed. If it is there, check the system volume and the player's own volume.
 
@@ -387,9 +345,9 @@ Log files are named by start time, rotate at 5 MB and are kept for 14 days. When
 - No transcoding. Cleaning only re-muxes; it never changes encoding parameters.
 - The player does not hot-reload: songs imported or playlists edited in the manager appear after a restart.
 - Closing the player can lose up to 2 seconds of position (the close handler does not wait for the page, which would risk a deadlock).
-- The Simple Player has no pause, volume or progress bar, and cannot switch playlists.
+- The Simple Player has no pause, no volume control and no progress bar, and cannot switch playlists.
 - No multi-user, sync or cloud backup.
-- Only Chinese and English are shipped; the Simple Player's console output stays Chinese.
+- Only Chinese and English are shipped; abnormal paths (crash dialogs, logs, integrity reports) stay Chinese.
 
 ## 17. Development
 

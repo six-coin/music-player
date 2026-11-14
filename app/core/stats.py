@@ -27,12 +27,16 @@ class SongStats:
     records: str = ""
     auto_skipped: int = 0
     last_played_at: int = 0
+    #: 完整播放次数：播放时长达到跳过阈值、且不是被切走的那一次。
+    #: 与自适应判定无关，只用来回答「这首歌我完整听过几次」。
+    full_plays: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "records": self.records,
             "auto_skipped": self.auto_skipped,
             "last_played_at": self.last_played_at,
+            "full_plays": self.full_plays,
         }
 
     @classmethod
@@ -40,10 +44,12 @@ class SongStats:
         records = raw.get("records")
         auto_skipped = raw.get("auto_skipped")
         last_played_at = raw.get("last_played_at")
+        full_plays = raw.get("full_plays")
         return cls(
             records=sanitize(records) if isinstance(records, str) else "",
             auto_skipped=auto_skipped if isinstance(auto_skipped, int) else 0,
             last_played_at=last_played_at if isinstance(last_played_at, int) else 0,
+            full_plays=max(0, full_plays) if isinstance(full_plays, int) else 0,
         )
 
 
@@ -79,12 +85,18 @@ class StatsStore:
         atomic.write_json(self.path_for(playlist_uid), payload)
 
     def record(self, playlist_uid: str, md5: str, skipped: bool, window: int) -> None:
-        """一次播放结束调用一次；窗口与锁都在这里收口。"""
+        """一次播放结束调用一次；窗口与锁都在这里收口。
+
+        ``skipped`` 由调用方按 ``skip_seconds`` 判定：自然播完永远是「没跳过」，
+        手动切歌则看播放秒数够不够。没跳过的那一次同时累加完整播放次数。
+        """
         lock_path = paths.lock_for(self.path_for(playlist_uid))
         with exclusive(lock_path):
             songs = self.load(playlist_uid)
             entry = songs.setdefault(md5, SongStats())
             entry.records = push(entry.records, skipped, window)
+            if not skipped:
+                entry.full_plays += 1
             entry.last_played_at = int(time.time())
             self.save(playlist_uid, songs)
 
@@ -153,6 +165,7 @@ class StatsStore:
                     merged = merged[-window:]
                 current.records = merged
                 current.auto_skipped += moved.auto_skipped
+                current.full_plays += moved.full_plays
                 current.last_played_at = max(current.last_played_at, moved.last_played_at)
             self.save(playlist_uid, songs)
             return True
@@ -183,7 +196,7 @@ class StatsStore:
             return len(stale)
 
     def summary(self, playlist_uid: str) -> dict[str, dict[str, float | int | str]]:
-        """给界面用的扁平摘要：记录数、跳过数、跳过率、自动跳过次数。"""
+        """给界面用的扁平摘要：记录数、跳过数、跳过率、自动跳过次数、完整播放次数。"""
         result: dict[str, dict[str, float | int | str]] = {}
         for md5, item in self.load(playlist_uid).items():
             result[md5] = {
@@ -192,6 +205,7 @@ class StatsStore:
                 "skips": item.records.count("1"),
                 "rate": skip_rate(item.records),
                 "auto_skipped": item.auto_skipped,
+                "full_plays": item.full_plays,
                 "last_played_at": item.last_played_at,
             }
         return result

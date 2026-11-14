@@ -7,6 +7,9 @@
 （``east_asian_width`` 为 ``A``）的字符也按两列算：中文环境下控制台把 ``…``
 ``·`` 这类字符渲染成两格，按一格算会让整行短一格，右边的竖线就歪了。
 方框线本身不参与计算，它是固定宽度拼上去的。
+
+文案全部来自语言包：字段名列宽按当前语言里最长的字段名算，英文的 ``Playlist``
+比中文的「歌单」宽，写死列宽会让英文界面错位。
 """
 
 from __future__ import annotations
@@ -16,6 +19,8 @@ import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TextIO
+
+from app import i18n
 
 RESET = "\x1b[0m"
 CYAN = "\x1b[36m"
@@ -28,9 +33,7 @@ CLEAR = "\x1b[H\x1b[J"  # 回到左上角，清到屏幕末尾
 
 WIDTH = 48  # 框内宽度，含左右各两个空格的内边距
 INSET = 2
-LABEL_WIDTH = 6  # 字段名列宽：歌单 / 模式 / 自适应 的值从同一列开始
-
-ORDER_LABELS = {"shuffle": "随机", "list_loop": "列表循环"}
+LABEL_GAP = 2  # 字段名与值之间的间距
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,8 +89,8 @@ def _border(left: str, right: str) -> str:
     return f"{CYAN}{left}{'─' * WIDTH}{right}{RESET}"
 
 
-def _pair(label: str, value: str, right: str = "") -> str:
-    head = f"{' ' * INSET}{label}{' ' * max(0, LABEL_WIDTH - width(label))}  "
+def _pair(label: str, value: str, right: str, label_width: int) -> str:
+    head = f"{' ' * INSET}{label}{' ' * max(0, label_width - width(label))}{' ' * LABEL_GAP}"
     tail = f"{right}{' ' * INSET}" if right else ""
     room = WIDTH - width(head) - width(tail) - 2
     value = clip(value, max(1, room))
@@ -95,24 +98,48 @@ def _pair(label: str, value: str, right: str = "") -> str:
     return _row([(head, BLUE), (value, WHITE), (" " * max(0, gap), ""), (tail, GRAY)])
 
 
+def _order_label(order: str) -> str:
+    """播放模式的显示名；语言包里没有这个模式就退回原始值。"""
+    key = f"simple.order.{order}"
+    label = i18n.t(key)
+    return order if label == key else label
+
+
 def draw(state: NowPlaying, warning: str = "") -> str:
     """整屏内容；行尾统一 ``\\r\\n``，控制台里才不会出现阶梯状错位。"""
+    labels = (
+        i18n.t("simple.playlist"),
+        i18n.t("simple.mode"),
+        i18n.t("simple.adaptation"),
+    )
+    label_width = max(width(label) for label in labels)
+
     lines: list[str] = []
     if warning:
         lines.append(f"{YELLOW}{clip(warning, WIDTH + 2)}{RESET}")
     lines.extend(
         [
             _border("┌", "┐"),
-            _row([(f"{' ' * INSET}正在播放", CYAN)]),
+            _row([(f"{' ' * INSET}{i18n.t('simple.now_playing')}", CYAN)]),
             _row([("", "")]),
             _row([(f"{' ' * INSET}{clip(state.title, WIDTH - INSET * 2)}", WHITE)]),
             _row([(f"{' ' * INSET}{clip(state.author, WIDTH - INSET * 2)}", GRAY)]),
             _row([("", "")]),
-            _pair("歌单", state.playlist, f"第 {state.index} / {state.total} 首"),
-            _pair("模式", ORDER_LABELS.get(state.order, state.order)),
-            _pair("自适应", "开" if state.adaptation else "关"),
+            _pair(
+                labels[0],
+                state.playlist,
+                i18n.t("simple.position", index=state.index, total=state.total),
+                label_width,
+            ),
+            _pair(labels[1], _order_label(state.order), "", label_width),
+            _pair(
+                labels[2],
+                i18n.t("simple.on") if state.adaptation else i18n.t("simple.off"),
+                "",
+                label_width,
+            ),
             _row([("", "")]),
-            _row([(f"{' ' * INSET}Ctrl+C 跳过        Ctrl+Q 退出", GRAY)]),
+            _row([(f"{' ' * INSET}{clip(i18n.t('simple.keys'), WIDTH - INSET * 2)}", GRAY)]),
             _border("└", "┘"),
         ]
     )

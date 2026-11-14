@@ -13,9 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 def _run() -> None:
     from app import bootstrap
-    from app.ui.manager.app import main
 
-    bootstrap.guard(main, "manager")
+    # 传模块名而不是函数：界面库缺失这类导入错误也要落到 guard 里。
+    bootstrap.guard("app.ui.manager.app", "manager")
 
 
 if __name__ == "__main__":

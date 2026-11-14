@@ -1,7 +1,7 @@
 """主题解析。
 
-设置里只存 ``light`` / ``dark``；窗口背景色与网页需要的就是这两个值。旧配置
-里的 ``system`` 在读取时按当时的系统偏好定一次，之后不再随系统变化。
+设置里只存 ``light`` / ``dark``；窗口背景色与网页需要的就是这两个值。
+系统偏好只在第一次启动时读一次（``settings.defaults()``），之后不再跟随。
 """
 
 from __future__ import annotations
@@ -26,7 +26,6 @@ def system_theme() -> str:
         return "light"
 
 
-def resolve(theme: str) -> str:
-    if theme == "system":
-        return system_theme()
+def resolve(theme: object) -> str:
+    """任何不是 light / dark 的值都按浅色处理。"""
     return theme if theme in ("light", "dark") else "light"

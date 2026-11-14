@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import ctypes
+import importlib
 import json
 import os
 import subprocess
@@ -98,10 +99,15 @@ def info(message: str, title: str = "") -> None:
         pass
 
 
-def guard(main, name: str) -> None:
-    """入口的最后一道防线：任何未捕获异常都变成「错误 + 时间 + 日志路径」弹窗。"""
+def guard(module: str, name: str) -> None:
+    """入口的最后一道防线：任何未捕获异常都变成「错误 + 时间 + 日志路径」弹窗。
+
+    模块名而不是函数对象：入口自己 ``import`` 的时候，界面库缺失这类错误会在
+    ``guard`` 之外抛出去，``.pyw`` 没有控制台，用户看到的就是「双击没反应」。
+    """
     try:
-        main()
+        target = importlib.import_module(module)
+        target.main()
     except SystemExit:
         raise
     except Exception as error:  # noqa: BLE001 - 这里就是要兜住一切
@@ -109,10 +115,6 @@ def guard(main, name: str) -> None:
             from app import logging_setup
 
             logging_setup.setup(name)
-            # 弹窗要说用户选的语言：这里可能发生在读配置之前，先同步一次。
-            sync_language()
-            logging_setup.fatal(
-                i18n.t("fatal.unexpected", error=f"{type(error).__name__}: {error}")
-            )
+            logging_setup.fatal(logging_setup.unexpected_text(type(error), error))
         except Exception:  # 连日志都起不来时只能静默退出
             os._exit(1)

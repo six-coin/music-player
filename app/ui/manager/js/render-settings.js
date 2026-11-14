@@ -1,4 +1,7 @@
-/* 设置页：五个分页的渲染与逐项写回。 */
+/* 设置页：五个分页的渲染与逐项写回。
+   分页顺序：通用 → 音乐库管理器 → 轻量音乐播放器 → 音乐播放器 → 关于。
+   管理器自己的东西（试听、导入、维护）都在「音乐库管理器」里，通用页只放
+   三端共享的外观与自适应默认值。 */
 /* ---------- 设置 ---------- */
 
 function settingsRow(title, hint, control, hintClass) {
@@ -33,10 +36,6 @@ function switchMarkup(attr, on, label) {
 function settingsGeneral() {
   const common = (state.data.settings && state.data.settings.common) || {};
   const adapt = common.adaptation || {};
-  const status = state.data.status || {};
-  const auditionVolume = Math.round(
-    (((state.data.settings || {}).audition || {}).volume ?? 0.2) * 100
-  );
 
   const themes = [
     ["light", T("settings.theme_light")],
@@ -54,12 +53,12 @@ function settingsGeneral() {
       .join("") +
     "</div>";
 
-  const adaptRow = function (key, label, unit, min, max, step) {
+  const adaptRow = function (key, label, unit, min, max, step, value) {
     return settingsRow(
       label,
-      T("adaptation.range", { min: min, max: max }),
+      T("adaptation." + key + "_hint") + " · " + T("adaptation.range", { min: min, max: max }),
       '<input class="input" type="number" data-default="' + key + '" value="' +
-        esc(adapt[key]) + '" min="' + min + '" max="' + max + '" step="' + step +
+        esc(value) + '" min="' + min + '" max="' + max + '" step="' + step +
         '" style="width:110px"><span class="adapt-unit">' + esc(unit) + "</span>"
     );
   };
@@ -89,38 +88,35 @@ function settingsGeneral() {
     ) +
     settingsCard(
       T("settings.adaptation_defaults"),
-      adaptRow("window", T("adaptation.window"), T("adaptation.times"), 10, 1000, 1) +
-        adaptRow("min_plays", T("adaptation.min_plays"), T("adaptation.times"), 0, 1000, 1) +
-        adaptRow("base", T("adaptation.base"), "", 0, 0.99, 0.01) +
-        adaptRow("skip_seconds", T("adaptation.skip_seconds"), T("adaptation.seconds"), 5, 300, 1),
+      adaptRow("window", T("adaptation.window"), T("adaptation.times"), 10, 1000, 1, adapt.window) +
+        adaptRow(
+          "min_plays",
+          T("adaptation.min_plays"),
+          T("adaptation.times"),
+          0,
+          1000,
+          1,
+          adapt.min_plays
+        ) +
+        adaptRow(
+          "base",
+          T("adaptation.base"),
+          T("adaptation.percent"),
+          1,
+          99,
+          1,
+          Math.round((adapt.base === undefined ? 0.95 : adapt.base) * 100)
+        ) +
+        adaptRow(
+          "skip_seconds",
+          T("adaptation.skip_seconds"),
+          T("adaptation.seconds"),
+          5,
+          300,
+          1,
+          adapt.skip_seconds
+        ),
       T("settings.adaptation_hint")
-    ) +
-    settingsCard(
-      T("settings.audition"),
-      settingsRow(
-        T("settings.audition_volume"),
-        T("settings.audition_volume_hint"),
-        '<div class="volume-line"><input class="range" id="audition-default" type="range" ' +
-          'min="0" max="100" step="1" value="' + auditionVolume + '">' +
-          '<span class="volume-value" id="audition-default-value">' + auditionVolume + "%</span></div>"
-      )
-    ) +
-    settingsCard(
-      T("settings.paths"),
-      settingsRow(
-        T("settings.data_dir"),
-        status.data_dir || "",
-        '<button class="btn ghost small" data-action="data_dir">' +
-          esc(T("action.open")) + "</button>",
-        "path-text"
-      ) +
-        settingsRow(
-          T("settings.log_dir"),
-          status.log_dir || "",
-          '<button class="btn ghost small" data-action="log_dir">' +
-            esc(T("action.open")) + "</button>",
-          "path-text"
-        )
     )
   );
 }
@@ -174,7 +170,6 @@ function settingsImport() {
 
 function settingsSimple() {
   const section = (state.data.settings && state.data.settings.simple) || {};
-  const volume = Math.round((section.volume === undefined ? 0.2 : section.volume) * 100);
   return settingsCard(
     T("settings.simple_section"),
     settingsRow(
@@ -189,13 +184,6 @@ function settingsSimple() {
           section.order || "shuffle",
           ""
         )
-      ) +
-      settingsRow(
-        T("settings.simple_volume"),
-        T("settings.simple_volume_hint"),
-        '<div class="volume-line"><input class="range" id="simple-volume" type="range" ' +
-          'min="0" max="100" step="1" value="' + volume + '">' +
-          '<span class="volume-value" id="simple-volume-value">' + volume + "%</span></div>"
       ) +
       settingsRow(
         T("settings.default_playlist"),
@@ -246,17 +234,26 @@ function settingsPlayer() {
   );
 }
 
-function settingsMaintenance() {
-  const debugOn = ((state.data.settings || {}).common || {}).debug === true;
+/* 「音乐库管理器」页：只属于管理器的几件事——试听、导入、维护。
+   维护卡片里放完整性检查、孤儿文件、统计与目录，还有调试状态。 */
+function settingsManager() {
+  const data = state.data || {};
+  const audition = (data.settings || {}).audition || {};
+  const auditionVolume = Math.round((audition.volume ?? 0.2) * 100);
+  const debugOn = ((data.settings || {}).common || {}).debug === true;
+
   return (
     settingsCard(
-      T("settings.debug_section"),
+      T("settings.audition"),
       settingsRow(
-        T("settings.debug"),
-        T("settings.debug_hint"),
-        switchMarkup('data-setting-switch="common.debug"', debugOn, T("settings.debug"))
+        T("settings.audition_volume"),
+        T("settings.audition_volume_hint"),
+        '<div class="volume-line"><input class="range" id="audition-default" type="range" ' +
+          'min="0" max="100" step="1" value="' + auditionVolume + '">' +
+          '<span class="volume-value" id="audition-default-value">' + auditionVolume + "%</span></div>"
       )
     ) +
+    settingsImport() +
     settingsCard(
       T("settings.maintenance_section"),
       settingsRow(
@@ -286,6 +283,11 @@ function settingsMaintenance() {
             esc(T("settings.data_dir")) + "</button>" +
             '<button class="btn ghost small" data-action="log_dir">' +
             esc(T("settings.log_dir")) + "</button>"
+        ) +
+        settingsRow(
+          T("settings.debug"),
+          T("settings.debug_hint"),
+          switchMarkup('data-setting-switch="common.debug"', debugOn, T("settings.debug"))
         )
     )
   );
@@ -335,10 +337,9 @@ function renderSettings(animate) {
   });
   const body = qs("#settings-body");
   if (!state.data) return;
-  if (state.settingsTab === "import") body.innerHTML = settingsImport();
+  if (state.settingsTab === "manager") body.innerHTML = settingsManager();
   else if (state.settingsTab === "simple") body.innerHTML = settingsSimple();
   else if (state.settingsTab === "player") body.innerHTML = settingsPlayer();
-  else if (state.settingsTab === "maintenance") body.innerHTML = settingsMaintenance();
   else if (state.settingsTab === "about") body.innerHTML = settingsAbout();
   else body.innerHTML = settingsGeneral();
 

@@ -1,7 +1,7 @@
 """完整性检查与自动修复。
 
 快速档只看记录与文件、引用与约束是否自洽；深检会把每个音频重算一遍 MD5，
-按字节数报进度，允许中途取消。
+再用 ffprobe 核一遍码率（检测虚标），按字节数报进度，允许中途取消。
 
 报告里的 ``items`` 是给人看的字符串，修复动作不依赖它们——修复按类别重新扫一遍
 现状再动手，这样即使用户在弹窗开着的时候改了库，也不会修错东西。
@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -19,9 +20,17 @@ from app.core.importer import file_md5
 from app.core.library import Library
 from app.core.playlists import PlaylistStore
 from app.core.stats import StatsStore
-from app.system import recycle
+from app.system import ffmpeg, recycle
 
 FIXABLE = ("orphan_file", "broken_reference", "stats_residue")
+
+#: 声明码率与实际码率相差超过这个比例就算虚标。VBR 与容器开销本来就会让两个
+#: 数不完全相等，放宽一点比误报更划算。
+BITRATE_TOLERANCE = 0.15
+#: 名字里写着的规格，例如「320kbps」。只认显式写了 kbps 的，避免把
+#: 「24K Magic」这类歌名当成码率声明。
+_BITRATE_CLAIM = re.compile(r"(\d{2,4})\s*kbps", re.IGNORECASE)
+_CLAIMED_VALUES = {64, 96, 128, 160, 192, 224, 256, 320, 500, 900, 1000}
 
 Progress = Callable[[int, int, str], None]
 Cancel = Callable[[], bool]
@@ -149,27 +158,101 @@ def _stats_residue(
     return items
 
 
-def _content_mismatch(
-    library: Library, progress: Progress | None, cancel: Cancel | None
-) -> list[str]:
-    items: list[str] = []
-    targets = []
+def _audio_targets(library: Library) -> tuple[list[tuple[Any, Any, int]], int]:
+    """深检要读的全部文件与总字节数；文件不在的交给「文件缺失」，这里跳过。"""
+    targets: list[tuple[Any, Any, int]] = []
     total = 0
     for music in library.musics.values():
         path = paths.music_path(music.md5, music.ext)
         try:
             size = path.stat().st_size
         except OSError:
-            continue  # 文件不在或读不到：归「文件缺失」，不在这里重复报
+            continue
         targets.append((music, path, size))
         total += size
+    return targets, total
+
+
+def _format_bitrate(value: float) -> str:
+    return f"{value / 1000:.0f} kbps" if value >= 1000 else f"{value:.0f} bps"
+
+
+def _claimed_bitrate(names: list[str]) -> int:
+    """歌名里写死的码率规格，例如「320kbps」；没写就是 0。"""
+    for name in names:
+        match = _BITRATE_CLAIM.search(name)
+        if match:
+            value = int(match.group(1))
+            if value in _CLAIMED_VALUES:
+                return value
+    return 0
+
+
+def _fake_quality(
+    targets: list[tuple[Any, Any, int]],
+    progress: Progress | None,
+    cancel: Cancel | None,
+    span: int,
+    offset: int,
+    weight: float,
+) -> list[str]:
+    """虚标检测：文件头声明的码率 vs「文件大小 ÷ 时长」算出来的实际码率。
+
+    声明的码率来自容器与帧头，一个被重新压缩过、却仍标着 320kbps 的文件，两个
+    数会差出好几倍。歌名里显式写了码率的也一起比。ffprobe 不可用时整项跳过。
+
+    进度按字节报，``weight`` 决定这一段占整条进度条的多少：和重算 MD5 的
+    那一段共用同一个总量，进度条才会一路走到底，不会先满一次再回零。
+    """
+    if ffmpeg.ffprobe_path() is None:
+        return []
+
+    items: list[str] = []
+    done = 0
+    for music, path, size in targets:
+        if cancel is not None and cancel():
+            break
+        if progress is not None:
+            progress(offset + int(done * weight), span, music.title)
+        params = ffmpeg.probe_stream(path)
+        done += size
+        if not params:
+            continue
+        duration = float(params.get("duration") or 0)
+        if duration <= 0:
+            continue
+
+        effective = size * 8 / duration
+        declared = float(params.get("bit_rate") or params.get("container_bit_rate") or 0)
+        if declared > 0 and effective > 0 and declared > effective * (1 + BITRATE_TOLERANCE):
+            items.append(
+                f"{music.title}：码率虚标"
+                f"（声明 {_format_bitrate(declared)}，实际 {_format_bitrate(effective)}）"
+            )
+            continue
+
+        claim = _claimed_bitrate(music.names)
+        if claim and effective < claim * 1000 * (1 - BITRATE_TOLERANCE):
+            items.append(f"{music.title}：标称 {claim} kbps，实际只有 {_format_bitrate(effective)}")
+    return items
+
+
+def _content_mismatch(
+    targets: list[tuple[Any, Any, int]],
+    progress: Progress | None,
+    cancel: Cancel | None,
+    offset: int,
+    span: int,
+    weight: float,
+) -> list[str]:
+    items: list[str] = []
     done = 0
 
     for music, path, size in targets:
         if cancel is not None and cancel():
             break
         if progress is not None:
-            progress(done, total, music.title)
+            progress(offset + int(done * weight), span, music.title)
         try:
             actual = file_md5(path)
         except OSError as error:
@@ -179,8 +262,6 @@ def _content_mismatch(
             items.append(f"{music.title}：文件内容与记录不符")
         done += size
 
-    if progress is not None:
-        progress(total, total, "")
     return items
 
 
@@ -222,13 +303,30 @@ def deep_check(
     progress: Progress | None = None,
     cancel: Cancel | None = None,
 ) -> dict[str, Any]:
-    """在快速检查之上，把每个文件重算一遍 MD5。"""
+    """在快速检查之上，把每个文件重算一遍 MD5，并检测规格虚标。
+
+    两段都按字节报进度，但共用同一个总量：前半段查虚标（要跑 ffprobe），
+    后半段重算 MD5，进度条一路走到 100%。ffprobe 不可用时只剩后半段。
+    """
     base = check(library, playlists, stats)
-    mismatch = _content_mismatch(library, progress, cancel)
+    targets, total = _audio_targets(library)
+    quality = ffmpeg.ffprobe_path() is not None
+
+    if quality:
+        fake = _fake_quality(targets, progress, cancel, total, 0, 0.5)
+        if fake:
+            base["sections"].append({"key": "fake_quality", "fixable": False, "items": fake})
+            base["ok"] = False
+            base["count"] += len(fake)
+
+    offset, weight = (total // 2, 0.5) if quality else (0, 1.0)
+    mismatch = _content_mismatch(targets, progress, cancel, offset, total, weight)
     if mismatch:
         base["sections"].append({"key": "content_mismatch", "fixable": False, "items": mismatch})
         base["ok"] = False
         base["count"] += len(mismatch)
+    if progress is not None:
+        progress(total, total, "")
     return base
 
 

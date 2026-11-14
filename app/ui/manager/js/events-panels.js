@@ -79,22 +79,20 @@ function bindPanelEvents() {
       await patchSetting("player.volume", Number(event.target.value) / 100);
       return;
     }
-    if (event.target.id === "simple-volume") {
-      await patchSetting("simple.volume", Number(event.target.value) / 100);
-      return;
-    }
     if (event.target.id === "audition-default") {
       await patchSetting("audition.volume", Number(event.target.value) / 100);
       return;
     }
     const field = event.target.closest("[data-default]");
     if (field) {
+      const key = field.dataset.default;
       const value = Number(field.value);
       if (!Number.isFinite(value)) {
         renderSettings();
         return;
       }
-      await patchSetting("common.adaptation." + field.dataset.default, value);
+      // 跳过基数在界面上是 1–99 的百分比，存的是 0.01–0.99 的比例。
+      await patchSetting("common.adaptation." + key, key === "base" ? value / 100 : value);
     }
   });
 
@@ -107,11 +105,6 @@ function bindPanelEvents() {
   settingsBody.addEventListener("input", function (event) {
     if (event.target.id === "player-volume") {
       const label = qs("#player-volume-value");
-      if (label) label.textContent = event.target.value + "%";
-      return;
-    }
-    if (event.target.id === "simple-volume") {
-      const label = qs("#simple-volume-value");
       if (label) label.textContent = event.target.value + "%";
       return;
     }
@@ -193,7 +186,7 @@ function bindPanelEvents() {
         await navigator.clipboard.writeText(copy.dataset.copy);
         toast(T("action.copied"));
       } catch (error) {
-        toast(String(error), false);
+        toast("复制失败：" + String(error), false);
       }
       return;
     }

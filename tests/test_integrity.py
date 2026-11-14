@@ -174,7 +174,8 @@ def test_deep_check_passes_for_matching_file(tmp_path, music_factory):
     assert report["ok"] is True
 
 
-def test_deep_check_reports_progress(tmp_path, music_factory):
+def test_deep_check_reports_progress(tmp_path, music_factory, monkeypatch):
+    monkeypatch.setattr(integrity.ffmpeg, "ffprobe_path", lambda: None)
     library = make_library(tmp_path)
     paths.MUSIC_DIR.mkdir(parents=True)
     temp = tmp_path / "payload.bin"
@@ -188,3 +189,45 @@ def test_deep_check_reports_progress(tmp_path, music_factory):
 
     assert seen[0] == (0, len(b"payload"))
     assert seen[-1][0] == seen[-1][1]
+
+
+def test_deep_check_flags_declared_bitrate_that_does_not_match(
+    tmp_path, music_factory, monkeypatch
+):
+    library = make_library(tmp_path)
+    paths.MUSIC_DIR.mkdir(parents=True)
+    music = music_factory("a")
+    # 10 秒、约 12 KB：实际只有 10 kbps 左右，帧头却声明 320 kbps。
+    paths.music_path(music.md5, music.ext).write_bytes(b"x" * 12000)
+    library.upsert_music(music)
+    monkeypatch.setattr(integrity.ffmpeg, "ffprobe_path", lambda: "ffprobe")
+    monkeypatch.setattr(
+        integrity.ffmpeg,
+        "probe_stream",
+        lambda path: {"bit_rate": 320000, "duration": 10.0, "size": 12000},
+    )
+
+    report = integrity.deep_check(library)
+
+    section = next(item for item in report["sections"] if item["key"] == "fake_quality")
+    assert section["fixable"] is False
+    assert "码率虚标" in section["items"][0]
+    assert "320 kbps" in section["items"][0]
+
+
+def test_deep_check_accepts_honest_bitrate(tmp_path, music_factory, monkeypatch):
+    library = make_library(tmp_path)
+    paths.MUSIC_DIR.mkdir(parents=True)
+    music = music_factory("a")
+    paths.music_path(music.md5, music.ext).write_bytes(b"x" * 12000)
+    library.upsert_music(music)
+    monkeypatch.setattr(integrity.ffmpeg, "ffprobe_path", lambda: "ffprobe")
+    monkeypatch.setattr(
+        integrity.ffmpeg,
+        "probe_stream",
+        lambda path: {"bit_rate": 9600, "duration": 10.0, "size": 12000},
+    )
+
+    report = integrity.deep_check(library)
+
+    assert "fake_quality" not in keys(report)

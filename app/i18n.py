@@ -35,7 +35,8 @@ def _read(language: str) -> dict[str, str]:
         with open(path, encoding="utf-8") as handle:
             data = json.load(handle)
     except (OSError, json.JSONDecodeError):
-        data = {}
+        # 读失败不进缓存：一次临时的权限/占用问题不该让整个进程永远只剩键名。
+        return {}
     table = {str(key): str(value) for key, value in data.items()}
     _cache[language] = table
     return table

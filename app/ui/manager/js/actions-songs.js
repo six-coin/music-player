@@ -508,9 +508,21 @@ function confirmDeleteSongs(md5s) {
     ? T("song.delete_confirm", { title: one.title })
     : T("song.delete_batch_confirm", { count: list.length });
 
+  // 歌曲的从属关系是「在哪些歌单里」：删掉之后这些歌单会各少一首。
+  const playlists = [];
+  const seen = new Set();
+  list.forEach(function (md5) {
+    playlistsWithSong(md5).forEach(function (playlist) {
+      if (seen.has(playlist.uid)) return;
+      seen.add(playlist.uid);
+      playlists.push(playlist);
+    });
+  });
+
   openModal({
     title: one ? T("song.delete") : T("song.delete_batch", { count: list.length }),
-    body: '<p class="modal-note">' + esc(text) + "</p>",
+    body:
+      '<p class="modal-note">' + esc(text) + "</p>" + dependencyMarkup(playlistDeps(playlists)),
     actions: [
       { label: T("action.cancel"), onClick: closeModal },
       {

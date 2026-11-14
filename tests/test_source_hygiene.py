@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from pathlib import Path
 
 from app import paths
 
@@ -32,9 +33,21 @@ def test_system_has_no_ui_imports():
         assert not bad, f"{path.name} 引入了界面库：{bad}"
 
 
-def test_no_working_directory_changes():
+def test_working_directory_is_pinned_in_one_place():
+    """cwd 是进程级全局状态：只允许 ``paths`` 在导入时钉一次，别处不许改。"""
+    allowed = paths.PACKAGE_DIR / "paths.py"
     for path in paths.PACKAGE_DIR.rglob("*.py"):
+        if path == allowed:
+            continue
         assert "os.chdir" not in path.read_text(encoding="utf-8"), path.name
+
+    text = allowed.read_text(encoding="utf-8")
+    assert text.count("os.chdir") == 1
+    assert "use_program_dir_as_cwd()" in text
+
+
+def test_cwd_is_the_program_dir():
+    assert Path.cwd().resolve() == paths.PROGRAM_DIR.resolve()
 
 
 def test_manager_entry_stays_thin():

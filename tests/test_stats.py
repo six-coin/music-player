@@ -66,3 +66,44 @@ def test_summary_reports_rate(tmp_path):
     assert summary["total"] == 2
     assert summary["skips"] == 1
     assert summary["rate"] == 0.5
+
+
+def test_full_plays_counts_only_unskipped_runs(tmp_path):
+    store = StatsStore(tmp_path / "stats")
+    for skipped in (True, False, True, False, False):
+        store.record(PLAYLIST, SONG, skipped=skipped, window=100)
+
+    entry = store.load(PLAYLIST)[SONG]
+
+    assert entry.records == "10100"
+    assert entry.full_plays == 3
+    assert store.summary(PLAYLIST)[SONG]["full_plays"] == 3
+
+
+def test_full_plays_survive_reload_and_merge_on_replace(tmp_path):
+    store = StatsStore(tmp_path / "stats")
+    store.record(PLAYLIST, SONG, skipped=False, window=100)
+    other = "t" * 32
+    store.record(PLAYLIST, other, skipped=False, window=100)
+
+    assert store.move_key(PLAYLIST, other, SONG, 100) is True
+
+    entry = store.load(PLAYLIST)[SONG]
+    assert entry.full_plays == 2
+    assert entry.records == "00"
+
+
+def test_missing_full_plays_field_defaults_to_zero(tmp_path):
+    import json
+
+    store = StatsStore(tmp_path / "stats")
+    store.directory.mkdir(parents=True, exist_ok=True)
+    store.path_for(PLAYLIST).write_text(
+        json.dumps({"version": 1, "playlist": PLAYLIST, "songs": {SONG: {"records": "01"}}}),
+        encoding="utf-8",
+    )
+
+    entry = store.load(PLAYLIST)[SONG]
+
+    assert entry.full_plays == 0
+    assert entry.records == "01"

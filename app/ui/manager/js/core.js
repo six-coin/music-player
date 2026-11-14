@@ -56,8 +56,9 @@ async function call(method) {
   try {
     return await api[method].apply(api, args);
   } catch (error) {
+    // 异常路径不走语言包：这里看到的是 Python 抛出来的原始原因，中文前缀够定位了。
     console.error(method, error);
-    toast(String(error), false);
+    toast("操作失败：" + String(error), false);
     return null;
   }
 }

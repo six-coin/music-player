@@ -20,7 +20,7 @@ from typing import Protocol
 
 from loguru import logger
 
-from app import bootstrap, logging_setup, paths
+from app import bootstrap, i18n, logging_setup, paths
 from app.cli import console, render
 from app.cli.console import Action
 from app.core import adaptation
@@ -37,12 +37,9 @@ from app.system import vlc
 from app.system.single_instance import SingleInstance
 
 INSTANCE_NAME = "MusicPlayerSimple"
-DEFAULT_PLAYLIST_LABEL = "默认歌单"
-UNKNOWN_AUTHOR = "未知作者"
 POLL_MS = 120
 START_TIMEOUT_SECONDS = 5.0
 END_GRACE_SECONDS = 0.4
-SETTINGS_WARNING = "设置文件损坏，已使用默认值（详见日志）"
 
 
 class Outcome(Enum):
@@ -91,7 +88,7 @@ class Session:
     ) -> None:
         self._deps = deps
         self._uid = playlist.uid
-        self._name = playlist.name or DEFAULT_PLAYLIST_LABEL
+        self._name = playlist.name or i18n.t("overview.default_playlist")
         self._adaptation_on = playlist.adaptation.enabled
         self._params = params
         self._order = order
@@ -174,9 +171,12 @@ class Session:
 
     def _state(self, music: Music, index: int, total: int) -> render.NowPlaying:
         authors = self._deps.library.music_authors(music)
+        author = (
+            i18n.t("list.separator").join(authors) if authors else i18n.t("common.unknown_author")
+        )
         return render.NowPlaying(
             title=music.title,
-            author="、".join(authors) if authors else UNKNOWN_AUTHOR,
+            author=author,
             playlist=self._name,
             index=index,
             total=total,
@@ -240,11 +240,13 @@ class Session:
 
 
 def main() -> int:
+    # 先把语言定下来：下面的提示可能发生在读设置之前，用户该看到自己的语言。
+    bootstrap.sync_language()
     warnings = bootstrap.prepare()
     if bootstrap.is_first_run():
         # 第一次运行还没有配置：先把管理器拉起来做初始设置。
         bootstrap.launch_manager("simple")
-        _say("这是第一次运行，正在打开管理器完成初始设置……")
+        _say(i18n.t("simple.first_run"))
         return 0
 
     log_file = logging_setup.setup("simple")
@@ -256,14 +258,14 @@ def main() -> int:
     instance = SingleInstance(INSTANCE_NAME)
     if not instance.acquire():
         logger.info("已有实例在运行，退出本次启动")
-        _say("simple 已经在运行。")
+        _say(i18n.t("simple.already_running"))
         return 0
 
     try:
         return _run(log_file)
     except Exception:
         logger.exception("simple 运行中失败")
-        _say(f"程序遇到未处理的错误，详见日志：{log_file}")
+        _say(i18n.t("simple.crashed", log=log_file))
         return 2
     finally:
         instance.release()
@@ -288,31 +290,29 @@ def _run(log_file: Path) -> int:
         content = playlists.resolve(playlist.uid, library)
     except AppError as error:
         logger.error("读取音乐库或歌单失败：{}", error)
-        _say(f"读取音乐库失败：{error}")
+        _say(i18n.t("simple.load_failed", error=error))
         _wait_key()
         return 1
 
     songs = list(dict.fromkeys(play_order(content, library)))
     if not songs:
         logger.info("默认歌单为空，退出")
-        _say("默认歌单里还没有歌曲，请先在管理器中导入。")
+        _say(i18n.t("simple.empty_playlist"))
         _wait_key()
         return 1
 
     order = str(settings.get("simple", "order", default="shuffle"))
-    # 音量只在启动时读一次：simple 播放中不跟随设置变化，避免用户改配置时声音忽大忽小。
-    volume = float(settings.get("simple", "volume", default=0.2))
     params = adaptation.params_from_dict(settings.get("common", "adaptation", default={}))
-    warning = SETTINGS_WARNING if warnings else ""
+    warning = i18n.t("simple.settings_warning") if warnings else ""
 
     stats = StatsStore(paths.STATS_DIR)
-    player = vlc.VlcPlayer(volume=volume)
+    player = vlc.VlcPlayer()
     screen = render.Screen()
     try:
         player.open()
     except vlc.VlcUnavailable as error:
         logger.error("VLC 无法初始化：{}", error)
-        _say(f"VLC 无法初始化：{error}\n请重装 VLC：{vlc.DOWNLOAD_URL}")
+        _say(i18n.t("simple.vlc_init_failed", error=error, url=vlc.DOWNLOAD_URL))
         _wait_key()
         return 1
 
@@ -352,7 +352,7 @@ def _load_settings() -> tuple[SettingsStore, list[str]]:
     except Exception as error:  # 字段类型全错时夹取会抛，不能让设置把启动拦下
         logger.error("读取设置失败，改用默认值：{}", error)
         store.data = settings_defaults()
-        return store, [f"{SETTINGS_WARNING}：{error}"]
+        return store, [f"{i18n.t('simple.settings_warning')}：{error}"]
     return store, warnings
 
 
@@ -361,9 +361,7 @@ def _probe_vlc() -> bool:
         version = vlc.probe()
     except vlc.VlcUnavailable as error:
         logger.error("VLC 不可用：{}", error)
-        _say(
-            f"没有找到可用的 VLC。\n请先安装 VLC：{vlc.DOWNLOAD_URL}\n装好之后重新双击 simple.bat。"
-        )
+        _say(i18n.t("simple.vlc_missing", url=vlc.DOWNLOAD_URL))
         _wait_key()
         return False
     logger.info("VLC 版本：{}", version)
@@ -382,7 +380,7 @@ def _wait_key() -> None:
     """
     if os.name != "nt" or not sys.stdin.isatty():  # pragma: no cover - 只服务 Windows
         return
-    print("按任意键退出……", end="", flush=True)
+    print(i18n.t("simple.press_any_key"), end="", flush=True)
     try:
         import msvcrt
 
@@ -399,6 +397,6 @@ def _install_excepthook() -> None:
         if issubclass(exc_type, KeyboardInterrupt):
             return
         logger.opt(exception=(exc_type, exc_value, exc_traceback)).critical("未捕获的异常")
-        print(f"\n[simple] 程序遇到未处理的错误：{exc_value}")
+        print(f"\n[simple] {i18n.t('simple.crashed_console', error=exc_value)}")
 
     sys.excepthook = hook

@@ -75,6 +75,21 @@ def test_add_and_remove_songs(api):
     assert playlist.entries == [SONG_B]
 
 
+def test_editing_playlist_tracks_keeps_their_stats(api):
+    """歌单增删曲目不动自适应数据：冗余可以接受，重新加回来还能接上。"""
+    playlist = api.playlists.create("深夜", "manual")
+    api.add_playlist_songs(playlist.uid, [SONG_A, SONG_B])
+    api.stats.record(playlist.uid, SONG_A, skipped=False, window=100)
+    api.stats.record(playlist.uid, SONG_A, skipped=True, window=100)
+
+    api.remove_playlist_song(playlist.uid, SONG_A)
+    api.set_playlist_entries(playlist.uid, [SONG_B])
+
+    entry = api.stats.load(playlist.uid)[SONG_A]
+    assert entry.records == "01"
+    assert entry.full_plays == 1
+
+
 def test_filter_crud(api):
     playlist = api.playlists.create("条件", "filter")
     assert len(playlist.filters) == 1

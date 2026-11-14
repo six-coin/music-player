@@ -20,6 +20,7 @@ function statsTable(rows, options) {
     "<tr><th>" + esc(T("adaptation.col_song")) + "</th>" +
     '<th class="num">' + esc(T("adaptation.col_records")) + "</th>" +
     "<th>" + esc(T("adaptation.col_rate")) + "</th>" +
+    '<th class="num">' + esc(T("adaptation.col_full")) + "</th>" +
     '<th class="num">' + esc(T("adaptation.col_auto")) + "</th>" +
     '<th class="num">' + esc(T("adaptation.col_probability")) + "</th>" +
     (settings.reset ? "<th></th>" : "") + "</tr>";
@@ -34,6 +35,7 @@ function statsTable(rows, options) {
         '<tr><td class="cell-title" title="' + esc(row.title) + '">' + esc(row.title) + "</td>" +
         '<td class="num">' + row.total + "</td>" +
         "<td>" + rateCell(row.rate) + "</td>" +
+        '<td class="num">' + row.full_plays + "</td>" +
         '<td class="num">' + row.auto_skipped + "</td>" +
         '<td class="num">' + esc(percent(row.probability)) + "</td>" +
         reset +
@@ -97,7 +99,7 @@ function renderDrawer(data) {
   const note = T("adaptation.stats_note", {
     window: params.window,
     min: params.min_plays,
-    base: params.base,
+    base: params.base_percent,
     seconds: params.skip_seconds,
   });
   const rows = data.rows || [];
@@ -147,6 +149,7 @@ async function loadMusicStats(md5) {
   host.innerHTML =
     cell(String(data.total), T("adaptation.col_records")) +
     cell(percent(data.rate), T("adaptation.col_rate")) +
+    cell(String(data.full_plays || 0), T("adaptation.col_full")) +
     cell(String(data.auto_skipped), T("adaptation.col_auto")) +
     cell(percent(data.probability), T("adaptation.col_probability"));
 }

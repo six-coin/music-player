@@ -1,4 +1,92 @@
 /* 歌单、标签、作者的编辑动作：新建、删除、条件取值、拖拽排序。 */
+/* ---------- 删除前的从属关系 ---------- */
+
+/* 二次确认里最多列三项：再多就不是「提醒」，而是把弹窗变成清单了。 */
+const DEPENDENCY_LIMIT = 3;
+
+function allMusics() {
+  return (state.data && state.data.library.musics) || [];
+}
+
+function songsUsingTag(tagUid) {
+  return allMusics().filter(function (music) {
+    return (music.tags || []).indexOf(tagUid) !== -1;
+  });
+}
+
+function songsUsingTagGroup(group) {
+  const uids = new Set(
+    (group.tags || []).map(function (tag) {
+      return tag.uid;
+    })
+  );
+  return allMusics().filter(function (music) {
+    return (music.tags || []).some(function (uid) {
+      return uids.has(uid);
+    });
+  });
+}
+
+function songsByAuthor(uid) {
+  return allMusics().filter(function (music) {
+    return (music.authors || []).indexOf(uid) !== -1;
+  });
+}
+
+function playlistsWithSong(md5) {
+  return ((state.data && state.data.playlists) || []).filter(function (playlist) {
+    if (playlist.kind === "manual") {
+      return (playlist.entries || []).indexOf(md5) !== -1;
+    }
+    return (playlist.filters || []).some(function (condition) {
+      return condition.target === "music" && (condition.values || []).indexOf(md5) !== -1;
+    });
+  });
+}
+
+function playlistReferrers(uid) {
+  return ((state.data && state.data.playlists) || []).filter(function (playlist) {
+    if (playlist.uid === uid) return false;
+    return (playlist.filters || []).some(function (condition) {
+      return condition.target === "playlist" && (condition.values || []).indexOf(uid) !== -1;
+    });
+  });
+}
+
+function dependencyMarkup(items) {
+  if (!items || !items.length) return "";
+  const shown = items.slice(0, DEPENDENCY_LIMIT);
+  const rest = items.length - shown.length;
+  const rows = shown
+    .map(function (item) {
+      return (
+        '<li><span class="dep-kind">' + esc(item.kind) + "</span>" +
+        '<span class="dep-name" title="' + esc(item.name) + '">' + esc(item.name) + "</span></li>"
+      );
+    })
+    .join("");
+  return (
+    '<div class="deps"><p class="deps-title">' + esc(T("delete.deps_title")) + "</p>" +
+    '<ul class="deps-list">' + rows + "</ul>" +
+    (rest > 0
+      ? '<p class="deps-more">' + esc(T("delete.deps_more", { count: rest })) + "</p>"
+      : "") +
+    "</div>"
+  );
+}
+
+function songDeps(musics) {
+  return musics.map(function (music) {
+    return { kind: T("delete.kind_song"), name: music.title };
+  });
+}
+
+function playlistDeps(playlists) {
+  return playlists.map(function (playlist) {
+    return { kind: T("delete.kind_playlist"), name: playlist.title };
+  });
+}
+
 /* ---------- 歌单交互 ---------- */
 
 function openCreatePlaylist() {
@@ -52,12 +140,14 @@ function openCreatePlaylist() {
 }
 
 function confirmDeletePlaylist(playlist) {
+  const referrers = playlistReferrers(playlist.uid);
   openModal({
     title: T("playlist.delete"),
     body:
       '<p class="modal-note">' +
       esc(T("playlist.delete_confirm", { name: playlist.title })) +
-      "</p>",
+      "</p>" +
+      dependencyMarkup(playlistDeps(referrers)),
     actions: [
       { label: T("action.cancel"), onClick: closeModal },
       {
@@ -242,7 +332,8 @@ async function openPlaylistPreview(playlist) {
 
   let body;
   if (!result.ok) {
-    body = '<p class="detail-error">' + esc(result.message) + "</p>";
+    body = '<div class="error-card" role="alert"><p class="error-card-text">' +
+      esc(result.message) + "</p></div>";
   } else if (!result.items.length) {
     body = '<p class="row-empty">' + esc(T("playlist.preview_empty")) + "</p>";
   } else {
@@ -356,9 +447,12 @@ function openCreateTagGroup() {
 }
 
 function confirmDeleteTagGroup(group) {
+  const songs = songsUsingTagGroup(group);
   openModal({
     title: T("tag.delete_group"),
-    body: '<p class="modal-note">' + esc(T("tag.delete_confirm", { name: group.name })) + "</p>",
+    body:
+      '<p class="modal-note">' + esc(T("tag.delete_confirm", { name: group.name })) + "</p>" +
+      dependencyMarkup(songDeps(songs)),
     actions: [
       { label: T("action.cancel"), onClick: closeModal },
       {
@@ -374,7 +468,9 @@ function confirmDeleteTagGroup(group) {
           }
           openModal({
             title: T("tag.delete_group"),
-            body: '<p class="modal-note">' + esc(data.message) + "</p>",
+            body:
+              '<p class="modal-note">' + esc(data.message) + "</p>" +
+              dependencyMarkup(songDeps(songs)),
             actions: [
               { label: T("action.cancel"), onClick: closeModal },
               {
@@ -390,6 +486,30 @@ function confirmDeleteTagGroup(group) {
               },
             ],
           });
+        },
+      },
+    ],
+  });
+}
+
+function confirmDeleteTag(group, tag) {
+  const songs = songsUsingTag(tag.uid);
+  openModal({
+    title: T("tag.delete_tag"),
+    body:
+      '<p class="modal-note">' +
+      esc(T("tag.delete_tag_confirm", { name: tag.name, group: group.name })) +
+      "</p>" +
+      dependencyMarkup(songDeps(songs)),
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("tag.delete_tag"),
+        danger: true,
+        onClick: async function () {
+          const data = await call("remove_tag", group.uid, tag.uid);
+          closeModal();
+          if (data) apply(data);
         },
       },
     ],
@@ -480,9 +600,12 @@ async function launchProgram(method) {
 }
 
 function confirmDeleteAuthor(author) {
+  const songs = songsByAuthor(author.uid);
   openModal({
     title: T("author.delete"),
-    body: '<p class="modal-note">' + esc(T("author.delete_confirm", { name: author.name })) + "</p>",
+    body:
+      '<p class="modal-note">' + esc(T("author.delete_confirm", { name: author.name })) + "</p>" +
+      dependencyMarkup(songDeps(songs)),
     actions: [
       { label: T("action.cancel"), onClick: closeModal },
       {
@@ -498,7 +621,9 @@ function confirmDeleteAuthor(author) {
           }
           openModal({
             title: T("author.delete"),
-            body: '<p class="modal-note">' + esc(data.message) + "</p>",
+            body:
+              '<p class="modal-note">' + esc(data.message) + "</p>" +
+              dependencyMarkup(songDeps(songs)),
             actions: [
               { label: T("action.cancel"), onClick: closeModal },
               {

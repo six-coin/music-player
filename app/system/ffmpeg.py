@@ -6,10 +6,12 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from app.errors import ActionError
 
@@ -94,3 +96,64 @@ def probe_duration_ms(path: Path) -> int:
         return int(float(result.stdout.strip()) * 1000)
     except ValueError:
         return 0
+
+
+def probe_stream(path: Path) -> dict[str, Any]:
+    """用 ffprobe 读音频流参数，给「虚标检测」用。
+
+    返回 ``{"sample_rate", "bit_rate", "codec", "duration", "size"}``，
+    读不出来的字段缺省为 0 / 空串。ffprobe 不可用时返回空字典——调用方据此
+    跳过这项检查，而不是把整个深检判成失败。
+    """
+    binary = ffprobe_path()
+    if binary is None:
+        return {}
+    result = _run(
+        [
+            binary,
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=sample_rate,bit_rate,codec_name:format=duration,bit_rate,size",
+            "-select_streams",
+            "a:0",
+            "-of",
+            "json",
+            str(path),
+        ],
+        timeout=30,
+    )
+    if result.returncode != 0:
+        return {}
+    try:
+        raw = json.loads(result.stdout or "{}")
+    except ValueError:
+        return {}
+    streams = raw.get("streams") or []
+    stream = streams[0] if isinstance(streams, list) and streams else {}
+    container = raw.get("format") or {}
+    if not isinstance(stream, dict) or not isinstance(container, dict):
+        return {}
+    return {
+        "sample_rate": _as_int(stream.get("sample_rate")),
+        "bit_rate": _as_int(stream.get("bit_rate")),
+        "codec": str(stream.get("codec_name") or ""),
+        "duration": _as_float(container.get("duration")),
+        "size": _as_int(container.get("size")),
+        "container_bit_rate": _as_int(container.get("bit_rate")),
+    }
+
+
+def _as_int(value: object) -> int:
+    try:
+        return int(float(str(value)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _as_float(value: object) -> float:
+    try:
+        number = float(str(value))
+    except (TypeError, ValueError):
+        return 0.0
+    return number if number == number else 0.0

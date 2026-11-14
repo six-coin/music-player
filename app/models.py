@@ -20,6 +20,9 @@ FILTER_TARGETS = ("all", "music", "playlist", "tag", "author")
 
 WINDOW_MIN = 10
 WINDOW_MAX = 1000
+#: 跳过基数在界面上是 1–99 的整数百分比，存储仍是 0.01–0.99 的比例：
+#: 概率公式直接乘比例，少一次换算；0 没有意义——关掉自适应就够了。
+BASE_MIN = 0.01
 BASE_MAX = 0.99
 SKIP_SECONDS_MIN = 5
 SKIP_SECONDS_MAX = 300
@@ -301,14 +304,14 @@ class Adaptation:
         if self.min_plays is not None:
             self.min_plays = min(upper, max(0, int(self.min_plays)))
         if self.base is not None:
-            self.base = min(BASE_MAX, max(0.0, float(self.base)))
+            self.base = min(BASE_MAX, max(BASE_MIN, float(self.base)))
         if self.skip_seconds is not None:
             self.skip_seconds = min(SKIP_SECONDS_MAX, max(SKIP_SECONDS_MIN, int(self.skip_seconds)))
 
     def validate(self) -> None:
         if self.window is not None and not WINDOW_MIN <= self.window <= WINDOW_MAX:
             raise DataError("记录窗口超出允许范围")
-        if self.base is not None and not 0.0 <= self.base <= BASE_MAX:
+        if self.base is not None and not BASE_MIN <= self.base <= BASE_MAX:
             raise DataError("跳过基数超出允许范围")
 
     def to_dict(self) -> dict[str, Any]:

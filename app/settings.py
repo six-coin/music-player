@@ -27,7 +27,7 @@ DEBUG_CACHE_SECONDS = 2.0
 DEFAULTS: dict[str, Any] = {
     "version": 1,
     "common": {
-        "theme": "system",
+        "theme": "light",
         "language": "zh-CN",
         "debug": False,
         "adaptation": {
@@ -46,7 +46,6 @@ DEFAULTS: dict[str, Any] = {
     },
     "simple": {
         "order": "shuffle",
-        "volume": 0.2,
     },
     "player": {
         "volume": 0.2,
@@ -117,7 +116,6 @@ def clamp(raw: dict[str, Any]) -> dict[str, Any]:
     data = _merge(DEFAULTS, raw if isinstance(raw, dict) else {})
 
     common = _section(data, "common")
-    # 旧配置里的 system 在这里定成当时的浅色/深色，之后不再随系统变化。
     common["theme"] = theme_tool.resolve(common.get("theme"))
     common["language"] = _choice(
         common.get("language"), tuple(i18n.available()), i18n.initial_language()
@@ -141,10 +139,8 @@ def clamp(raw: dict[str, Any]) -> dict[str, Any]:
 
     simple = _section(data, "simple")
     simple["order"] = _choice(simple.get("order"), SIMPLE_ORDERS, "shuffle")
-    simple_volume = simple.get("volume")
-    simple["volume"] = (
-        min(1.0, max(0.0, float(simple_volume))) if isinstance(simple_volume, (int, float)) else 0.2
-    )
+    # 轻量音乐播放器不再设默认音量：音量完全交给 VLC 与系统混音器。
+    simple.pop("volume", None)
 
     player = _section(data, "player")
     player["order"] = _choice(player.get("order"), PLAYER_ORDERS, "shuffle")

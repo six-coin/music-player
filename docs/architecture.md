@@ -10,7 +10,7 @@
 |---------------------------------------------|----------------------------------|----------------------------------------------------------------------------------------------------------|
 | `core` 不导入任何界面库                             | 队列与自适应要能被纯 pytest 覆盖，也要能被三个入口共用  | `test_source_hygiene.py::test_core_has_no_ui_imports`                                                    |
 | `system` 不导入界面库                             | 系统能力是基础设施，不该知道谁在调用               | `test_source_hygiene.py::test_system_has_no_ui_imports`                                                  |
-| 全项目不调用 `os.chdir`                           | 工作目录是进程级全局状态，被所有线程共享             | `test_source_hygiene.py::test_no_working_directory_changes`                                              |
+| 工作目录钉在程序目录                             | cwd 会影响相对路径、文件对话框与第三方库的临时文件，只许在一处定死 | `test_source_hygiene.py::test_working_directory_is_pinned_in_one_place`                    |
 | 入口文件 < 30 行                                 | 装配集中在一处                          | `test_source_hygiene.py::test_manager_entry_stays_thin`、`::test_player_entry_stays_thin`                 |
 | player 不写 `library.json` / `playlists.json` | 播放器不是编辑器；两个进程同时改库必然丢数据           | `test_player_api.py::test_player_leaves_library_untouched`                                               |
 | 队列永远是完整歌单                                   | 队列是承诺，不是装饰                       | `test_player_session.py::test_queue_shows_the_whole_playlist_with_states`                                |
@@ -86,7 +86,7 @@ Music Player/
 | 临时目录 | 清洗音频、换源的中间文件                    | `%TEMP%\six-coin\music-player`         |
 
 - 数据目录可改：设置页写 `data-dir.pending`，**下次启动**把旧目录的内容搬过去再改 `data-dir.txt`；落点恒以项目代号结尾，`paths.normalize_data_dir()` 负责补齐。`paths.resolve_user_path()` 的相对路径以数据目录为基准。
-- 启动时 `paths._reconcile_data_dir()` 做一件事：有 `data-dir.pending` 就搬到那里并改指针；指针末尾没补项目代号就补上再搬。
+- 启动时 `paths._reconcile_data_dir()` 只做一件事：有 `data-dir.pending` 就把旧目录的内容搬到那里并改指针；没有标记就什么都不做。
 - 统计与设置的锁文件放本地目录（`paths.lock_for()`），不跟数据混在一起。
 - 版本号只有 `pyproject.toml` 一处，`app/version.py` 读它。
 - 首次运行：`bootstrap.is_first_run()` 看数据目录里有没有 `settings.json`；player / simple 首次启动会拉起管理器（带 `--redirected-from`），管理器依次弹语言、使用说明，最后解释「你打开的不是这个程序」。
@@ -150,7 +150,7 @@ manager.pyw   player.pyw   simple.py          入口
 | `stats`          | 一歌单一文件，锁内读改写                   | 不算概率           |
 | `importer`       | 准备（清洗、MD5、时长）与提交（落盘、写库）两段      | 不弹窗、不报进度       |
 | `source`         | 换源与删除的多文件事务，失败回滚               | 不判断该不该做        |
-| `integrity`      | 检查与按类别修复                       | 不做二次确认         |
+| `integrity`      | 检查与按类别修复；深检额外重算 MD5、用 ffprobe 查码率虚标 | 不做二次确认         |
 | `queue`          | 一轮怎么排（洗牌、接缝、按名排序）              | 不知道「播到哪」       |
 | `player_session` | 当前歌单、轮次、索引、模式、pin、命令           | 不读文件、不碰文案与界面   |
 | `ui/*/api.py`    | 快照组装、调用翻译、写盘                   | 不实现队列规则、不做业务校验 |
@@ -202,7 +202,9 @@ n <= min_plays → 概率 0
 否则          → 概率 = min(base, 0.99) × s / n
 ```
 
-判定只在「自动前进」时发生：点歌单、点队列、选循环曲都不判定——用户明确点的歌被后台吞掉，会像按钮坏了。记录只在「下一首 / `Ctrl+C`」与自然播完时写一次，上一首、点队列、切歌单都不碰统计。
+`base` 在界面上是 1–99 的整数百分比，存进 JSON 仍是 0.01–0.99 的比例：公式直接乘比例，少一次换算；`0` 没有意义——关掉自适应就够了。
+
+判定只在「自动前进」时发生：点歌单、点队列、选循环曲都不判定——用户明确点的歌被后台吞掉，会像按钮坏了。记录只在「下一首 / `Ctrl+C`」与自然播完时写一次，上一首、点队列、切歌单都不碰统计。每次「没跳过」的记录顺带把 `full_plays` 加一，这是歌单级的「完整播放次数」，只用于展示，不参与概率。
 
 ### 6.6 player 的切歌
 
@@ -302,7 +304,7 @@ next / ended / failed
 | 导入单个文件失败                               | 记入批次错误清单，继续处理下一个                                                             |
 | 播放失败 / 文件缺失                            | 跳过 + 队列标灰 + 一行提示，不中断整个队列                                                     |
 | 写盘失败                                   | Toast + 日志，界面保持原值，不假装成功                                                      |
-| 未捕获异常                                  | `sys.excepthook` 记录 → `logger.complete()` → 原生 `MessageBoxW` → `os._exit(1)` |
+| 未捕获异常                                  | `sys.excepthook` 记录 → `logger.complete()` → 原生 `MessageBoxW` → `os._exit(1)`；弹窗文案固定中文，不查语言包 |
 
 原则：**能降级的降级，不能降级的必须留下可读的原因。任何静默失败都算缺陷。**
 
@@ -312,8 +314,9 @@ next / ended / failed
 - `settings.update()` 与 `patch_player()` 都先读盘再合并，避免两个进程互相覆盖；写盘走「临时文件 + `os.replace`」。
 - 语言包放 `app/locales/{语言代码}.json`，文件名即语言代码；启动时扫目录，放进去什么语言就支持什么语言。
 - 查表顺序：当前语言 → 默认语言（`zh-CN`）→ 键名本身，绝不抛异常。
-- 占位符统一 `{name}`；列举分隔符从语言包取（`list.separator`），不写死。
-- 管理器切语言立刻生效（文案、窗口标题、`<html lang>` 一起换）；player 与 simple 在启动时读一次。
+- 占位符统一 `{name}`；列举分隔符从语言包取（`list.separator`），不写死——中文是「、」，英文是 `, `。
+- 管理器切语言立刻生效（文案、窗口标题、`<html lang>`、排序下拉框一起换）；player 与 simple 在启动时读一次。
+- **只有用户在正常操作里会看到的文案进语言包**；异常路径（崩溃弹窗、日志、完整性报告）固定中文。崩溃时语言包本身可能读不出来，查表失败会让弹窗里只剩一个键名。
 - 字段级说明见 [configuration.md](configuration.md)。
 
 ## 11. 测试
@@ -340,6 +343,7 @@ tests/
 ├─ test_simple_loop.py / test_simple_render.py   播放循环与方框对齐
 ├─ test_vlc.py              VLC 适配器
 ├─ test_i18n.py             文案完整性
+├─ test_logging_setup.py    崩溃弹窗文案（固定中文，不查语言包）
 └─ test_source_hygiene.py   静态守卫
 ```
 
@@ -360,7 +364,7 @@ uv run ruff format --check .
 
 1. `core` 与 `system` 不导入界面库；界面库只在 `ui/` 里出现。
 2. 入口文件不超过 30 行，只做「把 app 叫起来」。
-3. 全项目不调用 `os.chdir`；内部路径一律来自 `paths.py`。
+3. 工作目录只在 `paths.py` 导入时钉到程序目录，别处不调用 `os.chdir`；内部路径一律来自 `paths.py`。
 4. 写 JSON 一律原子替换，读 JSON 一律先夹取再使用。
 5. 结构损坏要报错，不要静默重建——静默重建会把用户数据洗掉。
 6. player 与 simple 不写库与歌单，只写统计与自己的界面状态。
@@ -381,7 +385,7 @@ uv run ruff format --check .
 | 3.2 窗口尺寸   | 播放器固定 960×620、最小 760×480，不按屏幕 85% | 播放器是常驻小窗，铺满屏幕反而难用；尺寸记在 `player.json` 里                                       |
 | 1.6 目录     | 多一个 `<数据目录>/player.json`          | 窗口尺寸与队列开合是 player 私有的界面状态，不该进三端共享的 `settings.json`                           |
 | 3.x 界面     | 轻量音乐播放器没有 `ui/`，界面由 `cli/` 承担     | 命令行没有 DOM，按「输入 / 渲染 / 编排」切分更合适；启动速度是这类工具的核心体验                                |
-| 2.10 本地化   | 轻量音乐播放器的控制台输出不走 i18n，固定中文         | 输出只给本机用户看，切换语言没有意义；它的文案不进语言包                                                 |
+| 2.10 本地化   | 异常路径与内部日志固定中文，不进语言包              | 崩溃弹窗、日志、完整性报告只给本机用户看，且崩溃时语言包本身可能读不出来；查表失败会让弹窗里只剩一个键名                                              |
 | 3.10 键盘    | 不做硬件媒体键与全局热键                      | 只服务单机听歌，窗口内按键够用，也避免抢别的程序的键                                                   |
 | 3.10.2 快捷键 | 不设 `Ctrl+S`                       | 全自动保存，每次改动都已落盘                                                               |
 | 3.3.4 关闭握手 | 关闭时不等网页回话，直接用内存里最多 2 秒旧的播放位置      | 在 `closing` 里等网页回话会死锁；用 2 秒的陈旧值换掉一次死锁风险                                      |

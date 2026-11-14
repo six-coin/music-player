@@ -115,7 +115,9 @@ function adaptationDefaults() {
 }
 
 function adaptRow(key, label, hint, unit, value, fallback, overridden, limits) {
-  const number = value === null || value === undefined ? fallback : value;
+  const raw = value === null || value === undefined ? fallback : value;
+  // 跳过基数存的是比例，界面上按整数百分比显示。
+  const number = key === "base" ? Math.round(raw * 100) : raw;
   const range =
     limits && limits.min !== undefined
       ? ' min="' + limits.min + '" max="' + limits.max + '" step="' + (limits.step || 1) + '"'
@@ -139,9 +141,12 @@ function adaptationCard(playlist) {
     return adapt[key] !== null && adapt[key] !== undefined;
   };
   const globalText = function (key, unit) {
+    const value = key === "base" ? Math.round((defaults[key] || 0) * 100) : defaults[key];
+    // 百分比紧贴数字（「全局 95%」），次数与秒数则留一个空格。
+    if (key === "base") return T("adaptation.global_percent", { value: value });
     return unit
-      ? T("adaptation.global_unit", { value: defaults[key], unit: unit })
-      : T("adaptation.global", { value: defaults[key] });
+      ? T("adaptation.global_unit", { value: value, unit: unit })
+      : T("adaptation.global", { value: value });
   };
 
   return (
@@ -176,12 +181,12 @@ function adaptationCard(playlist) {
     adaptRow(
       "base",
       T("adaptation.base"),
-      globalText("base", ""),
-      "",
+      globalText("base", T("adaptation.percent")),
+      T("adaptation.percent"),
       adapt.base,
       defaults.base,
       overridden("base"),
-      { min: 0, max: 0.99, step: 0.01 }
+      { min: 1, max: 99 }
     ) +
     adaptRow(
       "skip_seconds",
@@ -230,6 +235,23 @@ function manualPlaylistCard(playlist) {
   );
 }
 
+function playlistErrorCard(playlist) {
+  const detail = playlist.error_detail || {};
+  const isCycle = detail.kind === "cycle";
+  const title = T(isCycle ? "playlist.cycle_title" : "playlist.error_title");
+  const body = isCycle
+    ? T("playlist.cycle_body", { chain: (detail.chain || []).join(" → ") })
+    : detail.text || playlist.error || "";
+  const hint = T(isCycle ? "playlist.cycle_hint" : "playlist.error_hint");
+  return (
+    '<div class="error-card" role="alert">' +
+    '<div class="error-card-title">' + esc(title) + "</div>" +
+    '<p class="error-card-text">' + esc(body) + "</p>" +
+    (hint ? '<p class="error-card-hint">' + esc(hint) + "</p>" : "") +
+    "</div>"
+  );
+}
+
 function filterPlaylistCard(playlist) {
   const rows = (playlist.filters || [])
     .map(function (condition, index) {
@@ -248,7 +270,7 @@ function filterPlaylistCard(playlist) {
     '</h3><button class="btn soft small" data-filter-add="1">' +
     esc(T("playlist.add_condition")) + "</button></div>" +
     (rows || '<p class="row-empty">' + esc(T("playlist.condition_empty")) + "</p>") +
-    (playlist.error ? '<p class="detail-error">' + esc(playlist.error) + "</p>" : "") +
+    (playlist.error ? playlistErrorCard(playlist) : "") +
     '<div class="card-foot">' +
     '<button class="btn ghost small" data-playlist-preview="1">' +
     esc(T("playlist.preview")) + "</button></div>" +
@@ -301,7 +323,7 @@ function filterSummary(condition) {
     })
     .filter(Boolean);
   if (!names.length) return T("playlist.filter_empty");
-  const shown = names.slice(0, 2).join("、");
+  const shown = names.slice(0, 2).join(T("list.separator"));
   return names.length > 2 ? shown + T("playlist.more", { count: names.length - 2 }) : shown;
 }
 
