@@ -45,6 +45,12 @@ function bridge() {
   return window.pywebview && window.pywebview.api ? window.pywebview.api : null;
 }
 
+function delay(ms) {
+  return new Promise(function (resolve) {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 async function call(method) {
   const api = bridge();
   if (!api) return null;
@@ -942,10 +948,10 @@ function filterPlaylistCard(playlist) {
     '</h3><button class="btn soft small" data-filter-add="1">' +
     esc(T("playlist.add_condition")) + "</button></div>" +
     (rows || '<p class="row-empty">' + esc(T("playlist.condition_empty")) + "</p>") +
-    '<div class="card-tools" style="margin-top:10px"><span></span>' +
+    (playlist.error ? '<p class="detail-error">' + esc(playlist.error) + "</p>" : "") +
+    '<div class="card-foot">' +
     '<button class="btn ghost small" data-playlist-preview="1">' +
     esc(T("playlist.preview")) + "</button></div>" +
-    (playlist.error ? '<p class="detail-error">' + esc(playlist.error) + "</p>" : "") +
     "</section>"
   );
 }
@@ -2482,7 +2488,22 @@ async function patchSetting(path, value) {
     }
   });
   const data = await call("update_settings", patch);
-  if (data) apply(data);
+  if (!data) return;
+  if (data.ok === false) {
+    apply(data);
+    return;
+  }
+  // 开关和滑块本身就是最终状态，不需要重绘；重绘会把正在播的过渡直接换掉，
+  // 也会把设置页的滚动位置弹回顶部。
+  if (data.settings) state.data.settings = data.settings;
+  if (data.status) state.data.status = data.status;
+
+  // 后端可能夹取数值（比如 base 上限 0.99），这时输入框要跟着回正。
+  let actual = data.settings;
+  parts.forEach(function (key) {
+    actual = actual && typeof actual === "object" ? actual[key] : undefined;
+  });
+  if (actual !== value) apply(data);
 }
 
 async function browseImportDir() {
@@ -3862,7 +3883,9 @@ function bindEvents() {
       const next = adaptSwitch.getAttribute("aria-checked") !== "true";
       adaptSwitch.setAttribute("aria-checked", next ? "true" : "false");
       const data = await call("update_adaptation", playlist.uid, { enabled: next });
-      if (data) apply(data);
+      if (!data) return;
+      await delay(170);
+      apply(data);
       return;
     }
 
@@ -4070,7 +4093,9 @@ function bindEvents() {
       const patch = {};
       patch[toggle.dataset.switch] = next;
       const data = await call("update_tag_group", group.uid, patch);
-      if (data) apply(data);
+      if (!data) return;
+      await delay(170);
+      apply(data);
       return;
     }
 
@@ -4314,7 +4339,9 @@ function bindEvents() {
 
   settingsBody.addEventListener("change", async function (event) {
     if (event.target.id === "import-dir") {
-      await patchSetting("import.dir", event.target.value.trim());
+      const dir = event.target.value.trim();
+      event.target.value = dir;
+      await patchSetting("import.dir", dir);
       return;
     }
     if (event.target.id === "player-volume") {
@@ -4450,8 +4477,12 @@ function syncAudition() {
     if (tag && state.active) {
       await flushNameSave();
       const on = tag.dataset.on !== "1";
+      tag.dataset.on = on ? "1" : "0";
+      tag.classList.toggle("is-on", on);
       const data = await call("toggle_music_tag", state.active, tag.dataset.tag, on);
-      if (data) apply(data);
+      if (!data) return;
+      await delay(170);
+      apply(data);
       return;
     }
 

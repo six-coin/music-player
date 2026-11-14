@@ -512,6 +512,16 @@ select {
   margin-top: 10px;
 }
 
+/* 卡片底部的操作条：分隔线在上，按钮在下。 */
+.card-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
 .tabs {
   display: flex;
   gap: 4px;
@@ -680,6 +690,10 @@ select {
   background: var(--surface-sunken);
   color: var(--text);
   font-size: 13px;
+  transition:
+    border-color 0.16s var(--ease),
+    box-shadow 0.16s var(--ease),
+    background 0.16s var(--ease);
 }
 
 .search input::placeholder {
@@ -1135,7 +1149,23 @@ input[type="checkbox"]:disabled {
 
 .detail-pane .card {
   margin-bottom: 14px;
-  padding: 14px 18px 16px;
+  padding: 14px 18px 10px;
+}
+
+/* 最后一行不再需要行间距，留白交给卡片自己的下内边距，避免末尾多出一截。 */
+.detail-pane .card > .field-row:last-child,
+.detail-pane .card > .toggle-row:last-child,
+.detail-pane .card > .settings-row:last-child,
+.detail-pane .card > .adapt-row:last-child {
+  padding-bottom: 0;
+}
+
+.detail-pane .card > .entry-list:last-child .entry-row:last-child {
+  padding-bottom: 0;
+}
+
+.detail-pane .card > .inline-form:last-child {
+  margin-bottom: 0;
 }
 
 .field-row {
@@ -1178,6 +1208,10 @@ input[type="checkbox"]:disabled {
   background: var(--panel);
   color: var(--text);
   font-size: 14px;
+  transition:
+    border-color 0.16s var(--ease),
+    box-shadow 0.16s var(--ease),
+    background 0.16s var(--ease);
 }
 
 .input:focus {
@@ -1219,7 +1253,16 @@ input[type="checkbox"]:disabled {
   color: var(--text);
   font-size: 12.5px;
   cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+  transition:
+    background 0.16s var(--ease),
+    border-color 0.16s var(--ease),
+    color 0.16s var(--ease),
+    box-shadow 0.16s var(--ease),
+    transform 0.12s var(--ease);
+}
+
+.chip-toggle:active {
+  transform: scale(0.95);
 }
 
 .chip-toggle:hover {
@@ -1752,6 +1795,12 @@ input[type="checkbox"]:disabled {
   border-top: 1px solid var(--border-soft);
 }
 
+/* 紧跟在可编辑行后面的表单：线上下各留 10px，避免上紧下松。 */
+.tag-edit-row + .inline-form {
+  margin-top: 2px;
+  padding-top: 10px;
+}
+
 .inline-form .input {
   flex: 1;
   height: 32px;
@@ -1985,11 +2034,13 @@ input[type="checkbox"]:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 0;
+  padding: 8px 0;
   border-top: 1px solid var(--border-soft);
 }
 
-.tag-edit-row:first-child {
+/* 第一行紧跟在卡片标题线下面：不要叠自己的线，留白与标题线对齐。 */
+.card-tools + .tag-edit-row {
+  padding-top: 10px;
   border-top: none;
 }
 
