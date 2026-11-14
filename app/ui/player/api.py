@@ -339,7 +339,7 @@ class PlayerApi:
                 "current_md5": current,
                 "pinned": self._title(pinned) if isinstance(pinned, str) else None,
             },
-            "volume": float(self.settings.get("player", "volume", default=0.8)),
+            "volume": float(self.settings.get("player", "volume", default=0.2)),
             "empty": self._empty_value(state["empty"]),
             "notice": self._notice_payload(state["notice"]),
             "warnings": list(self.warnings),

@@ -1986,7 +1986,7 @@ async function auditionPlay(md5) {
   }
 
   const configured = Number(settingValue("audition.volume"));
-  audio.volume = Number.isFinite(configured) ? Math.min(1, Math.max(0, configured)) : 0.05;
+  audio.volume = Number.isFinite(configured) ? Math.min(1, Math.max(0, configured)) : 0.2;
   const volumePercent = Math.round(audio.volume * 100);
   qs("#audition-volume").value = String(volumePercent);
   qs("#audition-volume-value").textContent = volumePercent + "%";
@@ -2215,7 +2215,7 @@ function settingsGeneral() {
   const adapt = common.adaptation || {};
   const status = state.data.status || {};
   const auditionVolume = Math.round(
-    (((state.data.settings || {}).audition || {}).volume ?? 0.05) * 100
+    (((state.data.settings || {}).audition || {}).volume ?? 0.2) * 100
   );
 
   const themes = [
@@ -2342,6 +2342,7 @@ function settingsImport() {
 
 function settingsSimple() {
   const section = (state.data.settings && state.data.settings.simple) || {};
+  const volume = Math.round((section.volume === undefined ? 0.2 : section.volume) * 100);
   return settingsCard(
     T("settings.simple_section"),
     settingsRow(
@@ -2358,6 +2359,13 @@ function settingsSimple() {
         )
       ) +
       settingsRow(
+        T("settings.simple_volume"),
+        T("settings.simple_volume_hint"),
+        '<div class="volume-line"><input class="range" id="simple-volume" type="range" ' +
+          'min="0" max="100" step="1" value="' + volume + '">' +
+          '<span class="volume-value" id="simple-volume-value">' + volume + "%</span></div>"
+      ) +
+      settingsRow(
         T("settings.default_playlist"),
         T("settings.default_playlist_hint"),
         '<button class="btn ghost small" data-action="goto_default">' +
@@ -2369,7 +2377,7 @@ function settingsSimple() {
 
 function settingsPlayer() {
   const section = (state.data.settings && state.data.settings.player) || {};
-  const volume = Math.round((section.volume === undefined ? 0.8 : section.volume) * 100);
+  const volume = Math.round((section.volume === undefined ? 0.2 : section.volume) * 100);
 
   return settingsCard(
     T("settings.player_section"),
@@ -4348,6 +4356,10 @@ function bindEvents() {
       await patchSetting("player.volume", Number(event.target.value) / 100);
       return;
     }
+    if (event.target.id === "simple-volume") {
+      await patchSetting("simple.volume", Number(event.target.value) / 100);
+      return;
+    }
     if (event.target.id === "audition-default") {
       await patchSetting("audition.volume", Number(event.target.value) / 100);
       return;
@@ -4369,6 +4381,11 @@ function bindEvents() {
       if (label) label.textContent = event.target.value + "%";
       return;
     }
+    if (event.target.id === "simple-volume") {
+      const label = qs("#simple-volume-value");
+      if (label) label.textContent = event.target.value + "%";
+      return;
+    }
     if (event.target.id === "audition-default") {
       const label = qs("#audition-default-value");
       if (label) label.textContent = event.target.value + "%";
@@ -4380,73 +4397,6 @@ function bindEvents() {
     if (!select) return;
     await patchSetting(select.dataset.settingSelect, select.dataset.value);
   });
-
-  /* ---------- 试听 ---------- */
-
-function auditionAudio() {
-  return qs("#audition-audio");
-}
-
-async function auditionPlay(md5) {
-  const info = await call("audition_url", md5);
-  if (!info || !info.ok) {
-    toast((info && info.message) || T("audition.failed"), false);
-    return;
-  }
-
-  const audio = auditionAudio();
-  if (state.auditionMd5 !== md5) {
-    audio.src = info.url;
-    state.auditionMd5 = md5;
-    qs("#audition-title").textContent = info.title || "";
-    qs("#audition-total").textContent = formatDuration(info.duration_ms);
-    qs("#audition-seek").value = "0";
-    qs("#audition-current").textContent = "0:00";
-  }
-
-  const configured = Number(settingValue("audition.volume"));
-  audio.volume = Number.isFinite(configured) ? Math.min(1, Math.max(0, configured)) : 0.05;
-  const volumePercent = Math.round(audio.volume * 100);
-  qs("#audition-volume").value = String(volumePercent);
-  qs("#audition-volume-value").textContent = volumePercent + "%";
-
-  qs("#audition").hidden = false;
-  qs("#app").classList.add("has-audition");
-  const started = audio.play();
-  if (started && started.catch) {
-    started.catch(function () {
-      toast(T("audition.failed"), false);
-    });
-  }
-}
-
-function auditionStop() {
-  const audio = auditionAudio();
-  audio.pause();
-  audio.removeAttribute("src");
-  audio.load();
-  state.auditionMd5 = null;
-  qs("#audition").hidden = true;
-  qs("#audition-toggle").dataset.playing = "false";
-  qs("#app").classList.remove("has-audition");
-}
-
-function syncAudition() {
-  const audio = auditionAudio();
-  const playing = Boolean(audio.src) && !audio.paused && !audio.ended;
-  const toggle = qs("#audition-toggle");
-  toggle.dataset.playing = playing ? "true" : "false";
-  toggle.setAttribute("aria-label", playing ? T("audition.pause") : T("audition.play"));
-
-  const duration = audio.duration;
-  if (Number.isFinite(duration) && duration > 0) {
-    qs("#audition-seek").value = String(Math.round((audio.currentTime / duration) * 1000));
-    qs("#audition-current").textContent = formatDuration(audio.currentTime * 1000);
-    qs("#audition-total").textContent = formatDuration(duration * 1000);
-  }
-}
-
-/* ---------- 统计抽屉 ---------- */
 
   qs("#drawer-close").addEventListener("click", closeDrawer);
 

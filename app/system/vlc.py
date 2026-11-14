@@ -48,9 +48,11 @@ def probe() -> str:
 class VlcPlayer:
     """一个实例一个 MediaPlayer；``close()`` 之后不能再 ``play()``。"""
 
-    def __init__(self, extra_args: tuple[str, ...] = ()) -> None:
+    def __init__(self, volume: float = 1.0, extra_args: tuple[str, ...] = ()) -> None:
         self._instance: Any = None
         self._player: Any = None
+        self._volume = min(1.0, max(0.0, float(volume)))
+        self._volume_pending = False
         self._args = (*_ARGS, *extra_args)
 
     def open(self) -> None:
@@ -73,12 +75,36 @@ class VlcPlayer:
             raise VlcUnavailable("播放器还没有初始化")
         media = self._instance.media_new(str(path))
         self._player.set_media(media)
-        return self._player.play() == 0
+        started = self._player.play() == 0
+        # 音频输出还没就绪时 audio_set_volume 会失败，先记一笔，等真正播起来再补。
+        self._volume_pending = True
+        self._apply_volume()
+        return started
+
+    def set_volume(self, value: float) -> None:
+        """改音量只影响之后的播放；simple 不会在播放中调用它。"""
+        self._volume = min(1.0, max(0.0, float(value)))
+        self._volume_pending = True
+        self._apply_volume()
+
+    def _apply_volume(self) -> bool:
+        if self._player is None:
+            return False
+        try:
+            if self._player.audio_set_volume(round(self._volume * 100)) == -1:
+                return False
+        except Exception:  # 输出设备被拔掉之类的场景，不该打断播放
+            return False
+        self._volume_pending = False
+        return True
 
     def is_playing(self) -> bool:
         if self._player is None:
             return False
-        return bool(self._player.is_playing())
+        playing = bool(self._player.is_playing())
+        if playing and self._volume_pending:
+            self._apply_volume()
+        return playing
 
     def stop(self) -> None:
         if self._player is None:

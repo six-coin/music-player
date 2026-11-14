@@ -322,7 +322,7 @@
     "settings.goto": "查看",
     "settings.player_section": "音乐播放器",
     "settings.volume": "默认音量",
-    "settings.volume_hint": "打开播放器时的初始音量，之后在播放器里调整不会回写。",
+    "settings.volume_hint": "打开播放器时的初始音量；在播放器里调整后会记住，下次沿用。",
     "settings.player_order_hint": "播放器的默认播放模式，可在播放器里临时切换。",
     "settings.remember_progress": "记住播放进度",
     "settings.remember_progress_hint": "重新打开播放器时回到上次的歌单与位置，处于暂停状态。",
@@ -415,5 +415,7 @@
     "settings.debug_hint": "开启后，音乐播放器与轻量音乐播放器都不再记录自适应，也不会自动跳过。",
     "audition.pause": "暂停",
     "audition.volume": "试听音量",
-    "adaptation.reset_all_confirm": "清空这个歌单的全部自适应统计？这个操作不可恢复。"
+    "adaptation.reset_all_confirm": "清空这个歌单的全部自适应统计？这个操作不可恢复。",
+    "settings.simple_volume": "默认音量",
+    "settings.simple_volume_hint": "启动时读取一次，播放中不会跟随设置变化。"
 }

@@ -517,7 +517,7 @@ select {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 4px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
 }
@@ -555,7 +555,7 @@ select {
   display: flex;
   flex-direction: column;
   margin: 0;
-  padding: 0 8px 4px;
+  padding: 8px 8px 0;
   list-style: none;
 }
 
@@ -1152,6 +1152,11 @@ input[type="checkbox"]:disabled {
   padding: 14px 18px 10px;
 }
 
+/* 没有标题的卡片，第一行直接贴卡片上沿，不再叠一层行内 padding。 */
+.detail-pane .card > .field-row:first-child {
+  padding-top: 0;
+}
+
 /* 最后一行不再需要行间距，留白交给卡片自己的下内边距，避免末尾多出一截。 */
 .detail-pane .card > .field-row:last-child,
 .detail-pane .card > .toggle-row:last-child,
@@ -1432,6 +1437,12 @@ input[type="checkbox"]:disabled {
   gap: 8px;
   padding: 8px 0;
   border-top: 1px solid var(--border-soft);
+}
+
+/* 第一行紧跟在卡片标题线下面，不要叠出自己的线。 */
+.card-tools + .filter-row {
+  padding-top: 10px;
+  border-top: none;
 }
 
 .filter-row:first-child {
@@ -2371,6 +2382,14 @@ input[type="checkbox"]:disabled {
    设置页的卡片不在详情区里，得自己给。 */
 .settings .card {
   padding: 14px 18px 8px;
+}
+
+/* 设置卡片底部的操作条：与上面的配置行用一条线隔开。 */
+.settings .card > .settings-actions {
+  margin-top: 0;
+  padding-top: 10px;
+  padding-bottom: 4px;
+  border-top: 1px solid var(--border-soft);
 }
 
 .settings .settings-row:last-child {

@@ -289,11 +289,13 @@ def _run(log_file: Path) -> int:
         return 1
 
     order = str(settings.get("simple", "order", default="shuffle"))
+    # 音量只在启动时读一次：simple 播放中不跟随设置变化，避免用户改配置时声音忽大忽小。
+    volume = float(settings.get("simple", "volume", default=0.2))
     params = adaptation.params_from_dict(settings.get("common", "adaptation", default={}))
     warning = SETTINGS_WARNING if warnings else ""
 
     stats = StatsStore(paths.STATS_DIR)
-    player = vlc.VlcPlayer()
+    player = vlc.VlcPlayer(volume=volume)
     screen = render.Screen()
     try:
         player.open()

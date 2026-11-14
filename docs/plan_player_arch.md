@@ -469,7 +469,7 @@ patch_player(patch)
         "current_md5": "a1b2…",
         "pinned": null
     },
-    "volume": 0.8,
+    "volume": 0.2,
     "empty": null,
     "notice": null,
     "warnings": [],

@@ -37,13 +37,14 @@ DEFAULTS: dict[str, Any] = {
         "clean_audio": True,
     },
     "audition": {
-        "volume": 0.05,
+        "volume": 0.2,
     },
     "simple": {
         "order": "shuffle",
+        "volume": 0.2,
     },
     "player": {
-        "volume": 0.8,
+        "volume": 0.2,
         "order": "shuffle",
         "remember_progress": True,
         "last_playlist": None,
@@ -106,17 +107,21 @@ def clamp(raw: dict[str, Any]) -> dict[str, Any]:
     audition["volume"] = (
         min(1.0, max(0.0, float(audition_volume)))
         if isinstance(audition_volume, (int, float))
-        else 0.05
+        else 0.2
     )
 
     simple = data["simple"]
     simple["order"] = _choice(simple.get("order"), SIMPLE_ORDERS, "shuffle")
+    simple_volume = simple.get("volume")
+    simple["volume"] = (
+        min(1.0, max(0.0, float(simple_volume))) if isinstance(simple_volume, (int, float)) else 0.2
+    )
 
     player = data["player"]
     player["order"] = _choice(player.get("order"), PLAYER_ORDERS, "shuffle")
     volume = player.get("volume")
     player["volume"] = (
-        min(1.0, max(0.0, float(volume))) if isinstance(volume, (int, float)) else 0.8
+        min(1.0, max(0.0, float(volume))) if isinstance(volume, (int, float)) else 0.2
     )
     player["remember_progress"] = _bool(player.get("remember_progress"), True)
     player["last_playlist"] = _optional_text(player.get("last_playlist"))

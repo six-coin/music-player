@@ -17,7 +17,8 @@ def test_first_load_creates_file_with_defaults(tmp_path):
     assert path.exists()
     assert store.data["common"]["theme"] == "system"
     assert store.data["simple"]["order"] == "shuffle"
-    assert store.data["player"]["volume"] == 0.8
+    assert store.data["simple"]["volume"] == 0.2
+    assert store.data["player"]["volume"] == 0.2
 
 
 def test_values_are_clamped(tmp_path):
@@ -100,7 +101,19 @@ def test_audition_volume_is_clamped(tmp_path):
 
     store = SettingsStore(tmp_path / "settings.json")
     store.load()
-    assert store.get("audition", "volume") == 0.05
+    assert store.get("audition", "volume") == 0.2
 
     store.update({"audition": {"volume": 3}})
     assert store.get("audition", "volume") == 1.0
+
+
+def test_simple_volume_defaults_and_clamps(tmp_path):
+    store = SettingsStore(tmp_path / "settings.json")
+    store.load()
+    assert store.get("simple", "volume") == 0.2
+
+    store.update({"simple": {"volume": 2}})
+    assert store.get("simple", "volume") == 1.0
+
+    store.update({"simple": {"volume": -1}})
+    assert store.get("simple", "volume") == 0.0

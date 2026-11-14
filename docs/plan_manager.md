@@ -252,9 +252,9 @@ FFmpeg 不作为 Python 依赖：直接 `subprocess` 调 `ffmpeg.exe` / `ffprobe
     }
   },
   "import": { "dir": "", "clean_audio": true },
-  "simple": { "order": "shuffle" },
+  "simple": { "order": "shuffle", "volume": 0.2 },
   "player": {
-    "volume": 0.8,
+    "volume": 0.2,
     "order": "shuffle",
     "remember_progress": true,
     "last_playlist": null,
@@ -285,7 +285,7 @@ FFmpeg 不作为 Python 依赖：直接 `subprocess` 调 `ffmpeg.exe` / `ffprobe
 | `adaptation.window` / `min_plays` / `base`      | manager 配置、player 判定、simple 判定 | `common` → 通用页    |
 | `adaptation.skip_seconds`                       | player 判定、simple 判定            | `common` → 通用页    |
 | `import.dir` / `import.clean_audio`             | manager                        | 导入页               |
-| `simple.order`                                  | simple                         | simple 页          |
+| `simple.order` / `simple.volume`                 | simple                         | simple 页          |
 | `player.volume` / `order` / `remember_progress` | player                         | player 页          |
 | `player.last_*`                                 | player 自写自读                    | player 页（不展示，仅内部） |
 
@@ -569,7 +569,7 @@ random() < p → 自动跳过
 | 分页     | 内容                                                                                           | 谁读                        |
 | ------ | -------------------------------------------------------------------------------------------- | ------------------------- |
 | 通用           | 主题（跟随系统/浅色/深色）、语言（当前仅中文，占位）、自适应默认值（window / min_plays / base）、跳过判定阈值（skip_seconds）、试听默认音量、数据目录、日志目录 | manager + player + simple |
-| 轻量音乐播放器      | 播放模式（随机 / 列表循环）、默认歌单（只读显示 + 跳转到该歌单）                                                          | 仅 simple                  |
+| 轻量音乐播放器      | 默认音量（启动时读一次，播放中不跟随）、播放模式（随机 / 列表循环）、默认歌单（只读显示 + 跳转到该歌单）                          | 仅 simple                  |
 | 音乐播放器        | 默认音量、播放模式（随机 / 列表循环 / 单曲循环）、记住进度                                                             | 仅 player                  |
 | 导入           | 默认导入目录、是否清洗音频、FFmpeg 状态检测                                                                    | 仅 manager                 |
 | 维护           | 调试状态（关掉 player 与 simple 的全部自适应记录）、完整性检查（快速/深检）、孤儿文件清理、清空全部统计、打开数据目录 / 日志目录                          | manager + player + simple |
