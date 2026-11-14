@@ -1,0 +1,202 @@
+/* 试听条、设置页、统计抽屉、歌曲详情的事件绑定。 */
+function bindPanelEvents() {
+  /* ---------- 试听条 ---------- */
+
+  qs("#audition-toggle").addEventListener("click", function () {
+    const audio = auditionAudio();
+    if (!audio.src) return;
+    if (audio.paused) audio.play();
+    else audio.pause();
+  });
+
+  qs("#audition-close").addEventListener("click", auditionStop);
+
+  qs("#audition-volume").addEventListener("input", function (event) {
+    const value = Number(event.target.value);
+    auditionAudio().volume = value / 100;
+    qs("#audition-volume-value").textContent = value + "%";
+  });
+
+  qs("#audition-volume").addEventListener("change", function (event) {
+    patchSetting("audition.volume", Number(event.target.value) / 100);
+  });
+
+  qs("#audition-seek").addEventListener("input", function (event) {
+    const audio = auditionAudio();
+    if (!Number.isFinite(audio.duration) || !audio.duration) return;
+    audio.currentTime = (Number(event.target.value) / 1000) * audio.duration;
+  });
+
+  ["play", "pause", "ended", "timeupdate", "loadedmetadata", "emptied"].forEach(function (name) {
+    auditionAudio().addEventListener(name, syncAudition);
+  });
+
+  /* ---------- 设置页 ---------- */
+
+  qs("#settings-nav").addEventListener("click", function (event) {
+    const tab = event.target.closest("[data-settings]");
+    if (!tab) return;
+    if (tab.dataset.settings === state.settingsTab) return;
+    state.settingsTab = tab.dataset.settings;
+    renderSettings(true);
+  });
+
+  const settingsBody = qs("#settings-body");
+
+  settingsBody.addEventListener("click", async function (event) {
+    const theme = event.target.closest("[data-theme-value]");
+    if (theme) {
+      const data = await call("set_theme", theme.dataset.themeValue);
+      if (data) apply(data);
+      return;
+    }
+    const language = event.target.closest("[data-language]");
+    if (language) {
+      const data = await call("set_language", language.dataset.language);
+      if (!data) return;
+      // 文案表要重新拉一次：静态标记上的中文是 HTML 里的兜底，不换就还是旧语言。
+      await loadStrings();
+      applyStrings();
+      apply(data);
+      return;
+    }
+    const toggle = event.target.closest("[data-setting-switch]");
+    if (toggle) {
+      const next = toggle.getAttribute("aria-checked") !== "true";
+      toggle.setAttribute("aria-checked", next ? "true" : "false");
+      await patchSetting(toggle.dataset.settingSwitch, next);
+    }
+  });
+
+  settingsBody.addEventListener("change", async function (event) {
+    if (event.target.id === "import-dir") {
+      const dir = event.target.value.trim();
+      event.target.value = dir;
+      await patchSetting("import.dir", dir);
+      return;
+    }
+    if (event.target.id === "player-volume") {
+      await patchSetting("player.volume", Number(event.target.value) / 100);
+      return;
+    }
+    if (event.target.id === "simple-volume") {
+      await patchSetting("simple.volume", Number(event.target.value) / 100);
+      return;
+    }
+    if (event.target.id === "audition-default") {
+      await patchSetting("audition.volume", Number(event.target.value) / 100);
+      return;
+    }
+    const field = event.target.closest("[data-default]");
+    if (field) {
+      const value = Number(field.value);
+      if (!Number.isFinite(value)) {
+        renderSettings();
+        return;
+      }
+      await patchSetting("common.adaptation." + field.dataset.default, value);
+    }
+  });
+
+  settingsBody.addEventListener("input", function (event) {
+    if (event.target.id === "player-volume") {
+      const label = qs("#player-volume-value");
+      if (label) label.textContent = event.target.value + "%";
+      return;
+    }
+    if (event.target.id === "simple-volume") {
+      const label = qs("#simple-volume-value");
+      if (label) label.textContent = event.target.value + "%";
+      return;
+    }
+    if (event.target.id === "audition-default") {
+      const label = qs("#audition-default-value");
+      if (label) label.textContent = event.target.value + "%";
+    }
+  });
+
+  settingsBody.addEventListener("selectchange", async function (event) {
+    const select = event.target.closest("[data-setting-select]");
+    if (!select) return;
+    await patchSetting(select.dataset.settingSelect, select.dataset.value);
+  });
+  qs("#drawer-close").addEventListener("click", closeDrawer);
+
+  qs("#drawer-body").addEventListener("click", async function (event) {
+    if (!state.drawer) return;
+    if (event.target.closest("[data-reset-all]")) {
+      confirmClearPlaylistStats();
+      return;
+    }
+    const one = event.target.closest("[data-reset-md5]");
+    if (one) {
+      const data = await call("reset_stats", state.drawer, one.dataset.resetMd5);
+      if (data) apply(data);
+    }
+  });
+
+  qs("#song-detail").addEventListener("input", function (event) {
+    if (event.target.id !== "song-name") return;
+    scheduleNameSave(event.target);
+  });
+
+  qs("#song-detail").addEventListener("blur", function (event) {
+    if (event.target.id === "song-name") flushNameSave();
+  }, true);
+
+  qs("#song-detail").addEventListener("click", async function (event) {
+    const tag = event.target.closest("[data-tag]");
+    if (tag && state.active) {
+      await flushNameSave();
+      const on = tag.dataset.on !== "1";
+      const box = tag.closest("[data-tag-group-box]");
+      if (on && box && box.dataset.unique === "1") {
+        box.querySelectorAll(".chip-toggle.is-on").forEach(function (other) {
+          if (other !== tag) {
+            other.classList.remove("is-on");
+            other.dataset.on = "0";
+          }
+        });
+      }
+      tag.dataset.on = on ? "1" : "0";
+      tag.classList.toggle("is-on", on);
+      syncTagGroup(box);
+      syncSongTagFlags();
+
+      const data = await call("toggle_music_tag", state.active, tag.dataset.tag, on);
+      if (!data) return;
+      if (data.ok === false) {
+        apply(data);
+        return;
+      }
+      // 详情区保持原样，避免整段重绘把动画和滚动位置一起冲掉；只刷新列表上的标记。
+      state.data = data;
+      renderSongList();
+      return;
+    }
+
+    if (event.target.closest("#btn-authors")) {
+      const music = musicByMd5(state.active);
+      if (music) openAuthorPicker(music);
+      return;
+    }
+
+    const copy = event.target.closest("[data-copy]");
+    if (copy) {
+      try {
+        await navigator.clipboard.writeText(copy.dataset.copy);
+        toast(T("action.copied"));
+      } catch (error) {
+        toast(String(error), false);
+      }
+      return;
+    }
+
+    const menu = event.target.closest("[data-menu='song']");
+    if (menu) {
+      const music = musicByMd5(state.active);
+      if (!music) return;
+      openMenu(menu, songMenuItems(music));
+    }
+  });
+}

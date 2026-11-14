@@ -135,7 +135,6 @@ class Session:
             logger.exception("播放失败，跳过：{}", path)
             return Outcome.FAILED, 0.0
 
-        self._last_sounded = md5
         started = False
         last_playing = started_at
         while True:
@@ -155,7 +154,10 @@ class Session:
                 playing = False
 
             if playing:
-                started = True
+                if not started:
+                    # 接缝判断要的是「上一轮真的出声的最后一首」：播不出来的歌不算。
+                    self._last_sounded = md5
+                    started = True
                 last_playing = now
             elif started and now - last_playing >= END_GRACE_SECONDS:
                 return Outcome.PLAYED, now - started_at

@@ -360,6 +360,10 @@ class Playlist:
             self.filters = []
         else:
             self.entries = []
+            # 条件歌单至少要有一条条件：删掉最后一条时补回「包含 · 全部歌曲」。
+            # 否则保存出去的文件通不过 validate，下次加载会把整条歌单当成坏记录丢掉。
+            if not self.filters:
+                self.filters = [Filter()]
         self.adaptation.normalize()
 
     def validate(self) -> None:

@@ -117,3 +117,31 @@ def test_simple_volume_defaults_and_clamps(tmp_path):
 
     store.update({"simple": {"volume": -1}})
     assert store.get("simple", "volume") == 0.0
+
+
+def test_broken_section_is_replaced_by_defaults(tmp_path):
+    """分节被手改成标量时不该把启动拦下。"""
+    path = tmp_path / "settings.json"
+    path.write_text(
+        json.dumps({"version": 1, "common": 5, "player": "x", "simple": []}),
+        encoding="utf-8",
+    )
+    store = SettingsStore(path)
+
+    warnings = store.load()
+
+    assert warnings == []
+    assert store.data["common"]["theme"] == "system"
+    assert store.data["player"]["volume"] == 0.2
+    assert store.data["simple"]["order"] == "shuffle"
+
+
+def test_debug_flag_follows_the_file(tmp_path):
+    """调试开关是跨进程读的；本进程改过之后缓存要立刻失效。"""
+    store = SettingsStore(tmp_path / "settings.json")
+    store.load()
+    assert store.debug_enabled() is False
+
+    store.update({"common": {"debug": True}})
+
+    assert store.debug_enabled() is True

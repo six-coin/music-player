@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import copy
+import time
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,8 @@ from app.system.filelock import exclusive
 THEMES = ("system", "light", "dark")
 SIMPLE_ORDERS = ("shuffle", "list_loop")
 PLAYER_ORDERS = ("shuffle", "list_loop", "repeat_one")
+
+DEBUG_CACHE_SECONDS = 2.0
 
 DEFAULTS: dict[str, Any] = {
     "version": 1,
@@ -86,11 +89,24 @@ def _optional_text(value: Any) -> str | None:
     return None
 
 
+def _section(data: dict[str, Any], key: str) -> dict[str, Any]:
+    """取出一个分节，并保证它是对象。
+
+    用户手改过的文件里 ``"player": 5`` 这种写法是合法的 JSON，但下面每一行都会
+    在它上面取键。这里就地换回默认分节，宁可丢掉一个坏字段，也不让设置把启动拦下。
+    """
+    node = data.get(key)
+    if not isinstance(node, dict):
+        node = copy.deepcopy(DEFAULTS.get(key, {}))
+        data[key] = node
+    return node
+
+
 def clamp(raw: dict[str, Any]) -> dict[str, Any]:
     """把任意来源的数据压成一份可用的设置。"""
     data = _merge(DEFAULTS, raw if isinstance(raw, dict) else {})
 
-    common = data["common"]
+    common = _section(data, "common")
     common["theme"] = _choice(common.get("theme"), THEMES, "system")
     common["language"] = _text(common.get("language"), "zh-CN") or "zh-CN"
     common["debug"] = _bool(common.get("debug"), False)
@@ -98,11 +114,11 @@ def clamp(raw: dict[str, Any]) -> dict[str, Any]:
     adaptation.normalize()
     common["adaptation"] = adaptation.to_dict()
 
-    import_section = data["import"]
+    import_section = _section(data, "import")
     import_section["dir"] = _text(import_section.get("dir"))
     import_section["clean_audio"] = _bool(import_section.get("clean_audio"), True)
 
-    audition = data["audition"]
+    audition = _section(data, "audition")
     audition_volume = audition.get("volume")
     audition["volume"] = (
         min(1.0, max(0.0, float(audition_volume)))
@@ -110,14 +126,14 @@ def clamp(raw: dict[str, Any]) -> dict[str, Any]:
         else 0.2
     )
 
-    simple = data["simple"]
+    simple = _section(data, "simple")
     simple["order"] = _choice(simple.get("order"), SIMPLE_ORDERS, "shuffle")
     simple_volume = simple.get("volume")
     simple["volume"] = (
         min(1.0, max(0.0, float(simple_volume))) if isinstance(simple_volume, (int, float)) else 0.2
     )
 
-    player = data["player"]
+    player = _section(data, "player")
     player["order"] = _choice(player.get("order"), PLAYER_ORDERS, "shuffle")
     volume = player.get("volume")
     player["volume"] = (
@@ -136,6 +152,7 @@ class SettingsStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.data: dict[str, Any] = defaults()
+        self._debug_cache: tuple[float, bool] | None = None
 
     def _lock_path(self) -> Path:
         return self.path.with_suffix(".lock")
@@ -164,6 +181,7 @@ class SettingsStore:
             warnings.append(str(error))
             raw = {}
         self.data = clamp(raw)
+        self._debug_cache = None
         return warnings
 
     def save(self) -> None:
@@ -174,6 +192,7 @@ class SettingsStore:
         with exclusive(self._lock_path()):
             self.data = clamp(_merge(self._read_disk(), patch))
             atomic.write_json(self.path, self.data)
+        self._debug_cache = None
         return self.data
 
     def patch_player(self, patch: dict[str, Any]) -> dict[str, Any]:
@@ -189,16 +208,27 @@ class SettingsStore:
             merged.update(patch)
             self.data = clamp(_merge(raw, {"player": merged}))
             atomic.write_json(self.path, self.data)
+        self._debug_cache = None
         return self.data
 
     def debug_enabled(self) -> bool:
-        """跨进程实时读取调试开关：manager 可能刚改过，内存里的旧值不算数。"""
+        """跨进程读取调试开关，缓存两秒。
+
+        这个值在自动跳过判定里是逐曲调用的：一轮扫几百首就是几百次读盘，
+        而调试开关的语义是「下次判定就生效」，两秒的延迟看不出来。
+        """
+        now = time.monotonic()
+        if self._debug_cache is not None and now - self._debug_cache[0] < DEBUG_CACHE_SECONDS:
+            return self._debug_cache[1]
         try:
             raw = atomic.read_json(self.path)
         except (ConfigError, OSError):
+            self._debug_cache = (now, False)
             return False
         common = raw.get("common") if isinstance(raw, dict) else None
-        return bool(common.get("debug")) if isinstance(common, dict) else False
+        enabled = bool(common.get("debug")) if isinstance(common, dict) else False
+        self._debug_cache = (now, enabled)
+        return enabled
 
     def get(self, *keys: str, default: Any = None) -> Any:
         node: Any = self.data

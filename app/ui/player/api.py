@@ -129,7 +129,8 @@ class PlayerApi:
             return
         if not isinstance(raw, dict):
             return
-        self._queue_visible = bool(raw.get("queue_visible", True))
+        visible = raw.get("queue_visible")
+        self._queue_visible = visible if isinstance(visible, bool) else True
         window = raw.get("window")
         if isinstance(window, dict):
             self._window_size = (
@@ -267,8 +268,19 @@ class PlayerApi:
 
     def set_playing(self, on: object) -> dict[str, Any]:
         with self._lock:
-            self.session.set_playing(bool(on))
-            if not on:
+            # 网页传的是布尔值；字符串只在被别处调用时出现，别把 "false" 当成真。
+            playing = (
+                bool(on)
+                if not isinstance(on, str)
+                else on.strip().lower()
+                not in (
+                    "",
+                    "false",
+                    "0",
+                )
+            )
+            self.session.set_playing(playing)
+            if not playing:
                 self._save_progress()
             return {"ok": True}
 

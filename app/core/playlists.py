@@ -86,19 +86,23 @@ class PlaylistStore:
         declared = raw.get("default_uid")
         if isinstance(declared, str) and declared in self.items and self.items[declared].builtin:
             self.default_uid = declared
-        else:
-            self._ensure_default()
+        elif self._ensure_default():
+            # 文件里没有可用的默认歌单，新建的那条要立刻落盘：否则每次启动都会
+            # 生成一个新的 uid，旧 uid 的统计文件就永远对不上了。
+            self.save()
 
         return list(self.warnings)
 
-    def _ensure_default(self) -> None:
+    def _ensure_default(self) -> bool:
+        """保证至少有一个内置默认歌单；返回是否新建了一条。"""
         for playlist in self.items.values():
             if playlist.builtin:
                 self.default_uid = playlist.uid
-                return
+                return False
         playlist = make_default_playlist()
         self.items[playlist.uid] = playlist
         self.default_uid = playlist.uid
+        return True
 
     def save(self) -> None:
         atomic.write_json(self.path, self.to_payload())

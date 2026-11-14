@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -49,7 +50,9 @@ def resolve_user_path(raw: str) -> Path:
     text = (raw or "").strip()
     if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
         text = text[1:-1]
-    text = text.replace("/", "\\").strip()
+    if os.name == "nt":  # 只有 Windows 认反斜杠；别的平台保持原样，免得把 / 也换掉
+        text = text.replace("/", "\\")
+    text = text.strip()
     if not text:
         return PROGRAM_DIR
     path = Path(text)

@@ -18,7 +18,7 @@ from loguru import logger
 from app import __version__, i18n, paths
 from app.core import integrity, source
 from app.core.adaptation import Params, effective, params_from_dict, skip_probability, skip_rate
-from app.core.importer import ImportOutcome, import_file
+from app.core.importer import commit_import, prepare_import
 from app.core.library import Library
 from app.core.naming import parse_filename
 from app.core.playlists import PlaylistStore
@@ -42,6 +42,7 @@ from app.system.single_instance import is_running
 
 SECTIONS = ("overview", "songs", "playlists", "tags", "authors", "settings")
 RECENT_LIMIT = 5
+MAX_TASKS = 20
 AUDIO_FILTER = ("音频文件 (*.mp3;*.m4a)",)
 ADAPTATION_KEYS = ("window", "min_plays", "base", "skip_seconds")
 
@@ -96,6 +97,15 @@ class ManagerApi:
             self._media.stop()
             self._media = None
 
+    def _retitle(self) -> None:
+        """窗口标题跟着界面语言走；老版本 pywebview 没有 set_title。"""
+        if self._window is None:
+            return
+        try:
+            self._window.set_title(i18n.t("manager.title"))
+        except Exception as error:
+            logger.debug("修改窗口标题失败：{}", error)
+
     # ---------- 读取 ----------
 
     def get_strings(self) -> dict[str, str]:
@@ -135,14 +145,24 @@ class ManagerApi:
     # ---------- 快照 ----------
 
     def _snapshot(self) -> dict[str, Any]:
+        """一次快照只扫一遍库。
+
+        「文件在不在」「标签约束」「孤儿文件」「失效引用」原来各算两遍（列表一遍、
+        概览一遍），几百首歌时每次点击都要多跑上千次 ``stat``。这里统一算一次再分发。
+        """
         missing = set(self.library.missing_files())
         tag_issues = set(self.library.tag_violations())
+        orphans = integrity.orphan_paths(self.library)
+        broken = self.library.broken_references()
         return {
             "ok": True,
             "message": "",
             "section": self.section,
             "selection": self.selection,
             "language": i18n.current(),
+            "languages": [
+                {"code": code, "name": name} for code, name in i18n.available_languages()
+            ],
             "theme": theme_tool.resolve(
                 str(self.settings.get("common", "theme", default="system"))
             ),
@@ -151,25 +171,46 @@ class ManagerApi:
             "settings": self.settings.data,
             "status": self.status,
             "counts": self._counts(),
-            "overview": self._overview(),
+            "overview": self._overview(missing, tag_issues, orphans, broken),
             "warnings": list(self.warnings),
             "errors": [],
         }
 
+    def _reference_counts(self) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
+        """一次遍历算出标签、标签组、作者各被多少首歌引用。
+
+        原来是「每个作者扫一遍全部歌曲」，作者上百个就是几十万次比较；
+        改成遍历歌曲、给计数加一，代价与作者数量无关。
+        """
+        group_of = {
+            tag.uid: group.uid for group in self.library.tag_groups.values() for tag in group.tags
+        }
+        tag_counts: dict[str, int] = {}
+        group_counts: dict[str, int] = {}
+        author_counts: dict[str, int] = {}
+        for music in self.library.musics.values():
+            for uid in music.tags:
+                tag_counts[uid] = tag_counts.get(uid, 0) + 1
+            for uid in music.authors:
+                author_counts[uid] = author_counts.get(uid, 0) + 1
+            for group_uid in {group_of[uid] for uid in music.tags if uid in group_of}:
+                group_counts[group_uid] = group_counts.get(group_uid, 0) + 1
+        return tag_counts, group_counts, author_counts
+
     def _library_payload(self, missing: set[str], tag_issues: set[str]) -> dict[str, Any]:
-        usage = self.library.tag_usage()
+        tag_counts, group_counts, author_counts = self._reference_counts()
         tag_groups: list[dict[str, Any]] = []
         for group in sorted(self.library.tag_groups.values(), key=lambda item: item.name):
             payload = group.to_dict()
-            payload["count"] = len(self.library.tag_group_songs(group.uid))
+            payload["count"] = group_counts.get(group.uid, 0)
             for tag in payload["tags"]:
-                tag["count"] = usage.get(tag["uid"], 0)
+                tag["count"] = tag_counts.get(tag["uid"], 0)
             tag_groups.append(payload)
 
         authors: list[dict[str, Any]] = []
         for author in self.library.authors.values():
             payload = author.to_dict()
-            payload["count"] = len(self.library.author_songs(author.uid))
+            payload["count"] = author_counts.get(author.uid, 0)
             authors.append(payload)
 
         return {
@@ -213,7 +254,13 @@ class ManagerApi:
         counts["playlists"] = len(self.playlists.items)
         return counts
 
-    def _overview(self) -> dict[str, Any]:
+    def _overview(
+        self,
+        missing: set[str] | None = None,
+        tag_issues: set[str] | None = None,
+        orphans: list | None = None,
+        broken: list[str] | None = None,
+    ) -> dict[str, Any]:
         now = int(time.time())
         musics = sorted(
             self.library.musics.values(), key=lambda item: item.created_at, reverse=True
@@ -251,17 +298,22 @@ class ManagerApi:
         )
         edited.sort(key=lambda item: item["at"], reverse=True)
 
+        if missing is None:
+            missing = set(self.library.missing_files())
+        if tag_issues is None:
+            tag_issues = set(self.library.tag_violations())
+        if orphans is None:
+            orphans = integrity.orphan_paths(self.library)
+        if broken is None:
+            broken = self.library.broken_references()
+
         issues: list[dict[str, Any]] = []
-        missing_tag = self.library.tag_violations()
-        if missing_tag:
-            issues.append({"kind": "missing_tag", "count": len(missing_tag)})
-        missing_file = self.library.missing_files()
-        if missing_file:
-            issues.append({"kind": "missing_file", "count": len(missing_file)})
-        orphans = integrity.orphan_paths(self.library)
+        if tag_issues:
+            issues.append({"kind": "missing_tag", "count": len(tag_issues)})
+        if missing:
+            issues.append({"kind": "missing_file", "count": len(missing)})
         if orphans:
             issues.append({"kind": "orphan_file", "count": len(orphans)})
-        broken = self.library.broken_references()
         if broken:
             issues.append({"kind": "broken_reference", "count": len(broken)})
 
@@ -668,8 +720,7 @@ class ManagerApi:
                 return snapshot
             self.playlists.remove(uid)
             self.playlists.save()
-            for suffix in (".json", ".lock"):
-                self.stats.path_for(uid).with_suffix(suffix).unlink(missing_ok=True)
+            self.stats.remove(uid)
             if self.selection and self.selection.get("uid") == uid:
                 self.selection = None
             return self._snapshot()
@@ -765,6 +816,8 @@ class ManagerApi:
                 return self._snapshot()
             if 0 <= index < len(playlist.filters):
                 del playlist.filters[index]
+                # 删掉最后一条时补回「包含 · 全部歌曲」，内存状态与下次加载一致。
+                playlist.normalize()
                 self.playlists.touch(uid)
                 self.playlists.save()
             return self._snapshot()
@@ -921,27 +974,34 @@ class ManagerApi:
 
     # ---------- 导入 ----------
 
-    def browse_import(self) -> dict[str, Any]:
+    def _start_dir(self) -> str:
+        return str(paths.resolve_user_path(str(self.settings.get("import", "dir", default=""))))
+
+    def _ask_paths(self, *, multiple: bool) -> list[str]:
+        """文件选择对话框；失败只记日志，返回空列表。
+
+        老版本 pywebview 有时返回 ``str``，有时返回 ``list``，统一成列表。
+        """
         if self._window is None:
-            return {"paths": []}
-        start_dir = str(
-            paths.resolve_user_path(str(self.settings.get("import", "dir", default="")))
-        )
+            return []
         try:
             result = self._window.create_file_dialog(
                 webview.OPEN_DIALOG,
-                directory=start_dir,
-                allow_multiple=True,
+                directory=self._start_dir(),
+                allow_multiple=multiple,
                 file_types=AUDIO_FILTER,
             )
         except Exception as error:
             logger.error("打开文件对话框失败：{}", error)
-            return {"paths": [], "message": str(error)}
+            return []
         if not result:
-            return {"paths": []}
+            return []
         if isinstance(result, str):
-            return {"paths": [result]}
-        return {"paths": [str(item) for item in result]}
+            return [result]
+        return [str(item) for item in result]
+
+    def browse_import(self) -> dict[str, Any]:
+        return {"paths": self._ask_paths(multiple=True)}
 
     def preview_import(self, paths_list: list[str]) -> dict[str, Any]:
         """把文件名拆成标题与作者，供批量向导逐条修改。"""
@@ -958,6 +1018,23 @@ class ManagerApi:
                 }
             )
         return {"items": items}
+
+    def _register_task(self, payload: dict[str, Any]) -> str:
+        """登记一个任务并清掉过期的旧任务，任务表不会无限长。"""
+        task_id = new_uid()
+        with self._lock:
+            self._tasks[task_id] = payload
+            stale = [key for key, item in self._tasks.items() if item["state"] != "running"]
+            for key in stale[: max(0, len(self._tasks) - MAX_TASKS)]:
+                del self._tasks[key]
+        return task_id
+
+    def _task_patch(self, task_id: str, **fields: Any) -> dict[str, Any] | None:
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if task is not None:
+                task.update(fields)
+            return task
 
     def start_import(self, items: list[Any], clean: bool | None = None) -> dict[str, Any]:
         normalized: list[dict[str, Any]] = []
@@ -978,9 +1055,8 @@ class ManagerApi:
         if not normalized:
             return {"task_id": ""}
 
-        task_id = new_uid()
-        with self._lock:
-            self._tasks[task_id] = {
+        task_id = self._register_task(
+            {
                 "state": "running",
                 "done": 0,
                 "total": len(normalized),
@@ -989,6 +1065,7 @@ class ManagerApi:
                 "errors": [],
                 "clean": clean,
             }
+        )
         thread = threading.Thread(
             target=self._run_import, args=(task_id, normalized), name="import", daemon=True
         )
@@ -996,48 +1073,60 @@ class ManagerApi:
         return {"task_id": task_id}
 
     def _run_import(self, task_id: str, items: list[dict[str, Any]]) -> None:
+        """逐条导入。
+
+        清洗、算 MD5、读时长都在锁外做——这些是秒级的；只有「落盘 + 写进内存库」
+        这一小段在锁内。否则导入期间界面的每一次快照都会被锁住，而导入线程
+        直接改 ``library.musics`` 又会让别的线程撞上「字典在迭代时被改变」。
+        """
         default_clean = bool(self.settings.get("import", "clean_audio", default=True))
-        with self._lock:
-            task = self._tasks.get(task_id)
-            if task is None:
-                return
-            clean = default_clean if task.get("clean") is None else bool(task["clean"])
+        task = self._task_patch(task_id)
+        if task is None:
+            return
+        clean = default_clean if task.get("clean") is None else bool(task["clean"])
 
         for index, entry in enumerate(items, start=1):
             path = Path(entry["path"])
-            with self._lock:
-                task = self._tasks.get(task_id)
-                if task is None:
-                    return
-                task["current"] = path.name
+            if self._task_patch(task_id, current=path.name) is None:
+                return
+
             try:
-                outcome: ImportOutcome = import_file(
-                    path,
-                    self.library,
-                    clean=clean,
-                    title=entry.get("title"),
-                    authors=entry.get("authors"),
-                )
+                prepared = prepare_import(path, clean)
             except Exception as error:  # 单个文件失败不打断整批
-                logger.exception("导入失败：{}", entry["path"])
-                outcome = ImportOutcome(error=str(error))
+                logger.warning("导入准备失败：{}（{}）", path, error)
+                self._record_import_error(task_id, f"{path.name}：{error}", index)
+                continue
+
             with self._lock:
                 task = self._tasks.get(task_id)
                 if task is None:
+                    prepared.discard()
                     return
-                if outcome.error:
-                    task["errors"].append(f"{path.name}：{outcome.error}")
-                elif outcome.duplicate:
-                    task["errors"].append(f"{path.name}：{i18n.t('import.duplicate')}")
+                try:
+                    outcome = commit_import(
+                        prepared, self.library, entry.get("title"), entry.get("authors")
+                    )
+                except Exception as error:
+                    logger.exception("导入提交失败：{}", path)
+                    task["errors"].append(f"{path.name}：{error}")
                 else:
-                    task["imported"].append(outcome.music.md5)
-                    self.library.save()
+                    if outcome.error:
+                        task["errors"].append(f"{path.name}：{outcome.error}")
+                    elif outcome.duplicate:
+                        task["errors"].append(f"{path.name}：{i18n.t('import.duplicate')}")
+                    else:
+                        task["imported"].append(outcome.music.md5)
+                        self.library.save()
                 task["done"] = index
+
+        self._task_patch(task_id, state="done", current="")
+
+    def _record_import_error(self, task_id: str, message: str, index: int) -> None:
         with self._lock:
             task = self._tasks.get(task_id)
             if task is not None:
-                task["state"] = "done"
-                task["current"] = ""
+                task["errors"].append(message)
+                task["done"] = index
 
     def poll_task(self, task_id: str) -> dict[str, Any]:
         with self._lock:
@@ -1066,26 +1155,8 @@ class ManagerApi:
 
     def browse_audio(self) -> dict[str, Any]:
         """换源用的单文件选择。"""
-        if self._window is None:
-            return {"path": ""}
-        start_dir = str(
-            paths.resolve_user_path(str(self.settings.get("import", "dir", default="")))
-        )
-        try:
-            result = self._window.create_file_dialog(
-                webview.OPEN_DIALOG,
-                directory=start_dir,
-                allow_multiple=False,
-                file_types=AUDIO_FILTER,
-            )
-        except Exception as error:
-            logger.error("打开文件对话框失败：{}", error)
-            return {"path": "", "message": str(error)}
-        if not result:
-            return {"path": ""}
-        if isinstance(result, str):
-            return {"path": result}
-        return {"path": str(result[0]) if result else ""}
+        picked = self._ask_paths(multiple=False)
+        return {"path": picked[0] if picked else ""}
 
     def _adaptation_defaults(self) -> Params:
         return params_from_dict(self.settings.get("common", "adaptation", default={}))
@@ -1094,9 +1165,8 @@ class ManagerApi:
         with self._lock:
             if md5 not in self.library.musics:
                 return {"task_id": ""}
-        task_id = new_uid()
-        with self._lock:
-            self._tasks[task_id] = {
+        task_id = self._register_task(
+            {
                 "state": "running",
                 "kind": "replace",
                 "done": 0,
@@ -1106,6 +1176,7 @@ class ManagerApi:
                 "errors": [],
                 "result": None,
             }
+        )
         thread = threading.Thread(
             target=self._run_replace, args=(task_id, md5, path), name="replace", daemon=True
         )
@@ -1232,22 +1303,27 @@ class ManagerApi:
 
     # ---------- 系统 ----------
 
-    def open_data_dir(self) -> dict[str, Any]:
+    def _open_dir(self, path: Path) -> dict[str, Any]:
         try:
-            paths.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            os.startfile(str(paths.CONFIG_DIR))
+            path.mkdir(parents=True, exist_ok=True)
+            os.startfile(str(path))
             return {"ok": True}
-        except OSError as error:
+        except (OSError, AttributeError) as error:  # 非 Windows 上没有 os.startfile
             return {"ok": False, "message": str(error)}
+
+    def open_data_dir(self) -> dict[str, Any]:
+        return self._open_dir(paths.CONFIG_DIR)
+
+    def open_log_dir(self) -> dict[str, Any]:
+        return self._open_dir(paths.LOG_DIR)
 
     def run_integrity(self) -> dict[str, Any]:
         with self._lock:
             return integrity.check(self.library, self.playlists, self.stats)
 
     def start_integrity(self, deep: bool = False) -> dict[str, Any]:
-        task_id = new_uid()
-        with self._lock:
-            self._tasks[task_id] = {
+        task_id = self._register_task(
+            {
                 "state": "running",
                 "kind": "integrity",
                 "done": 0,
@@ -1258,6 +1334,7 @@ class ManagerApi:
                 "result": None,
                 "cancel": False,
             }
+        )
         thread = threading.Thread(
             target=self._run_integrity, args=(task_id, bool(deep)), name="integrity", daemon=True
         )
@@ -1266,12 +1343,7 @@ class ManagerApi:
 
     def _run_integrity(self, task_id: str, deep: bool) -> None:
         def progress(done: int, total: int, name: str) -> None:
-            with self._lock:
-                task = self._tasks.get(task_id)
-                if task is not None:
-                    task["done"] = done
-                    task["total"] = total
-                    task["current"] = name
+            self._task_patch(task_id, done=done, total=total, current=name)
 
         def cancelled() -> bool:
             with self._lock:
@@ -1280,22 +1352,26 @@ class ManagerApi:
 
         try:
             if deep:
+                # 深检要遍历全部歌曲重算 MD5，期间导入线程可能正在加歌。
+                # 用一份副本做检查：结果对应一个一致的时间点，也不会撞上迭代中修改。
+                with self._lock:
+                    library = self.library.clone()
                 report = integrity.deep_check(
-                    self.library, self.playlists, self.stats, progress, cancelled
+                    library, self.playlists, self.stats, progress, cancelled
                 )
             else:
-                report = integrity.check(self.library, self.playlists, self.stats)
+                with self._lock:
+                    report = integrity.check(self.library, self.playlists, self.stats)
         except Exception as error:
             logger.exception("完整性检查失败")
             self._finish_task(task_id, error=str(error))
             return
-        with self._lock:
-            task = self._tasks.get(task_id)
-            if task is None:
-                return
-            task["state"] = "cancelled" if cancelled() else "done"
-            task["current"] = ""
-            task["result"] = report
+        self._task_patch(
+            task_id,
+            state="cancelled" if cancelled() else "done",
+            current="",
+            result=report,
+        )
 
     def fix_issues(self, kind: str = "") -> dict[str, Any]:
         with self._lock:
@@ -1313,6 +1389,23 @@ class ManagerApi:
         with self._lock:
             if isinstance(patch, dict) and patch:
                 self.settings.update(patch)
+                self._sync_language()
+            return self._snapshot()
+
+    def _sync_language(self) -> None:
+        """设置里的语言变了就立刻生效：文案、窗口标题一起换。"""
+        language = str(self.settings.get("common", "language", default=i18n.DEFAULT_LANGUAGE))
+        if language == i18n.current():
+            return
+        if i18n.set_language(language) == language:
+            self._retitle()
+
+    def set_language(self, language: str) -> dict[str, Any]:
+        with self._lock:
+            if language in dict(i18n.available_languages()):
+                self.settings.update({"common": {"language": language}})
+                i18n.set_language(language)
+                self._retitle()
             return self._snapshot()
 
     def set_theme(self, theme: str) -> dict[str, Any]:
@@ -1330,7 +1423,7 @@ class ManagerApi:
             )
         except Exception as error:
             logger.error("打开目录对话框失败：{}", error)
-            return {"path": "", "message": str(error)}
+            return {"path": ""}
         if not result:
             return {"path": ""}
         if isinstance(result, str):
@@ -1361,11 +1454,3 @@ class ManagerApi:
             "program_dir": str(paths.PROGRAM_DIR),
             "version": __version__,
         }
-
-    def open_log_dir(self) -> dict[str, Any]:
-        try:
-            paths.LOG_DIR.mkdir(parents=True, exist_ok=True)
-            os.startfile(str(paths.LOG_DIR))
-            return {"ok": True}
-        except OSError as error:
-            return {"ok": False, "message": str(error)}

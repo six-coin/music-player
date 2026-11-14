@@ -154,14 +154,18 @@ def _content_mismatch(
 ) -> list[str]:
     items: list[str] = []
     targets = []
+    total = 0
     for music in library.musics.values():
         path = paths.music_path(music.md5, music.ext)
-        if path.exists():
-            targets.append((music, path))
-    total = sum(path.stat().st_size for _, path in targets)
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue  # 文件不在或读不到：归「文件缺失」，不在这里重复报
+        targets.append((music, path, size))
+        total += size
     done = 0
 
-    for music, path in targets:
+    for music, path, size in targets:
         if cancel is not None and cancel():
             break
         if progress is not None:
@@ -173,7 +177,7 @@ def _content_mismatch(
             continue
         if actual != music.md5:
             items.append(f"{music.title}：文件内容与记录不符")
-        done += path.stat().st_size
+        done += size
 
     if progress is not None:
         progress(total, total, "")
@@ -303,9 +307,8 @@ def fix(
     counts: dict[str, int] = {}
     if kind in ("", "orphan_file"):
         files = orphan_paths(library)
-        for file in files:
-            recycle.recycle(file)
-        counts["orphan_file"] = len(files)
+        removed = sum(1 for file in files if recycle.recycle(file))
+        counts["orphan_file"] = removed
     if kind in ("", "broken_reference"):
         counts["broken_reference"] = _fix_references(library, playlists)
     if kind in ("", "stats_residue"):

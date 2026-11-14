@@ -10,7 +10,3 @@ logs/
 config/
 assets/
 .workbuddy-ai/
-
-# 重构前的参考材料，删除这两个目录后一并删掉这两行
-music-player-manager/
-music-player-simple/

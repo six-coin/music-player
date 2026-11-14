@@ -41,14 +41,22 @@ class Library:
         if not isinstance(raw, dict):
             raise ConfigError(f"音乐库结构错误：{self.path} 的顶层必须是对象")
 
-        for item in raw.get("authors") or []:
+        for item in self._records(raw, "authors", "作者"):
             self._load_record(item, Author, self.authors, "作者")
-        for item in raw.get("tag_groups") or []:
+        for item in self._records(raw, "tag_groups", "标签组"):
             self._load_record(item, TagGroup, self.tag_groups, "标签组")
-        for item in raw.get("musics") or []:
+        for item in self._records(raw, "musics", "歌曲"):
             self._load_record(item, Music, self.musics, "歌曲", key="md5")
 
         return list(self.warnings)
+
+    def _records(self, raw: dict[str, Any], key: str, label: str) -> list[Any]:
+        """取一段记录列表；写成对象或字符串时整段跳过并留一条警告。"""
+        value = raw.get(key) or []
+        if not isinstance(value, list):
+            self.warnings.append(f"{label}列表格式错误，整段已跳过")
+            return []
+        return value
 
     def _load_record(self, raw: Any, model, target: dict, label: str, key: str = "uid") -> None:
         if not isinstance(raw, dict):
@@ -86,6 +94,17 @@ class Library:
             item["uid"]: TagGroup.from_dict(item) for item in payload.get("tag_groups", [])
         }
         self.musics = {item["md5"]: Music.from_dict(item) for item in payload.get("musics", [])}
+
+    def clone(self) -> Library:
+        """复制一份独立的内存库，用于「读一遍很慢、期间可能有人在写」的场景。
+
+        深检要遍历全部歌曲重算 MD5，耗时以秒计；导入线程 meanwhile 会往
+        ``musics`` 里加记录。直接遍历会撞上「字典在迭代时被改变」，复制一份
+        则拿到的是一个一致的时间点快照。副本不负责写盘。
+        """
+        copy = Library(self.path)
+        copy.restore(self.to_payload())
+        return copy
 
     # ---------- 查询 ----------
 

@@ -139,6 +139,12 @@
   </div>
 
   <audio id="audio" preload="metadata"></audio>
-  <script src="app.js"></script>
+  <!-- 没有构建步骤：按职责拆成多个普通脚本，共享全局作用域，顺序见 docs/architecture.md -->
+  <script src="js/core.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/playback.js"></script>
+  <script src="js/picker.js"></script>
+  <script src="js/events.js"></script>
+  <script src="js/main.js"></script>
 </body>
 </html>

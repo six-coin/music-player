@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.core.library import Library
@@ -134,3 +136,30 @@ def test_broken_default_uid_is_repaired(tmp_path):
 
     assert store.default_uid in store.items
     assert store.default().builtin is True
+
+
+def test_filter_playlist_keeps_at_least_one_condition(tmp_path):
+    """删掉最后一条条件后补回默认条件：文件不能变成加载时会被丢掉的坏记录。"""
+    store = PlaylistStore(tmp_path / "playlists.json")
+    store.load()
+    playlist = store.create("条件", "filter")
+    playlist.filters = []
+
+    playlist.normalize()
+    playlist.validate()
+
+    assert len(playlist.filters) == 1
+    assert playlist.filters[0].target == "all"
+
+
+def test_default_playlist_is_persisted_when_missing(tmp_path):
+    """文件里没有内置歌单时，新建的那条要立刻落盘，否则每次启动都会换 uid。"""
+    path = tmp_path / "playlists.json"
+    path.write_text(json.dumps({"version": 1, "default_uid": "", "items": []}), encoding="utf-8")
+
+    store = PlaylistStore(path)
+    store.load()
+
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["default_uid"] == store.default_uid
+    assert [item["builtin"] for item in saved["items"]] == [True]

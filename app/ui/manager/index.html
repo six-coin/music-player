@@ -369,6 +369,24 @@
 
   <div class="toast" id="toast" role="status" hidden></div>
 
-  <script src="app.js"></script>
+  <!-- 没有构建步骤：按职责拆成多个普通脚本，共享全局作用域，顺序见 docs/architecture.md -->
+  <script src="js/core.js"></script>
+  <script src="js/navigation.js"></script>
+  <script src="js/ui-widgets.js"></script>
+  <script src="js/render-overview.js"></script>
+  <script src="js/render-songs.js"></script>
+  <script src="js/render-playlists.js"></script>
+  <script src="js/render-library.js"></script>
+  <script src="js/render-settings.js"></script>
+  <script src="js/stats.js"></script>
+  <script src="js/integrity.js"></script>
+  <script src="js/import.js"></script>
+  <script src="js/actions-library.js"></script>
+  <script src="js/actions-songs.js"></script>
+  <script src="js/events-shell.js"></script>
+  <script src="js/events-playlists.js"></script>
+  <script src="js/events-library.js"></script>
+  <script src="js/events-panels.js"></script>
+  <script src="js/main.js"></script>
 </body>
 </html>

@@ -102,6 +102,23 @@ class StatsStore:
         with exclusive(lock_path):
             self.save(playlist_uid, {})
 
+    def remove(self, playlist_uid: str) -> bool:
+        """删掉整个歌单的统计。
+
+        只删数据文件，不删锁文件：另一个进程可能正持有它，删掉会制造
+        「同一个锁文件两个 inode」的假象，下一次读改写就绕过了互斥。
+        锁文件是空的，留着不占地方。
+        """
+        path = self.path_for(playlist_uid)
+        lock_path = path.with_suffix(".lock")
+        with exclusive(lock_path):
+            try:
+                path.unlink(missing_ok=True)
+                return True
+            except OSError:
+                logger.error("删除统计文件失败：{}", path)
+                return False
+
     def clear_all(self) -> int:
         """删掉全部统计文件，返回删掉的份数。"""
         if not self.directory.exists():

@@ -244,8 +244,13 @@ class PlayerSession:
 
     def previous(self) -> bool:
         if self.pin is not None:
+            # 退出 pin 时先把当前曲对回歌单里的原位置：即使前面没有可播的歌，
+            # 状态也必须停在「原歌单的原曲」上，不能留下「index 在歌单里、
+            # current_md5 却是歌单外那首」的半截状态。
             self.index = max(0, min(self.pin.origin_index, len(self.order) - 1))
             self.pin = None
+            if self.order:
+                self.current_md5 = self.order[self.index]
         for position in range(self.index - 1, -1, -1):
             if self._verdict(self.order[position], judge=False) == "take":
                 self.index = position
