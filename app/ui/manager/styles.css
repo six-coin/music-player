@@ -932,7 +932,10 @@ input[type="checkbox"]:disabled {
 }
 
 .song-list {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: 4px;
   min-height: 0;
   margin: 6px -6px 0;
   padding: 0 6px 10px;
@@ -2325,7 +2328,8 @@ input[type="checkbox"]:disabled {
   padding: 0 4px 28px 0;
 }
 
-.settings-body.is-entering {
+.settings-body.is-entering,
+.detail-pane.is-entering {
   animation: view-in 0.2s var(--ease);
 }
 

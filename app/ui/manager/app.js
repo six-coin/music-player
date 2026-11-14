@@ -1413,38 +1413,59 @@ async function goSection(section) {
   }
 }
 
+function animateDetail(id) {
+  const pane = qs("#" + id);
+  if (!pane) return;
+  pane.scrollTop = 0;
+  pane.classList.remove("is-entering");
+  void pane.offsetWidth;
+  pane.classList.add("is-entering");
+}
+
 async function selectMusic(md5) {
+  const same = state.activeKind === "music" && state.active === md5;
   state.active = md5;
   state.activeKind = "music";
   state.selection = new Set([md5]);
   state.anchor = md5;
   renderSongs();
   const data = await call("select_item", "music", md5);
-  if (data) apply(data);
+  if (!data) return;
+  apply(data);
+  if (!same) animateDetail("song-detail");
 }
 
 async function selectPlaylist(uid) {
+  const same = state.activeKind === "playlist" && state.active === uid;
   state.active = uid;
   state.activeKind = "playlist";
   renderPlaylists();
   const data = await call("select_item", "playlist", uid);
-  if (data) apply(data);
+  if (!data) return;
+  apply(data);
+  if (!same) animateDetail("playlist-detail");
 }
 
 async function selectTagGroup(uid) {
+  const same = state.activeKind === "tag_group" && state.active === uid;
   state.active = uid;
   state.activeKind = "tag_group";
   renderTags();
   const data = await call("select_item", "tag_group", uid);
-  if (data) apply(data);
+  if (!data) return;
+  apply(data);
+  if (!same) animateDetail("tag-detail");
 }
 
 async function selectAuthor(uid) {
+  const same = state.activeKind === "author" && state.active === uid;
   state.active = uid;
   state.activeKind = "author";
   renderAuthors();
   const data = await call("select_item", "author", uid);
-  if (data) apply(data);
+  if (!data) return;
+  apply(data);
+  if (!same) animateDetail("author-detail");
 }
 
 function toggleSelection(md5) {
@@ -4360,6 +4381,7 @@ function bindEvents() {
   qs("#settings-nav").addEventListener("click", function (event) {
     const tab = event.target.closest("[data-settings]");
     if (!tab) return;
+    if (tab.dataset.settings === state.settingsTab) return;
     state.settingsTab = tab.dataset.settings;
     renderSettings(true);
   });
