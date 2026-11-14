@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 import threading
 import time
 from pathlib import Path
@@ -177,8 +176,9 @@ class ManagerApi:
             "version": version_module.version(),
             "first_run": self.first_run,
             "redirected_from": self.redirected_from,
-            "data_dir": str(self.base),
-            "data_dir_next": str(paths.read_data_dir()),
+            "data_dir": str(paths.DATA_DIR),
+            "data_dir_next": str(paths.pending_data_dir() or ""),
+            "data_dir_default": str(paths.DATA_DIR_DEFAULT),
             "library": self._library_payload(missing, tag_issues),
             "playlists": self._playlist_payload(),
             "settings": self.settings.data,
@@ -1421,6 +1421,18 @@ class ManagerApi:
                 self._retitle()
             return self._snapshot()
 
+    def preview_language(self, language: str) -> dict[str, Any]:
+        """首次运行的语言下拉框：只换内存里的语言，不落盘。
+
+        落盘会让「第一次运行」的判据（settings.json 是否存在）提前成立，
+        用户中途关掉窗口就再也看不到语言选择。
+        """
+        with self._lock:
+            if language in dict(i18n.available_languages()):
+                i18n.set_language(language)
+                self._retitle()
+            return {"ok": True, "language": i18n.current(), "strings": i18n.strings()}
+
     def set_theme(self, theme: str) -> dict[str, Any]:
         with self._lock:
             if theme in THEMES:
@@ -1465,25 +1477,26 @@ class ManagerApi:
             return snapshot
 
     def set_data_dir(self, raw: str) -> dict[str, Any]:
-        """改数据目录：写指针，下次启动生效。设置文件复制一份过去。"""
+        """记下新的数据目录：补项目代号，下次启动把文件搬过去。"""
         with self._lock:
-            target = paths.resolve_user_path(str(raw))
-            if target == paths.DATA_DIR:
-                return self._snapshot()
             try:
-                target.mkdir(parents=True, exist_ok=True)
-                destination = target / paths.SETTINGS_PATH.name
-                if not destination.exists() and paths.SETTINGS_PATH.exists():
-                    shutil.copy2(paths.SETTINGS_PATH, destination)
-                paths.write_data_dir(target)
+                target = paths.request_data_dir(str(raw), base=paths.DATA_DIR)
             except OSError as error:
                 snapshot = self._snapshot()
                 snapshot["ok"] = False
                 snapshot["message"] = i18n.t("about.data_dir_failed", error=error)
                 return snapshot
             snapshot = self._snapshot()
-            snapshot["message"] = i18n.t("about.restart_hint")
+            snapshot["message"] = (
+                i18n.t("about.data_dir_saved", path=target)
+                if snapshot["data_dir_next"]
+                else i18n.t("about.data_dir_same")
+            )
             return snapshot
+
+    def reset_data_dir(self) -> dict[str, Any]:
+        """把数据目录恢复成默认位置。"""
+        return self.set_data_dir(str(paths.DATA_DIR_DEFAULT))
 
     def browse_folder(self) -> dict[str, Any]:
         if self._window is None:

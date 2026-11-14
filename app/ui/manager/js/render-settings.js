@@ -293,28 +293,22 @@ function settingsMaintenance() {
 
 function settingsAbout() {
   const data = state.data || {};
-  const pending = Boolean(data.data_dir_next && data.data_dir_next !== data.data_dir);
+  const next = data.data_dir_next || "";
+  // 输入框显示的是「重启后生效的落点」，没有待生效的值就是当前目录。
+  const shown = next || data.data_dir || "";
 
   return settingsCard(
     T("about.title"),
     settingsRow(
-      T("about.version"),
-      "",
-      '<span class="path-text">' + esc(data.version || "") + "</span>"
+      T("about.data_dir"),
+      next ? T("about.data_dir_pending", { path: next }) : T("about.data_dir_hint"),
+      '<input class="input path-input" id="data-dir" spellcheck="false" value="' +
+        esc(shown) + '">' +
+        '<button class="btn ghost small" data-action="about_data_dir">' +
+        esc(T("about.data_dir_change")) + "</button>" +
+        '<button class="btn ghost small" data-action="about_data_dir_reset">' +
+        esc(T("about.data_dir_reset")) + "</button>"
     ) +
-      settingsRow(
-        T("about.data_dir"),
-        pending
-          ? T("about.data_dir_pending", { path: data.data_dir_next })
-          : T("about.data_dir_hint"),
-        '<span class="path-text">' + esc(data.data_dir || "") + "</span>" +
-          '<button class="btn ghost small" data-action="about_data_dir">' +
-          esc(T("about.data_dir_change")) + "</button>" +
-          (pending
-            ? '<button class="btn primary small" data-action="about_restart">' +
-              esc(T("about.restart")) + "</button>"
-            : "")
-      ) +
       settingsRow(
         T("about.readme"),
         T("about.readme_hint"),
@@ -326,6 +320,11 @@ function settingsAbout() {
         T("about.reset_hint"),
         '<button class="btn danger-ghost small" data-action="about_reset">' +
           esc(T("about.reset")) + "</button>"
+      ) +
+      settingsRow(
+        T("about.version"),
+        "",
+        '<span class="path-text">' + esc(data.version || "") + "</span>"
       )
   );
 }
@@ -479,12 +478,37 @@ function confirmResetSettings() {
   });
 }
 
+async function applyDataDir(raw) {
+  const value = String(raw || "").trim();
+  if (!value) {
+    renderSettings();
+    return;
+  }
+  const data = await call("set_data_dir", value);
+  if (!data) return;
+  apply(data);
+  renderSettings();
+  if (data.message) toast(data.message);
+}
+
 async function changeDataDir() {
+  const input = qs("#data-dir");
+  const current = String(state.data.data_dir_next || state.data.data_dir || "").trim();
+  const typed = input ? input.value.trim() : "";
+  // 输入框改过就按输入的落点走，没改过才去选目录。
+  if (typed && typed !== current) {
+    await applyDataDir(typed);
+    return;
+  }
   const picked = await call("browse_folder");
   if (!picked || !picked.path) return;
-  const data = await call("set_data_dir", picked.path);
-  if (data) {
-    apply(data);
-    renderSettings();
-  }
+  await applyDataDir(picked.path);
+}
+
+async function resetDataDir() {
+  const data = await call("reset_data_dir");
+  if (!data) return;
+  apply(data);
+  renderSettings();
+  if (data.message) toast(data.message);
 }

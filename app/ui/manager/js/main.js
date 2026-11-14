@@ -22,8 +22,9 @@ async function runFirstRun() {
     title: T("firstrun.title"),
     dismissible: false,
     body:
-      '<p class="modal-note">' + esc(T("firstrun.text")) + "</p>" +
-      '<label class="field-label" for="firstrun-language">' + esc(T("firstrun.title")) + "</label>" +
+      '<p class="modal-note" data-i18n="firstrun.text">' + esc(T("firstrun.text")) + "</p>" +
+      '<label class="field-label" for="firstrun-language" data-i18n="firstrun.title">' +
+      esc(T("firstrun.title")) + "</label>" +
       '<select class="input" id="firstrun-language">' + options + "</select>",
     actions: [
       {
@@ -43,6 +44,27 @@ async function runFirstRun() {
       },
     ],
   });
+
+  // 下拉框一改就把界面切成那种语言：用户不必先点「开始使用」才能看懂界面。
+  const start = qs("#modal-actions .btn");
+  if (start) start.dataset.i18n = "firstrun.start";
+  const select = qs("#firstrun-language");
+  if (select) {
+    select.addEventListener("change", function () {
+      previewLanguage(select.value);
+    });
+  }
+}
+
+async function previewLanguage(code) {
+  const result = await call("preview_language", code);
+  if (!result) return;
+  await loadStrings();
+  applyStrings();
+  if (state.data) state.data.language = result.language;
+  document.documentElement.lang = result.language;
+  const title = qs("#modal-title");
+  if (title) title.textContent = T("firstrun.title");
 }
 
 async function showFirstRunReadme(redirected) {

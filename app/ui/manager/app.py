@@ -58,14 +58,10 @@ def main() -> None:
             _alert(i18n.t("manager.already_running"))
         return
 
-    api: ManagerApi | None = None
     try:
-        api = _run()
+        _run()
     finally:
         instance.release()
-
-    if api is not None and api.restart_requested:
-        bootstrap.restart_manager()
 
 
 def _run() -> ManagerApi | None:

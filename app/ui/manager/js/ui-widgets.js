@@ -241,7 +241,12 @@ function openModal(options) {
     button.className =
       "btn" + (action.primary ? " primary" : "") + (action.danger ? " danger" : "");
     button.textContent = action.label;
-    button.addEventListener("click", action.onClick);
+    button.addEventListener("click", function (event) {
+      // 按钮是显式动作：弹窗不允许 Esc 关闭时，按钮仍然要能把它关掉。
+      // 否则「必须读完的使用说明」会把首次运行卡死在这一屏。
+      modalDismissible = true;
+      action.onClick(event);
+    });
     qs("#modal-actions").appendChild(button);
   });
 

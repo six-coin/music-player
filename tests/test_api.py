@@ -56,3 +56,27 @@ def test_empty_library_reports_no_issues(tmp_path):
 
     assert overview["issues"] == []
     assert overview["recent_imported"] == []
+
+
+def test_preview_language_does_not_write_settings(tmp_path):
+    """首次运行的语言下拉框只换内存：写了设置就等于跳过了首次运行。"""
+    from app import i18n
+
+    api = ManagerApi(config_dir=tmp_path)
+    settings_file = tmp_path / "settings.json"
+    before = settings_file.read_bytes()
+
+    result = api.preview_language("en-US")
+
+    assert result["language"] == "en-US"
+    assert i18n.current() == "en-US"
+    assert settings_file.read_bytes() == before
+
+
+def test_preview_language_ignores_an_unknown_code(tmp_path):
+    api = ManagerApi(config_dir=tmp_path)
+    api.preview_language("en-US")
+
+    result = api.preview_language("xx-XX")
+
+    assert result["language"] == "en-US"

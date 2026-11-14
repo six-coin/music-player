@@ -98,6 +98,12 @@ function bindPanelEvents() {
     }
   });
 
+  settingsBody.addEventListener("keydown", function (event) {
+    if (event.target.id !== "data-dir" || event.key !== "Enter") return;
+    event.preventDefault();
+    applyDataDir(event.target.value);
+  });
+
   settingsBody.addEventListener("input", function (event) {
     if (event.target.id === "player-volume") {
       const label = qs("#player-volume-value");

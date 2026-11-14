@@ -2390,6 +2390,27 @@ input[type="checkbox"]:disabled {
   width: 190px;
 }
 
+/* 原生下拉框（首次启动的语言选择）：字体跟正文一致，展开的列表也跟着主题走。 */
+select.input {
+  font-family: inherit;
+}
+
+select option {
+  background: var(--panel);
+  color: var(--text);
+}
+
+[data-theme="dark"] select {
+  color-scheme: dark;
+}
+
+/* 路径类输入框比普通数字框宽一档：路径长，190px 只看得见盘符。 */
+.settings-row-control .input.path-input {
+  width: 300px;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 12.5px;
+}
+
 .settings-actions {
   display: flex;
   flex-wrap: wrap;

@@ -16,27 +16,27 @@ setup.bat
 
 Double-click `setup.bat`. It checks for uv, creates the virtual environment and installs dependencies. The window waits for a key press when it finishes.
 
-| Component | When you need it | Notes |
-|---|---|---|
-| uv | Always | The only supported way to manage dependencies |
-| WebView2 Runtime | Manager and player | Ships with Windows 11; Windows 10 usually has it via Edge |
-| VLC | Simple Player only | Install the 64-bit build; the app finds it on its own |
-| FFmpeg | Optional | Cleans audio on import and reads durations; playback works without it |
+| Component        | When you need it   | Notes                                                                 |
+|------------------|--------------------|-----------------------------------------------------------------------|
+| uv               | Always             | The only supported way to manage dependencies                         |
+| WebView2 Runtime | Manager and player | Ships with Windows 11; Windows 10 usually has it via Edge             |
+| VLC              | Simple Player only | Install the 64-bit build; the app finds it on its own                 |
+| FFmpeg           | Optional           | Cleans audio on import and reads durations; playback works without it |
 
 Moving to another machine: copy the program folder and run `setup.bat` there once. Copy `%PROGRAMDATA%\six-coin\music-player` to the same place and your library, playlists and audio come with you.
 
 ## 2. Starting
 
-| Entry point | What opens |
-|---|---|
-| `manager.bat` | Music Library Manager (window) |
-| `player.bat` | Music Player (window, no VLC needed) |
-| `simple.bat` | Simple Player (console, VLC required) |
-| `setup.bat` | Installs or updates the runtime |
+| Entry point   | What opens                            |
+|---------------|---------------------------------------|
+| `manager.bat` | Music Library Manager (window)        |
+| `player.bat`  | Music Player (window, no VLC needed)  |
+| `simple.bat`  | Simple Player (console, VLC required) |
+| `setup.bat`   | Installs or updates the runtime       |
 
 Each program allows a single instance. Double-clicking again while one is open shows "already running" and exits; no second window appears.
 
-On the **first run**, whichever entry point you double-click opens the manager instead: pick the interface language (the Windows UI language by default, English when there is no matching locale), then read the manual. If you started `player.bat` or `simple.bat`, one extra note explains that the manager is what just opened. Close it and start your original entry point again when you are done.
+On the **first run**, whichever entry point you double-click opens the manager instead: pick the interface language (the Windows UI language by default, English when there is no matching locale; the whole dialog switches the moment you change it), then read the manual. If you started `player.bat` or `simple.bat`, one extra note explains that the manager is what just opened. Close it and start your original entry point again when you are done.
 
 Closing the window quits. Next time the manager opens on the overview, and the player returns to the last playlist and position, paused.
 
@@ -61,12 +61,12 @@ The manager has three columns: navigation on the left, a list in the middle, det
 └─────────────────────────────────────────────────────────┘
 ```
 
-| Area | Contents |
-|---|---|
-| Navigation | Overview, Songs, Playlists, Tags, Artists, with Settings at the bottom |
-| List | Items of the current section, with title, count and the New button above |
-| Detail | Editor for the selected item; changes save as you type, there is no Save button |
-| Preview bar | Rises from the bottom after Preview; pause, seek and change volume there |
+| Area        | Contents                                                                        |
+|-------------|---------------------------------------------------------------------------------|
+| Navigation  | Overview, Songs, Playlists, Tags, Artists, with Settings at the bottom          |
+| List        | Items of the current section, with title, count and the New button above        |
+| Detail      | Editor for the selected item; changes save as you type, there is no Save button |
+| Preview bar | Rises from the bottom after Preview; pause, seek and change volume there        |
 
 The overview has no list column, so its main area spans two columns: six number cards (songs, total time, size, playlists, artists, tag groups), then "Recently imported / Recently edited" next to "To review", then the quick actions.
 
@@ -74,18 +74,18 @@ The overview has no list column, so its main area spans two columns: six number 
 
 Only `.mp3` and `.m4a` are accepted. Anything else is rejected with a reason.
 
-| Action | Result |
-|---|---|
-| Import music with one file selected | Import starts immediately with a progress dialog |
-| Import music with several files selected | The three-step bulk import wizard opens |
+| Action                                   | Result                                           |
+|------------------------------------------|--------------------------------------------------|
+| Import music with one file selected      | Import starts immediately with a progress dialog |
+| Import music with several files selected | The three-step bulk import wizard opens          |
 
 The wizard:
 
-| Step | What you do |
-|---|---|
+| Step            | What you do                                                                      |
+|-----------------|----------------------------------------------------------------------------------|
 | 1 Check details | Edit each title and artist; artists are comma separated; remove a file if needed |
-| 2 Choose tags | Tick tags that apply to the whole batch; skippable |
-| 3 Start import | Review the summary, decide whether to clean audio, start |
+| 2 Choose tags   | Tick tags that apply to the whole batch; skippable                               |
+| 3 Start import  | Review the summary, decide whether to clean audio, start                         |
 
 Rules:
 
@@ -99,30 +99,30 @@ Rules:
 
 The list sorts by title; switch to import date, duration or artist. Search matches titles, aliases, artists and tags at once.
 
-| Action | How |
-|---|---|
-| Select a song | Click it; the detail area shows its information |
-| Multi-select | `Ctrl` click, `Shift` click, or the checkbox at the start of a row |
-| Add tags in bulk | Select several, then Add tags |
-| Add to a playlist | Select several, then Add to playlist (manual playlists only) |
-| Delete in bulk | Select several, then Delete song |
+| Action            | How                                                                |
+|-------------------|--------------------------------------------------------------------|
+| Select a song     | Click it; the detail area shows its information                    |
+| Multi-select      | `Ctrl` click, `Shift` click, or the checkbox at the start of a row |
+| Add tags in bulk  | Select several, then Add tags                                      |
+| Add to a playlist | Select several, then Add to playlist (manual playlists only)       |
+| Delete in bulk    | Select several, then Delete song                                   |
 
 Detail cards:
 
-| Card | Contents |
-|---|---|
-| Basics | Title, artists (searchable, move up/down to reorder), tags (grouped checkboxes) |
-| File | MD5, path, size, duration, import date |
+| Card              | Contents                                                                                  |
+|-------------------|-------------------------------------------------------------------------------------------|
+| Basics            | Title, artists (searchable, move up/down to reorder), tags (grouped checkboxes)           |
+| File              | MD5, path, size, duration, import date                                                    |
 | Adaptive skipping | Records, skip rate, auto skips and next probability for this song in the default playlist |
 
 "More" in the top right holds four actions:
 
-| Action | What it does |
-|---|---|
-| Preview | Plays in the preview bar at the bottom; does not touch a running player |
-| Manage aliases | Aliases are searchable but never shown in lists |
+| Action              | What it does                                                                                |
+|---------------------|---------------------------------------------------------------------------------------------|
+| Preview             | Plays in the preview bar at the bottom; does not touch a running player                     |
+| Manage aliases      | Aliases are searchable but never shown in lists                                             |
 | Replace source file | Swap the audio file while title, artists, tags, playlist membership and statistics stay put |
-| Delete song | Confirms first; the audio file goes to the Recycle Bin |
+| Delete song         | Confirms first; the audio file goes to the Recycle Bin                                      |
 
 A tag group can be Required or Single. Violations never block saving: the row gets an amber dot and the integrity check reports it.
 
@@ -130,22 +130,22 @@ A tag group can be Required or Single. Violations never block saving: the row ge
 
 Two kinds, fixed at creation time and not switchable afterwards:
 
-| Kind | How songs get in |
-|---|---|
-| Manual | Hand-picked; drag to reorder |
+| Kind       | How songs get in                                |
+|------------|-------------------------------------------------|
+| Manual     | Hand-picked; drag to reorder                    |
 | Rule-based | Collected by rules, recomputed as you edit them |
 
 There is also a built-in Default playlist containing every song. It cannot be deleted or renamed, and it is what the Simple Player plays.
 
 Each rule row reads "Include/Exclude · Target · Values":
 
-| Target | Values |
-|---|---|
-| All songs | none |
-| Songs | pick from the library |
+| Target    | Values                                                                              |
+|-----------|-------------------------------------------------------------------------------------|
+| All songs | none                                                                                |
+| Songs     | pick from the library                                                               |
 | Playlists | pick another playlist (nesting allowed; a circular reference marks that row in red) |
-| Tags | pick tags; any match counts |
-| Artists | pick artists; any match counts |
+| Tags      | pick tags; any match counts                                                         |
+| Artists   | pick artists; any match counts                                                      |
 
 Rules evaluate top to bottom: includes add, excludes subtract. An empty rule matches nothing.
 
@@ -157,10 +157,10 @@ Deleting: the built-in playlist cannot be deleted. If another rule-based playlis
 
 A tag group is a container for tags, with two switches:
 
-| Switch | Meaning |
-|---|---|
-| Required | Every song needs at least one tag from this group |
-| Single | Every song may have at most one tag from this group |
+| Switch   | Meaning                                             |
+|----------|-----------------------------------------------------|
+| Required | Every song needs at least one tag from this group   |
+| Single   | Every song may have at most one tag from this group |
 
 Artists have a name and notes. The artist order is the order used by the artist picker in song details; drag rows or use the context menu. Artists with no songs can be removed in one go.
 
@@ -170,12 +170,12 @@ Deleting a referenced artist or tag group lists the affected songs first; confir
 
 Adaptive skipping filters out songs you keep skipping. It is configured **per playlist**: every playlist has its own switch and four parameters, and the same song's records in two playlists never mix.
 
-| Parameter | Default | Range | Meaning |
-|---|---|---|---|
-| History window | 100 | 10–1000 | How many recent plays are kept per song |
-| Minimum plays | 10 | 0–window | Never skip below this many records |
-| Skip base | 0.95 | 0–0.99 | Probability ceiling |
-| Skip threshold | 30 | 5–300 s | Switching away sooner counts as a skip |
+| Parameter      | Default | Range    | Meaning                                 |
+|----------------|---------|----------|-----------------------------------------|
+| History window | 100     | 10–1000  | How many recent plays are kept per song |
+| Minimum plays  | 10      | 0–window | Never skip below this many records      |
+| Skip base      | 0.95    | 0–0.99   | Probability ceiling                     |
+| Skip threshold | 30      | 5–300 s  | Switching away sooner counts as a skip  |
 
 The rule, for song M in playlist P:
 
@@ -188,13 +188,13 @@ otherwise           → p = min(base, 0.99) × s / n; skip with probability p
 
 What gets recorded:
 
-| Situation | Record |
-|---|---|
-| Skipped before the threshold (Next / `Ctrl+C`) | `1` |
-| Skipped after the threshold | `0` |
-| Played to the end | `0` |
-| Skipped automatically | nothing; only the auto-skip counter grows |
-| Previous, clicking the queue, switching playlist, quitting | nothing |
+| Situation                                                  | Record                                    |
+|------------------------------------------------------------|-------------------------------------------|
+| Skipped before the threshold (Next / `Ctrl+C`)             | `1`                                       |
+| Skipped after the threshold                                | `0`                                       |
+| Played to the end                                          | `0`                                       |
+| Skipped automatically                                      | nothing; only the auto-skip counter grows |
+| Previous, clicking the queue, switching playlist, quitting | nothing                                   |
 
 Automatic skipping is **silent**: no toast, no flash, the player simply moves on and marks that row as played.
 
@@ -221,14 +221,14 @@ Three columns: playlists on the left, the current track in the middle, the queue
 └──────────────┴────────────────────────────────┴──────────────┘
 ```
 
-| Behaviour | Detail |
-|---|---|
-| Click a playlist | Loads it and starts from the first song |
-| Click the current playlist again | Nothing happens; position and queue stay put |
-| Click a queue row | Jumps there immediately, from 0; played rows can be clicked too |
-| Previous / Next | Wraps according to the mode; playback never stops |
-| Three modes | Shuffle, list loop, repeat one — all endless |
-| Repeat one, other song | "Pick one to loop" beside the title picks from the whole library |
+| Behaviour                        | Detail                                                           |
+|----------------------------------|------------------------------------------------------------------|
+| Click a playlist                 | Loads it and starts from the first song                          |
+| Click the current playlist again | Nothing happens; position and queue stay put                     |
+| Click a queue row                | Jumps there immediately, from 0; played rows can be clicked too  |
+| Previous / Next                  | Wraps according to the mode; playback never stops                |
+| Three modes                      | Shuffle, list loop, repeat one — all endless                     |
+| Repeat one, other song           | "Pick one to loop" beside the title picks from the whole library |
 
 The queue always shows the **whole playlist**: played rows dimmed, the current one highlighted, upcoming ones normal. The next round is only generated after the last song ends, and Previous is disabled in a fresh round.
 
@@ -253,12 +253,12 @@ Double-click and the default playlist starts. No menu, no picker. Everything is 
 └────────────────────────────────────────────────┘
 ```
 
-| Behaviour | Detail |
-|---|---|
-| Play modes | Shuffle or list loop, from the manager's Simple player page |
-| Volume | Read once at startup; later changes do not affect a running player |
-| Skip | `Ctrl+C` moves to the next song without quitting |
-| Quit | `Ctrl+Q`; `Alt+F4` and the window's × also exit cleanly |
+| Behaviour         | Detail                                                                  |
+|-------------------|-------------------------------------------------------------------------|
+| Play modes        | Shuffle or list loop, from the manager's Simple player page             |
+| Volume            | Read once at startup; later changes do not affect a running player      |
+| Skip              | `Ctrl+C` moves to the next song without quitting                        |
+| Quit              | `Ctrl+Q`; `Alt+F4` and the window's × also exit cleanly                 |
 | Adaptive skipping | Uses the default playlist's configuration; the screen only shows on/off |
 
 Exit codes: `0` normal, `1` startup failure (no VLC, empty default playlist…), `2` fatal error while running.
@@ -267,14 +267,14 @@ Exit codes: `0` normal, `1` startup failure (no VLC, empty default playlist…),
 
 Reachable from "To review" on the overview and from Settings · Maintenance. The quick check does not read audio; the deep check recomputes every file's MD5, reports progress by bytes, and can be cancelled.
 
-| Category | What is checked | Auto-fix |
-|---|---|---|
-| Missing files | Record exists, file does not | No — re-import or replace the source |
-| Orphan files | File exists, no record | Yes — sent to the Recycle Bin |
-| Content mismatch | Deep check finds an MD5 that differs from the record | No |
+| Category          | What is checked                                                                 | Auto-fix                               |
+|-------------------|---------------------------------------------------------------------------------|----------------------------------------|
+| Missing files     | Record exists, file does not                                                    | No — re-import or replace the source   |
+| Orphan files      | File exists, no record                                                          | Yes — sent to the Recycle Bin          |
+| Content mismatch  | Deep check finds an MD5 that differs from the record                            | No                                     |
 | Broken references | A song points at a missing artist or tag; a playlist points at a missing object | Yes — the stale references are dropped |
-| Tag constraints | A required group is empty, a single group has several tags | No — jumps to that song |
-| Stale statistics | Statistics mention songs that are gone | Yes — pruned against the library |
+| Tag constraints   | A required group is empty, a single group has several tags                      | No — jumps to that song                |
+| Stale statistics  | Statistics mention songs that are gone                                          | Yes — pruned against the library       |
 
 Fixes run per category, or all fixable ones at once. They only delete data that no longer has an owner, so there is no second confirmation; orphan files go to the Recycle Bin and can be restored.
 
@@ -284,22 +284,22 @@ They only apply while the window (or console) is in the foreground; no system-wi
 
 Music Player:
 
-| Key | Action |
-|---|---|
-| `Space` | Play / pause |
-| `←` / `→` | Seek back / forward 5 seconds |
-| `Ctrl+←` / `Ctrl+→` | Previous / next |
-| `↑` / `↓` | Volume ±5% |
-| `Ctrl+C` | Skip the current song (same as Next) |
-| `Esc` | Hide the queue |
+| Key                 | Action                               |
+|---------------------|--------------------------------------|
+| `Space`             | Play / pause                         |
+| `←` / `→`           | Seek back / forward 5 seconds        |
+| `Ctrl+←` / `Ctrl+→` | Previous / next                      |
+| `↑` / `↓`           | Volume ±5%                           |
+| `Ctrl+C`            | Skip the current song (same as Next) |
+| `Esc`               | Hide the queue                       |
 
 Simple Player:
 
-| Key | Action |
-|---|---|
+| Key      | Action                |
+|----------|-----------------------|
 | `Ctrl+C` | Skip the current song |
-| `Ctrl+Q` | Quit |
-| `Alt+F4` | Quit |
+| `Ctrl+Q` | Quit                  |
+| `Alt+F4` | Quit                  |
 
 Manager: `Esc` closes a dialog, drawer or context menu; `Tab` cycles inside dialogs. There is no `Ctrl+S` — every change is saved immediately.
 
@@ -307,18 +307,18 @@ Manager: `Esc` closes a dialog, drawer or context menu; `Tab` cycles inside dial
 
 Five pages; changes apply immediately and there is no Save button.
 
-| Page | Contents |
-|---|---|
-| General | Theme (light / dark only, no follow-system option), language (sorted by language code), adaptive defaults, preview volume, data and log folders |
-| Simple player | Play mode, default volume, default playlist (read-only, with a link) |
-| Player | Default volume, play mode, remember position |
-| Import | Default import folder, clean audio on import, FFmpeg and ffprobe status |
-| Maintenance | Debug mode, integrity check (quick / deep), clean orphan files, clear all statistics, open data and log folders |
-| About | Version, data folder (changeable; restart to apply, with a "Restart now" button), user manual, reset all settings |
+| Page          | Contents                                                                                                                                        |
+|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| General       | Theme (light / dark only, no follow-system option), language (sorted by language code), adaptive defaults, preview volume, data and log folders |
+| Simple player | Play mode, default volume, default playlist (read-only, with a link)                                                                            |
+| Player        | Default volume, play mode, remember position                                                                                                    |
+| Import        | Default import folder, clean audio on import, FFmpeg and ffprobe status                                                                         |
+| Maintenance   | Debug mode, integrity check (quick / deep), clean orphan files, clear all statistics, open data and log folders                                 |
+| About         | Data folder (an input box with "Change" and "Reset"), user manual, reset all settings, version                                                  |
 
 Switching the language takes effect immediately: labels and the window title change together. The Music Player and Simple Player read the language at startup, so restart them to follow a change.
 
-"Reset all settings" also restores language and appearance; the library, playlists and statistics are untouched. Changing the data folder only copies `settings.json` to the new folder; audio and statistics are not moved.
+"Reset all settings" also restores language and appearance; the library, playlists and statistics are untouched. A data folder change appends `music-player` automatically and applies after a restart, moving the old contents (audio included); existing files in the target are never overwritten.
 
 ## 14. Files and folders
 
@@ -357,7 +357,7 @@ Music Player\
 
 Deleting `settings.json` restores every setting; deleting `library.json` wipes the library; deleting files from `music\` turns those songs into "File missing". To back up, copy the whole data folder.
 
-Log files are named by start time, rotate at 5 MB and are kept for 14 days. When troubleshooting, read the newest one first. The old `config\`, `assets\music\` and `logs\` folders in the program directory are moved to the locations above the first time the new version starts.
+Log files are named by start time, rotate at 5 MB and are kept for 14 days. When troubleshooting, read the newest one first. The data folder always ends with the project code: picking `D://Data` gives `D://Data//music-player`.
 
 ## 15. Troubleshooting
 

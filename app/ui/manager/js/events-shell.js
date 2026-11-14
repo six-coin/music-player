@@ -39,7 +39,7 @@ function bindShellEvents() {
       else if (name === "about_readme") openAboutReadme();
       else if (name === "about_reset") confirmResetSettings();
       else if (name === "about_data_dir") changeDataDir();
-      else if (name === "about_restart") call("restart_app");
+      else if (name === "about_data_dir_reset") resetDataDir();
       else if (name === "goto_default") goSection("playlists");
       else if (name === "new_playlist") openCreatePlaylist();
       else if (name === "new_tag_group") openCreateTagGroup();
