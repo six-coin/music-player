@@ -517,7 +517,7 @@ select {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 0;
   padding-top: 10px;
   border-top: 1px solid var(--border);
 }
@@ -626,7 +626,6 @@ select {
   gap: 4px;
   margin-top: 18px;
   padding-top: 12px;
-  border-top: 1px solid var(--border);
 }
 
 /* ---------- 列表栏 ---------- */
@@ -1152,6 +1151,11 @@ input[type="checkbox"]:disabled {
   padding: 14px 18px 10px;
 }
 
+/* 没有标题、只有一行字段的卡片，上下留白要对称。 */
+.detail-pane .card.is-bare {
+  padding-top: 9px;
+}
+
 /* 没有标题的卡片，第一行直接贴卡片上沿，不再叠一层行内 padding。 */
 .detail-pane .card > .field-row:first-child {
   padding-top: 0;
@@ -1165,12 +1169,12 @@ input[type="checkbox"]:disabled {
   padding-bottom: 0;
 }
 
-.detail-pane .card > .entry-list:last-child .entry-row:last-child {
-  padding-bottom: 0;
-}
-
 .detail-pane .card > .inline-form:last-child {
   margin-bottom: 0;
+}
+
+.detail-pane .card.card--list {
+  padding-bottom: 4px;
 }
 
 .field-row {
@@ -1279,6 +1283,22 @@ input[type="checkbox"]:disabled {
   border-color: var(--blue);
   background: var(--blue-soft);
   color: var(--blue-text);
+}
+
+@keyframes chip-pop {
+  0% {
+    transform: scale(0.94);
+  }
+  55% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.chip-toggle.is-popping {
+  animation: chip-pop 0.22s var(--ease);
 }
 
 .tag-group {
@@ -2012,10 +2032,14 @@ input[type="checkbox"]:disabled {
 
 .toggle-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   padding: 11px 0;
   border-top: 1px solid var(--border-soft);
+}
+
+.toggle-row .switch {
+  margin-top: 0;
 }
 
 .toggle-row:first-of-type {

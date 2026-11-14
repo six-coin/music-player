@@ -446,6 +446,36 @@ function renderSelectionBar() {
   if (count) qs("#selection-count").textContent = T("songs.selected", { count: count });
 }
 
+function syncTagGroup(box) {
+  if (!box) return;
+  const selected = box.querySelectorAll(".chip-toggle.is-on").length;
+  const missing = box.dataset.compulsory === "1" && selected === 0;
+  const conflict = box.dataset.unique === "1" && selected > 1;
+  const text = missing ? T("song.missing_tag") : conflict ? T("song.tag_conflict") : "";
+  box.classList.toggle("is-warn", Boolean(text));
+  const hint = box.querySelector(".tag-hint");
+  if (hint) {
+    hint.textContent = text;
+    hint.hidden = !text;
+  }
+}
+
+function syncSongTagFlags() {
+  const meta = qs("#song-detail .detail-meta");
+  if (!meta) return;
+  const flag = meta.querySelector("[data-tag-issue-flag]");
+  const warn = qs("#song-detail .tag-group.is-warn");
+  if (warn && !flag) {
+    const node = document.createElement("span");
+    node.className = "tag-flag";
+    node.dataset.tagIssueFlag = "1";
+    node.textContent = T("song.missing_tag");
+    meta.insertBefore(node, meta.firstChild);
+  } else if (!warn && flag) {
+    flag.remove();
+  }
+}
+
 function renderDetail() {
   const pane = qs("#song-detail");
   const music = state.activeKind === "music" && state.active ? musicByMd5(state.active) : null;
@@ -496,11 +526,13 @@ function renderDetail() {
       .join("");
     const hint = missing ? T("song.missing_tag") : conflict ? T("song.tag_conflict") : "";
     return (
-      '<div class="tag-group' + (warn ? " is-warn" : "") + '">' +
+      '<div class="tag-group' + (warn ? " is-warn" : "") + '" data-tag-group-box="' +
+      esc(group.uid) + '" data-compulsory="' + (group.compulsory ? "1" : "0") +
+      '" data-unique="' + (group.unique ? "1" : "0") + '">' +
       '<div class="tag-group-head"><span>' + esc(group.name) + "</span>" +
       '<span class="tag-flag">' + esc(flags.join(" · ")) + "</span></div>" +
       '<div class="chips">' + chips + "</div>" +
-      (warn ? '<p class="tag-hint">' + esc(hint) + "</p>" : "") +
+      '<p class="tag-hint"' + (warn ? "" : " hidden") + ">" + esc(hint) + "</p>" +
       "</div>"
     );
   });
@@ -508,7 +540,11 @@ function renderDetail() {
   const aliasCount = Math.max(0, (music.names || []).length - 1);
   const flags = [];
   if (music.missing) flags.push('<span class="tag-flag">' + esc(T("song.missing_file")) + "</span>");
-  if (music.tag_issue) flags.push('<span class="tag-flag">' + esc(T("song.missing_tag")) + "</span>");
+  if (music.tag_issue) {
+    flags.push(
+      '<span class="tag-flag" data-tag-issue-flag="1">' + esc(T("song.missing_tag")) + "</span>"
+    );
+  }
 
   pane.innerHTML =
     '<header class="detail-head">' +
@@ -802,7 +838,7 @@ function renderPlaylistDetail() {
       ? ""
       : '<button class="btn ghost" data-menu="playlist">' + esc(T("action.more")) + "</button>") +
     "</div></header>" +
-    '<section class="card">' + nameRow + "</section>" +
+    '<section class="card is-bare">' + nameRow + "</section>" +
     content +
     adaptationCard(playlist);
 }
@@ -919,7 +955,7 @@ function manualPlaylistCard(playlist) {
     .join("");
 
   return (
-    '<section class="card"><div class="card-tools"><h3 class="card-title">' +
+    '<section class="card card--list"><div class="card-tools"><h3 class="card-title">' +
     esc(T("playlist.content")) + " · " + esc(T("playlist.count", { count: musics.length })) +
     '</h3><button class="btn soft small" data-playlist-add="1">' +
     esc(T("playlist.add_songs")) + "</button></div>" +
@@ -1284,7 +1320,7 @@ function renderAuthorDetail() {
     'maxlength="2000" placeholder="' + esc(T("author.description_placeholder")) + '">' +
     esc(author.description || "") + "</textarea></div></div></section>" +
 
-    '<section class="card"><div class="card-tools"><h3 class="card-title">' +
+    '<section class="card card--list"><div class="card-tools"><h3 class="card-title">' +
     esc(T("author.songs")) + '</h3><span class="detail-hint">' +
     esc(T("author.count", { count: songs.length })) + "</span></div>" +
     '<ul class="entry-list">' + rows + "</ul></section>";
@@ -4427,12 +4463,27 @@ function bindEvents() {
     if (tag && state.active) {
       await flushNameSave();
       const on = tag.dataset.on !== "1";
+      const box = tag.closest("[data-tag-group-box]");
       tag.dataset.on = on ? "1" : "0";
       tag.classList.toggle("is-on", on);
+      tag.classList.remove("is-popping");
+      void tag.offsetWidth;
+      tag.classList.add("is-popping");
+      window.setTimeout(function () {
+        tag.classList.remove("is-popping");
+      }, 240);
+      syncTagGroup(box);
+      syncSongTagFlags();
+
       const data = await call("toggle_music_tag", state.active, tag.dataset.tag, on);
       if (!data) return;
-      await delay(170);
-      apply(data);
+      if (data.ok === false) {
+        apply(data);
+        return;
+      }
+      // 详情区保持原样，避免整段重绘把动画和滚动位置一起冲掉；只刷新列表上的标记。
+      state.data = data;
+      renderSongList();
       return;
     }
 
