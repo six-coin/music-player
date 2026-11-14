@@ -838,7 +838,7 @@ function renderPlaylistDetail() {
       ? ""
       : '<button class="btn ghost" data-menu="playlist">' + esc(T("action.more")) + "</button>") +
     "</div></header>" +
-    '<section class="card is-bare">' + nameRow + "</section>" +
+    '<section class="card">' + nameRow + "</section>" +
     content +
     adaptationCard(playlist);
 }
