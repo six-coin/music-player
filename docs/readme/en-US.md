@@ -92,10 +92,10 @@ The list sorts by title; switch to import date, duration or artist. Search match
 
 Detail cards:
 
-| Card              | Contents                                                                                  |
-|-------------------|-------------------------------------------------------------------------------------------|
-| Basics            | Title, artists (searchable, move up/down to reorder), tags (grouped checkboxes)           |
-| File              | MD5, path, size, duration, import date                                                    |
+| Card              | Contents                                                                                                                    |
+|-------------------|-----------------------------------------------------------------------------------------------------------------------------|
+| Basics            | Title, artists (searchable, move up/down to reorder), tags (grouped checkboxes)                                             |
+| File              | MD5, path, size, duration, import date                                                                                      |
 | Adaptive skipping | Total plays for this song, then its records, skip rate, full plays, auto skips and next probability in the default playlist |
 
 "More" in the top right holds four actions:
@@ -272,13 +272,13 @@ Manager: `Esc` closes a dialog, drawer or context menu; `Tab` cycles inside dial
 
 Five pages; changes apply immediately and there is no Save button.
 
-| Page            | Contents                                                                                                                                                                                                  |
-|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| General         | Theme (light / dark only, no follow-system option), language (sorted by language code), adaptive defaults (window, minimum plays, skip base, skip threshold), playback records (record total play counts) |
+| Page            | Contents                                                                                                                                                                                                    |
+|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| General         | Theme (light / dark only, no follow-system option), language (sorted by language code), adaptive defaults (window, minimum plays, skip base, skip threshold), playback records (record total play counts)   |
 | Library manager | Preview volume, import (default folder, clean audio on import, FFmpeg and ffprobe status), maintenance (integrity check, clean orphan files, clear adaptation stats, open data and log folders, debug mode) |
-| Simple player   | Play mode, default playlist (read-only, with a link)                                                                                                                                                      |
-| Player          | Default volume, play mode, remember position                                                                                                                                                              |
-| About           | Data folder (an input box with "Change" and "Reset"), user manual, reset all settings, version                                                                                                            |
+| Simple player   | Play mode, default playlist (read-only, with a link)                                                                                                                                                        |
+| Player          | Default volume, play mode, remember position                                                                                                                                                                |
+| About           | Data folder (an input box with "Change" and "Reset"), user manual, reset all settings, version                                                                                                              |
 
 The skip base is a percentage from 1 to 99: the real probability is base × the song's recent skip rate.
 
