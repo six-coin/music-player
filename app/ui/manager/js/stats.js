@@ -20,6 +20,7 @@ function statsTable(rows, options) {
     "<tr><th>" + esc(T("adaptation.col_song")) + "</th>" +
     '<th class="num">' + esc(T("adaptation.col_records")) + "</th>" +
     "<th>" + esc(T("adaptation.col_rate")) + "</th>" +
+    '<th class="num">' + esc(T("adaptation.col_total")) + "</th>" +
     '<th class="num">' + esc(T("adaptation.col_full")) + "</th>" +
     '<th class="num">' + esc(T("adaptation.col_auto")) + "</th>" +
     '<th class="num">' + esc(T("adaptation.col_probability")) + "</th>" +
@@ -28,13 +29,15 @@ function statsTable(rows, options) {
   const body = rows
     .map(function (row) {
       const reset = settings.reset
-        ? '<td><button class="btn ghost small" data-reset-md5="' + esc(row.md5) + '">' +
+        ? '<td><button class="btn ghost small" data-reset-md5="' + esc(row.md5) +
+          '" data-reset-title="' + esc(row.title) + '">' +
           esc(T("adaptation.reset_one")) + "</button></td>"
         : "";
       return (
         '<tr><td class="cell-title" title="' + esc(row.title) + '">' + esc(row.title) + "</td>" +
         '<td class="num">' + row.total + "</td>" +
         "<td>" + rateCell(row.rate) + "</td>" +
+        '<td class="num">' + (row.total_plays || 0) + "</td>" +
         '<td class="num">' + row.full_plays + "</td>" +
         '<td class="num">' + row.auto_skipped + "</td>" +
         '<td class="num">' + esc(percent(row.probability)) + "</td>" +
@@ -70,6 +73,32 @@ function closeDrawer() {
     drawer.classList.remove("is-closing");
     qs("#drawer-body").innerHTML = "";
   }, 160);
+}
+
+/* 清空一首歌的记录也要问一句：再小的数据点下去就没了，没有撤销。 */
+function confirmClearSongStats(md5, title) {
+  const uid = state.drawer;
+  if (!uid || !md5) return;
+  openModal({
+    title: T("adaptation.reset_one_title"),
+    body:
+      '<p class="modal-note">' +
+      esc(T("adaptation.reset_one_confirm", { name: title || md5.slice(0, 8) })) +
+      "</p>",
+    actions: [
+      { label: T("action.cancel"), onClick: closeModal },
+      {
+        label: T("adaptation.reset_one"),
+        danger: true,
+        onClick: async function () {
+          const data = await call("reset_stats", uid, md5);
+          if (!data) return;
+          closeModal();
+          apply(data);
+        },
+      },
+    ],
+  });
 }
 
 function confirmClearPlaylistStats() {
@@ -135,20 +164,25 @@ async function loadMusicStats(md5) {
     source.textContent = T("adaptation.song_source", { name: data.playlist.title });
   }
 
-  if (!data.in_playlist) {
-    host.innerHTML = '<p class="tag-hint">' + esc(T("adaptation.not_in_default")) + "</p>";
-    return;
-  }
-
   const cell = function (value, label) {
     return (
       '<div class="adapt-cell"><span class="adapt-value">' + esc(value) +
       '</span><span class="adapt-label">' + esc(label) + "</span></div>"
     );
   };
+
+  if (!data.in_playlist) {
+    // 自适应按歌单算，这首歌不在默认歌单里就没有那几项；总播放次数是全库的，
+    // 照样能看。
+    host.innerHTML =
+      cell(String(data.total_plays || 0), T("adaptation.col_total")) +
+      '<p class="tag-hint">' + esc(T("adaptation.not_in_default")) + "</p>";
+    return;
+  }
   host.innerHTML =
     cell(String(data.total), T("adaptation.col_records")) +
     cell(percent(data.rate), T("adaptation.col_rate")) +
+    cell(String(data.total_plays || 0), T("adaptation.col_total")) +
     cell(String(data.full_plays || 0), T("adaptation.col_full")) +
     cell(String(data.auto_skipped), T("adaptation.col_auto")) +
     cell(percent(data.probability), T("adaptation.col_probability"));

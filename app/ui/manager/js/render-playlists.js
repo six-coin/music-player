@@ -51,7 +51,8 @@ function renderPlaylistList() {
         ? T("playlist.resolve_error")
         : T("playlist.count", { count: playlist.count });
       return (
-        '<li class="' + classes.join(" ") + '" data-playlist-uid="' + esc(playlist.uid) +
+        '<li class="' + classes.join(" ") + '" draggable="true" data-playlist-uid="' +
+        esc(playlist.uid) +
         '" tabindex="0"><div class="song-body"><span class="song-title">' +
         esc(playlist.title) + '</span><span class="song-sub">' + esc(badge) + " · " +
         esc(count) + "</span></div></li>"

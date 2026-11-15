@@ -1,6 +1,6 @@
 [project]
 name = "music-player"
-version = "1.0.0.dev2"
+version = "1.0.0.dev3"
 description = "A local music library manager plus two players: the manager imports, organizes and configures; the players only play. Windows desktop app, double-click to run."
 readme = "README.md"
 requires-python = ">=3.11"

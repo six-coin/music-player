@@ -117,6 +117,18 @@ function settingsGeneral() {
           adapt.skip_seconds
         ),
       T("settings.adaptation_hint")
+    ) +
+    settingsCard(
+      T("settings.playback_section"),
+      settingsRow(
+        T("settings.record_total_plays"),
+        T("settings.record_total_plays_hint"),
+        switchMarkup(
+          'data-setting-switch="common.record_total_plays"',
+          common.record_total_plays !== false,
+          T("settings.record_total_plays")
+        )
+      )
     )
   );
 }

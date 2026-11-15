@@ -155,29 +155,20 @@ class Library:
     def remove_author(self, uid: str) -> Author | None:
         return self.authors.pop(uid, None)
 
-    def reorder_authors(self, order: list[str]) -> None:
-        """按给定顺序重排作者；没出现在列表里的追加在末尾。"""
-        result: dict[str, Author] = {}
-        for uid in order:
-            author = self.authors.get(uid)
-            if author is not None:
-                result[uid] = author
-        for uid, author in self.authors.items():
-            if uid not in result:
-                result[uid] = author
-        self.authors = result
+    def reorder_tag_groups(self, order: list[str]) -> None:
+        """按给定顺序重排标签组；没出现在列表里的追加在末尾。
 
-    def move_author(self, uid: str, delta: int) -> bool:
-        order = list(self.authors)
-        if uid not in order:
-            return False
-        source = order.index(uid)
-        target = source + delta
-        if not 0 <= target < len(order):
-            return False
-        order[source], order[target] = order[target], order[source]
-        self.reorder_authors(order)
-        return True
+        作者不提供这个入口：作者列表只按名称展示，顺序不构成数据。
+        """
+        result: dict[str, TagGroup] = {}
+        for uid in order:
+            group = self.tag_groups.get(uid)
+            if group is not None:
+                result[uid] = group
+        for uid, group in self.tag_groups.items():
+            if uid not in result:
+                result[uid] = group
+        self.tag_groups = result
 
     # ---------- 引用 ----------
 

@@ -165,6 +165,22 @@ class PlaylistStore:
         del self.items[uid]
         return True
 
+    def reorder(self, order: list[str]) -> None:
+        """按给定顺序重排歌单；没出现在列表里的追加在末尾。
+
+        顺序就是 ``playlists.json`` 里 ``items`` 的数组顺序，管理器与播放器
+        都照它展示，所以拖完必须落盘。
+        """
+        result: dict[str, Playlist] = {}
+        for uid in order:
+            playlist = self.items.get(uid)
+            if playlist is not None:
+                result[uid] = playlist
+        for uid, playlist in self.items.items():
+            if uid not in result:
+                result[uid] = playlist
+        self.items = result
+
     def touch(self, uid: str) -> None:
         playlist = self.items.get(uid)
         if playlist is not None:

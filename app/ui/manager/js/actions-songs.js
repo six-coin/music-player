@@ -147,7 +147,8 @@ function openAuthorPicker(music) {
   }
 
   function renderPickLists() {
-    const authors = state.data.library.authors;
+    // 与作者分区同一个顺序：按名称，中文按拼音。
+    const authors = sortedAuthors();
     const available = authors.filter(function (author) {
       return selected.indexOf(author.uid) === -1;
     });

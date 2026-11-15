@@ -129,8 +129,8 @@ function bindPanelEvents() {
     }
     const one = event.target.closest("[data-reset-md5]");
     if (one) {
-      const data = await call("reset_stats", state.drawer, one.dataset.resetMd5);
-      if (data) apply(data);
+      confirmClearSongStats(one.dataset.resetMd5, one.dataset.resetTitle || "");
+      return;
     }
   });
 

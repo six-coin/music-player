@@ -152,18 +152,60 @@ def test_author_duplicate_name_is_rejected(tmp_path):
     assert api.library.authors[uid_b].name == "B"
 
 
-def test_author_order_can_be_reordered(tmp_path):
+def test_authors_are_listed_by_name(tmp_path):
+    """作者不再允许手动排序：快照里一律按名称排。"""
+    api = make_api(tmp_path)
+    for name in ("Charlie", "alice", "Bob"):
+        api.create_author(name)
+
+    names = [author["name"] for author in api.get_state()["library"]["authors"]]
+
+    assert names == ["alice", "Bob", "Charlie"]
+
+
+def test_tag_groups_can_be_reordered(tmp_path):
     api = make_api(tmp_path)
     for name in ("甲", "乙", "丙"):
-        api.create_author(name)
-    order = [author_uid(api, name) for name in ("甲", "乙", "丙")]
+        api.create_tag_group(name)
+    order = [group_uid(api, name) for name in ("甲", "乙", "丙")]
 
-    api.reorder_authors([order[2], order[0], order[1]])
+    state = api.reorder_tag_groups([order[2], order[0], order[1]])
 
-    assert list(api.library.authors) == [order[2], order[0], order[1]]
+    assert list(api.library.tag_groups) == [order[2], order[0], order[1]]
+    assert [group["uid"] for group in state["library"]["tag_groups"]] == [
+        order[2],
+        order[0],
+        order[1],
+    ]
 
-    api.move_author(order[1], -1)
-    assert list(api.library.authors) == [order[2], order[1], order[0]]
+
+def test_tags_can_be_reordered(tmp_path):
+    api = make_api(tmp_path)
+    api.create_tag_group("风格")
+    uid = group_uid(api, "风格")
+    for name in ("古典", "民谣", "爵士"):
+        api.add_tag(uid, name)
+    order = [tag.uid for tag in api.library.tag_groups[uid].tags]
+
+    state = api.reorder_tags(uid, [order[2], order[0], order[1]])
+
+    assert [tag.name for tag in api.library.tag_groups[uid].tags] == ["爵士", "古典", "民谣"]
+    payload = next(item for item in state["library"]["tag_groups"] if item["uid"] == uid)
+    assert [tag["uid"] for tag in payload["tags"]] == [order[2], order[0], order[1]]
+
+
+def test_reorder_keeps_the_tags_left_out(tmp_path):
+    """只传一部分标识时，没提到的标签留在末尾，不会被删掉。"""
+    api = make_api(tmp_path)
+    api.create_tag_group("风格")
+    uid = group_uid(api, "风格")
+    for name in ("古典", "民谣", "爵士"):
+        api.add_tag(uid, name)
+    order = [tag.uid for tag in api.library.tag_groups[uid].tags]
+
+    api.reorder_tags(uid, [order[1]])
+
+    assert [tag.uid for tag in api.library.tag_groups[uid].tags] == [order[1], order[0], order[2]]
 
 
 def test_select_item_switches_section(tmp_path):

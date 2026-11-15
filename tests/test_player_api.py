@@ -35,6 +35,7 @@ def write_config(
     extra: tuple[str, ...] = (),
     adaptation: bool = True,
     patch: dict | None = None,
+    playlist_adaptation: dict | None = None,
 ) -> None:
     chars = [*entries, *extra]
     musics = [
@@ -60,7 +61,7 @@ def write_config(
                 "kind": "manual",
                 "entries": [md5(char) for char in entries],
                 "filters": [],
-                "adaptation": {"enabled": adaptation},
+                "adaptation": {"enabled": adaptation, **(playlist_adaptation or {})},
             }
         ],
     }
@@ -324,3 +325,100 @@ def test_ui_tokens_match():
     manager = (paths.UI_MANAGER_DIR / "styles.css").read_text(encoding="utf-8")
     player = (paths.UI_PLAYER_DIR / "styles.css").read_text(encoding="utf-8")
     assert names(manager) == names(player)
+
+
+# ---------- 总播放次数 ----------
+
+
+def total_of(tmp_path, char: str) -> int:
+    path = tmp_path / "totals.json"
+    if not path.exists():
+        return 0
+    return json.loads(path.read_text(encoding="utf-8"))["songs"].get(md5(char), 0)
+
+
+def test_natural_end_counts_a_total_play(api, tmp_path):
+    api.select_playlist(UID)
+    api.track_ended(md5("a"), 900)
+
+    assert total_of(tmp_path, "a") == 1
+
+
+def test_short_skip_does_not_count_a_total_play(api, tmp_path):
+    """阈值 30 秒：10 秒就切走，自适应记一次跳过，总播放不动。"""
+    api.select_playlist(UID)
+    api.next_track(md5("a"), 10_000)
+
+    assert total_of(tmp_path, "a") == 0
+
+
+def test_skip_after_the_playlist_threshold_counts(api, tmp_path):
+    api.select_playlist(UID)
+    api.next_track(md5("a"), 31_000)
+
+    assert total_of(tmp_path, "a") == 1
+
+
+def test_total_plays_ignore_the_adaptation_switch(tmp_path):
+    write_config(tmp_path, adaptation=False)
+    player = PlayerApi(config_dir=tmp_path)
+    try:
+        player.select_playlist(UID)
+        player.track_ended(md5("a"), 900)
+    finally:
+        player.close()
+
+    assert not (tmp_path / "stats" / f"{UID}.json").exists()
+    assert total_of(tmp_path, "a") == 1
+
+
+def test_total_plays_ignore_the_debug_switch(tmp_path):
+    write_config(tmp_path, patch={"common": {"debug": True}})
+    player = PlayerApi(config_dir=tmp_path)
+    try:
+        player.select_playlist(UID)
+        player.track_ended(md5("a"), 900)
+    finally:
+        player.close()
+
+    assert not (tmp_path / "stats" / f"{UID}.json").exists()
+    assert total_of(tmp_path, "a") == 1
+
+
+def test_playlist_threshold_applies_in_the_playlist(tmp_path):
+    """歌单自己写了 60 秒阈值：31 秒切走还不算播过。"""
+    write_config(tmp_path, playlist_adaptation={"skip_seconds": 60})
+    player = PlayerApi(config_dir=tmp_path)
+    try:
+        player.select_playlist(UID)
+        player.next_track(md5("a"), 31_000)
+    finally:
+        player.close()
+
+    assert total_of(tmp_path, "a") == 0
+
+
+def test_total_plays_use_the_global_threshold_in_repeat_one(tmp_path):
+    """单曲循环不看歌单的 60 秒：按全局的 30 秒算，31 秒就是一次。"""
+    write_config(tmp_path, playlist_adaptation={"skip_seconds": 60})
+    player = PlayerApi(config_dir=tmp_path)
+    try:
+        player.select_playlist(UID)
+        player.set_mode("repeat_one")
+        player.next_track(md5("a"), 31_000)
+    finally:
+        player.close()
+
+    assert total_of(tmp_path, "a") == 1
+
+
+def test_master_switch_off_stops_counting(tmp_path):
+    write_config(tmp_path, patch={"common": {"record_total_plays": False}})
+    player = PlayerApi(config_dir=tmp_path)
+    try:
+        player.select_playlist(UID)
+        player.track_ended(md5("a"), 900)
+    finally:
+        player.close()
+
+    assert total_of(tmp_path, "a") == 0

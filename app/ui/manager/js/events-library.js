@@ -40,7 +40,37 @@ function bindLibraryEvents() {
     tagSearch.focus();
   });
 
+  // 标签组列表拖拽排序：顺序写回 library.json 的 tag_groups 数组。
+  bindDragSort(qs("#tag-list"), {
+    row: "[data-tag-group]",
+    allow: function () {
+      return !state.tagQuery.trim();
+    },
+    key: function (node) {
+      return node.dataset.tagGroup;
+    },
+    commit: async function (order) {
+      const data = await call("reorder_tag_groups", order);
+      if (data) apply(data);
+    },
+  });
+
   const tagDetail = qs("#tag-detail");
+
+  // 组里的小标签：按住左边的把手拖，顺序写回这个标签组。
+  bindDragSort(tagDetail, {
+    row: "[data-tag-row]",
+    handle: "[data-tag-grip]",
+    key: function (node) {
+      return node.dataset.tagRow;
+    },
+    commit: async function (order) {
+      const group = tagGroupByUid(state.active);
+      if (!group) return;
+      const data = await call("reorder_tags", group.uid, order);
+      if (data) apply(data);
+    },
+  });
 
   tagDetail.addEventListener("change", async function (event) {
     const group = tagGroupByUid(state.active);
@@ -141,18 +171,6 @@ function bindLibraryEvents() {
     if (state.active !== author.uid) selectAuthor(author.uid);
     openMenu({ x: event.clientX, y: event.clientY }, [
       {
-        label: T("author.move_up"),
-        onClick: function () {
-          moveAuthor(author.uid, -1);
-        },
-      },
-      {
-        label: T("author.move_down"),
-        onClick: function () {
-          moveAuthor(author.uid, 1);
-        },
-      },
-      {
         label: T("author.delete"),
         onClick: function () {
           confirmDeleteAuthor(author);
@@ -173,57 +191,6 @@ function bindLibraryEvents() {
     qs("#authors-search-clear").hidden = true;
     renderAuthorList();
     authorSearch.focus();
-  });
-
-  const authorList = qs("#author-list");
-
-  authorList.addEventListener("dragstart", function (event) {
-    const row = event.target.closest("[data-author-uid]");
-    if (!row) return;
-    state.dragAuthor = row.dataset.authorUid;
-    row.classList.add("is-dragging");
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", state.dragAuthor);
-    }
-  });
-
-  authorList.addEventListener("dragover", function (event) {
-    const row = event.target.closest("[data-author-uid]");
-    if (!row || !state.dragAuthor) return;
-    event.preventDefault();
-    qsa("[data-author-uid]", authorList).forEach(function (node) {
-      node.classList.remove("drop-before", "drop-after");
-    });
-    const rect = row.getBoundingClientRect();
-    row.classList.add(event.clientY > rect.top + rect.height / 2 ? "drop-after" : "drop-before");
-  });
-
-  authorList.addEventListener("drop", async function (event) {
-    const row = event.target.closest("[data-author-uid]");
-    if (!row || !state.dragAuthor) return;
-    event.preventDefault();
-    const after = row.classList.contains("drop-after");
-    const order = qsa("[data-author-uid]", authorList).map(function (node) {
-      return node.dataset.authorUid;
-    });
-    const from = order.indexOf(state.dragAuthor);
-    if (from === -1) return;
-    order.splice(from, 1);
-    let index = order.indexOf(row.dataset.authorUid);
-    if (index === -1) index = order.length;
-    if (after) index += 1;
-    order.splice(index, 0, state.dragAuthor);
-    state.dragAuthor = null;
-    const data = await call("reorder_authors", order);
-    if (data) apply(data);
-  });
-
-  authorList.addEventListener("dragend", function () {
-    state.dragAuthor = null;
-    qsa("[data-author-uid]", authorList).forEach(function (node) {
-      node.classList.remove("is-dragging", "drop-before", "drop-after");
-    });
   });
 
   const authorDetail = qs("#author-detail");
@@ -262,18 +229,6 @@ function bindLibraryEvents() {
     const menu = event.target.closest("[data-menu='author']");
     if (menu) {
       openMenu(menu, [
-        {
-          label: T("author.move_up"),
-          onClick: function () {
-            moveAuthor(author.uid, -1);
-          },
-        },
-        {
-          label: T("author.move_down"),
-          onClick: function () {
-            moveAuthor(author.uid, 1);
-          },
-        },
         {
           label: T("author.delete"),
           onClick: function () {

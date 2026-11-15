@@ -122,6 +122,18 @@ def push(records: str, skipped: bool, window: int) -> str:
     return updated
 
 
+def is_full_play(played_ms: int, skip_seconds: int, *, natural: bool) -> bool:
+    """这一次播放够不够得上「播了一次」。
+
+    自然播完永远算；手动切歌要看播放秒数有没有到阈值。总播放次数用它来判定，
+    但阈值来自「当时正在播放的环境」：在歌单里用那个歌单的阈值，单曲循环用
+    全局默认阈值。
+    """
+    if natural:
+        return True
+    return max(0, int(played_ms)) >= max(0, int(skip_seconds)) * 1000
+
+
 def skip_rate(records: str) -> float:
     total = len(records)
     return records.count("1") / total if total else 0.0

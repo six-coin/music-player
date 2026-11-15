@@ -56,6 +56,21 @@ def test_builtin_playlist_cannot_be_renamed(api):
     assert api.update_playlist_name(default.uid, "改名") == {"ok": False}
 
 
+def test_playlists_can_be_reordered(api):
+    first = api.playlists.create("甲", "manual")
+    second = api.playlists.create("乙", "manual")
+    third = api.playlists.create("丙", "manual")
+
+    state = api.reorder_playlists([third.uid, first.uid, second.uid])
+
+    assert [item["uid"] for item in state["playlists"]] == [
+        third.uid,
+        first.uid,
+        second.uid,
+        api.playlists.default().uid,
+    ]
+
+
 def test_set_entries_keeps_order_and_drops_unknown(api):
     playlist = api.playlists.create("深夜", "manual")
 

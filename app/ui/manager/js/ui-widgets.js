@@ -143,6 +143,85 @@ function refreshSortSelect() {
   select.dataset.value = current.value;
   select.querySelector(".select-value").textContent = current.label;
 }
+/* ---------- 拖拽排序 ---------- */
+
+/* 列表拖拽排序：命中 options.row 的行可以互相拖动，松手时把新顺序交给
+   options.commit。传了 options.handle 时只有按住手柄才能拖——行里有输入框
+   时，整行可拖会把「选中文字」变成「拖走这一行」。 */
+function bindDragSort(list, options) {
+  if (!list) return;
+  const selector = options.row;
+  const keyOf = options.key;
+  const commit = options.commit;
+  const handle = options.handle || "";
+  const allow = options.allow || null;
+  let dragging = null;
+
+  const clear = function () {
+    qsa(selector, list).forEach(function (node) {
+      node.classList.remove("is-dragging", "drop-before", "drop-after");
+      if (handle) node.draggable = false;
+    });
+  };
+
+  if (handle) {
+    list.addEventListener("mousedown", function (event) {
+      const grip = event.target.closest(handle);
+      const row = grip ? grip.closest(selector) : null;
+      if (row) row.draggable = true;
+    });
+    list.addEventListener("mouseup", clear);
+  }
+
+  list.addEventListener("dragstart", function (event) {
+    const row = event.target.closest(selector);
+    // 列表被搜索过滤过时不允许拖：这时 DOM 里只有一部分行，按它排会把
+    // 没显示出来的那些甩到末尾去。
+    if (!row || (allow && !allow())) {
+      event.preventDefault();
+      return;
+    }
+    dragging = keyOf(row);
+    row.classList.add("is-dragging");
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", dragging);
+    }
+  });
+
+  list.addEventListener("dragover", function (event) {
+    const row = event.target.closest(selector);
+    if (!row || dragging === null) return;
+    event.preventDefault();
+    qsa(selector, list).forEach(function (node) {
+      node.classList.remove("drop-before", "drop-after");
+    });
+    const rect = row.getBoundingClientRect();
+    row.classList.add(event.clientY > rect.top + rect.height / 2 ? "drop-after" : "drop-before");
+  });
+
+  list.addEventListener("drop", function (event) {
+    const row = event.target.closest(selector);
+    if (!row || dragging === null) return;
+    event.preventDefault();
+    const after = row.classList.contains("drop-after");
+    const moved = dragging;
+    dragging = null;
+    const keys = qsa(selector, list).map(function (node) {
+      return keyOf(node);
+    });
+    const from = keys.indexOf(moved);
+    if (from === -1) return;
+    keys.splice(from, 1);
+    let index = keys.indexOf(keyOf(row));
+    if (index === -1) index = keys.length;
+    if (after) index += 1;
+    keys.splice(index, 0, moved);
+    commit(keys);
+  });
+
+  list.addEventListener("dragend", clear);
+}
 /* ---------- 菜单 ---------- */
 
 function songMenuItems(music) {

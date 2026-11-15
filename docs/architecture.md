@@ -35,6 +35,7 @@ Music Player/
 │  │  ├─ playlists.py                       歌单读写、条件解析（带环检测）
 │  │  ├─ adaptation.py                      跳过概率与记录串的纯函数
 │  │  ├─ stats.py                           每个歌单一份统计，锁内读改写
+│  │  ├─ totals.py                          歌曲级总播放次数，全库一份
 │  │  ├─ importer.py                        导入流水线：准备（重活）+ 提交（轻活）
 │  │  ├─ source.py                          换源与删除，失败回滚
 │  │  ├─ integrity.py                       完整性检查与按类别修复
@@ -69,7 +70,7 @@ Music Player/
 |-----------------|---------------------------------------------------------------------------------|---------------------------------------|
 | `ui/manager/js` | `core.js`                                                                       | 全局状态、DOM 选择器、JS 桥、文案、格式化、主题、Toast     |
 |                 | `navigation.js`                                                                 | 分区跳转与「当前选中项」                          |
-|                 | `ui-widgets.js`                                                                 | 自绘下拉框、右键菜单、弹窗                         |
+|                 | `ui-widgets.js`                                                                 | 自绘下拉框、拖拽排序、右键菜单、弹窗                 |
 |                 | `render-*.js`                                                                   | 五个分区与设置页的渲染，`apply()` 是总入口            |
 |                 | `stats.js` / `integrity.js` / `import.js`                                       | 统计抽屉、完整性报告、导入与批量向导                    |
 |                 | `actions-*.js`                                                                  | 用户动作：编辑、删除、换源、批量、试听                   |
@@ -115,13 +116,14 @@ manager.pyw   player.pyw   simple.py          入口
 
 ## 4. 数据模型
 
-三份数据 + 一份设置 + 每歌单一价统计，字段级说明见 [configuration.md](configuration.md)。
+四份数据 + 一份设置 + 每歌单一份统计，字段级说明见 [configuration.md](configuration.md)。
 
 | 文件                        | 内容            | 谁写                               |
 |---------------------------|---------------|----------------------------------|
 | `<数据目录>/library.json`     | 作者、标签组、歌曲（实体） | manager                          |
 | `<数据目录>/playlists.json`   | 歌单（引用）与默认歌单   | manager                          |
 | `<数据目录>/stats/<uid>.json` | 每个歌单的自适应记录    | manager、player、simple            |
+| `<数据目录>/totals.json`      | 歌曲级总播放次数      | manager、player、simple            |
 | `<数据目录>/settings.json`    | 设置，四个分节       | manager 写全部，player 只写 `player` 节 |
 | `<数据目录>/player.json`      | 窗口尺寸、队列开合     | player                           |
 
@@ -131,6 +133,7 @@ manager.pyw   player.pyw   simple.py          入口
 2. **统计单独成文件**：player 与 simple 会高频写统计，写 `library.json` 会把整个库置于并发风险中；一个歌单一份文件还能让损坏只影响一个歌单。
 3. **设置单独一份**：三端都读，谁都不该为了读一个音量值去解析整个音乐库。
 4. **`player.json` 独立**：窗口尺寸是 player 私有的界面状态，不该进三端共享的 `settings.json`。
+5. **总播放次数单独一份**：它是全库一份、只受一个总开关控制；混进按歌单分的统计里，清空某个歌单的自适应就会把它一起洗掉。
 
 **路径不存进数据。** 文件位置恒为 `<数据目录>/music/{md5}.{ext}`，由 `paths.music_path()` 推导。这样移动程序目录、改盘符都不会让记录失效。
 
@@ -148,6 +151,7 @@ manager.pyw   player.pyw   simple.py          入口
 | `playlists`      | 歌单读写、条件求值、环检测                       | 不写统计、不碰界面      |
 | `adaptation`     | 概率公式、记录串的追加与截断                      | 不读文件           |
 | `stats`          | 一歌单一文件，锁内读改写                        | 不算概率           |
+| `totals`         | 全库一份的总播放次数，锁内读改写                    | 不算概率、不按歌单分     |
 | `importer`       | 准备（清洗、MD5、时长）与提交（落盘、写库）两段           | 不弹窗、不报进度       |
 | `source`         | 换源与删除的多文件事务，失败回滚                    | 不判断该不该做        |
 | `integrity`      | 检查与按类别修复；深检额外重算 MD5、用 ffprobe 查码率虚标 | 不做二次确认         |
@@ -182,7 +186,7 @@ manager.pyw   player.pyw   simple.py          入口
 
 ### 6.3 删除
 
-库、歌单引用、统计三处一起摘；音频先改名成歌名再送回收站，这样在回收站里看到的是「歌名」而不是 MD5。作者与标签组被引用时先阻止并列出引用方，`force` 才连引用一起删。
+库、歌单引用、统计、总播放次数四处一起摘；音频先改名成歌名再送回收站，这样在回收站里看到的是「歌名」而不是 MD5。作者与标签组被引用时先阻止并列出引用方，`force` 才连引用一起删。
 
 ### 6.4 歌单解析
 
@@ -205,6 +209,8 @@ n <= min_plays → 概率 0
 `base` 在界面上是 1–99 的整数百分比，存进 JSON 仍是 0.01–0.99 的比例：公式直接乘比例，少一次换算；`0` 没有意义——关掉自适应就够了。
 
 判定只在「自动前进」时发生：点歌单、点队列、选循环曲都不判定——用户明确点的歌被后台吞掉，会像按钮坏了。记录只在「下一首 / `Ctrl+C`」与自然播完时写一次，上一首、点队列、切歌单都不碰统计。每次「没跳过」的记录顺带把 `full_plays` 加一，这是歌单级的「完整播放次数」，只用于展示，不参与概率。
+
+总播放次数是另一套账：全库一份，记在 `totals.json` 里，只受设置里 `common.record_total_plays` 一个开关控制——歌单的自适应关掉、调试状态打开，都照样记。判定标准看当时的环境：在歌单里播用那个歌单的 `skip_seconds`，单曲循环用全局阈值，自然播完永远算一次。清空自适应（单曲、整张歌单、全部统计）都不动它。
 
 ### 6.6 player 的切歌
 
@@ -260,9 +266,9 @@ next / ended / failed
 | 导航     | `select_section` / `select_item` / `clear_selection`                                                                                                                                                                                  | 快照                                                            |
 | 歌曲     | `update_music_name` / `set_music_authors` / `toggle_music_tag` / `add_alias` / `remove_alias` / `move_alias`                                                                                                                          | `{"ok"}` 或快照                                                  |
 | 批量     | `batch_add_tags` / `batch_add_to_playlist` / `delete_musics`                                                                                                                                                                          | 快照                                                            |
-| 歌单     | `create_playlist` / `update_playlist_name` / `set_playlist_entries` / `add_playlist_songs` / `remove_playlist_song` / `add_filter` / `update_filter` / `move_filter` / `remove_filter` / `delete_playlist`                            | 快照                                                            |
+| 歌单     | `create_playlist` / `update_playlist_name` / `set_playlist_entries` / `add_playlist_songs` / `remove_playlist_song` / `add_filter` / `update_filter` / `move_filter` / `remove_filter` / `delete_playlist` / `reorder_playlists`                            | 快照                                                            |
 | 自适应    | `update_adaptation` / `reset_stats`                                                                                                                                                                                                   | 快照                                                            |
-| 标签作者   | `create_tag_group` / `update_tag_group` / `add_tag` / `rename_tag` / `remove_tag` / `delete_tag_group` / `create_author` / `update_author` / `move_author` / `reorder_authors` / `delete_author` / `delete_empty_authors`             | 快照                                                            |
+| 标签作者   | `create_tag_group` / `update_tag_group` / `add_tag` / `rename_tag` / `remove_tag` / `reorder_tags` / `reorder_tag_groups` / `delete_tag_group` / `create_author` / `update_author` / `delete_author` / `delete_empty_authors`             | 快照                                                            |
 | 设置     | `update_settings` / `set_theme` / `set_language` / `clear_all_stats` / `refresh_status` / `browse_folder`                                                                                                                             | 快照 / 值                                                        |
 | 系统     | `browse_import` / `browse_audio` / `open_data_dir` / `open_log_dir` / `run_integrity` / `start_integrity` / `fix_issues` / `launch_player` / `launch_simple`                                                                          | 值或快照                                                          |
 | 试听     | `audition_url`                                                                                                                                                                                                                        | `{ok, url, title, duration_ms}`                               |
@@ -331,6 +337,7 @@ tests/
 ├─ test_playlists.py        手动保序、条件集合、环检测、默认歌单落盘
 ├─ test_adaptation.py       环形缓冲、阈值、概率
 ├─ test_adaptation_record.py simple 的记录规则
+├─ test_totals.py           歌曲级总播放次数与它的开关
 ├─ test_importer.py         MD5、重复、后缀白名单（假 ffmpeg）
 ├─ test_source.py           换源与删除的每个分支
 ├─ test_integrity.py        六类问题与三类修复
@@ -376,6 +383,7 @@ uv run ruff format --check .
 12. 两份 `styles.css` 的 `:root` 变量名集合必须相等。
 13. 两份语言包的键集合与占位符集合必须相等。
 14. 界面文案不写死：HTML 里是兜底，运行时由 `data-i18n*` 与 `T()` 覆盖。
+15. 总播放次数只受 `common.record_total_plays` 控制：清空自适应（单曲 / 整张歌单 / 全部）不动它，歌单的自适应开关与调试状态也不影响它。
 
 ## 13. 偏离标准
 

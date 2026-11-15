@@ -246,6 +246,9 @@ LIBRARY_PATH = DATA_DIR / "library.json"
 PLAYLISTS_PATH = DATA_DIR / "playlists.json"
 PLAYER_STATE_PATH = DATA_DIR / "player.json"
 STATS_DIR = DATA_DIR / "stats"
+#: 歌曲级总播放次数。不放进 ``stats/``：那里一个文件对应一个歌单，混进一份
+#: 全库共用的数据会让完整性检查把它当成「多余的统计文件」。
+TOTALS_PATH = DATA_DIR / "totals.json"
 
 LOCALES_DIR = PACKAGE_DIR / "locales"
 UI_MANAGER_DIR = PACKAGE_DIR / "ui" / "manager"

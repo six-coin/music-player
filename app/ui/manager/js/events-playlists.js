@@ -38,6 +38,21 @@ function bindPlaylistEvents() {
     playlistSearch.focus();
   });
 
+  // 歌单列表拖拽排序：顺序写回 playlists.json 的 items 数组，播放器也照它展示。
+  bindDragSort(qs("#playlist-list"), {
+    row: "[data-playlist-uid]",
+    allow: function () {
+      return !state.playlistQuery.trim();
+    },
+    key: function (node) {
+      return node.dataset.playlistUid;
+    },
+    commit: async function (order) {
+      const data = await call("reorder_playlists", order);
+      if (data) apply(data);
+    },
+  });
+
   const playlistDetail = qs("#playlist-detail");
 
   playlistDetail.addEventListener("input", function (event) {

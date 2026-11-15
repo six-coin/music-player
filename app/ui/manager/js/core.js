@@ -21,7 +21,6 @@ const state = {
   nameTimer: null,
   playlistNameTimer: null,
   dragMd5: null,
-  dragAuthor: null,
 };
 
 function qs(selector, root) {
@@ -147,6 +146,14 @@ function authorMap() {
     map[author.uid] = author;
   });
   return map;
+}
+
+/* 作者不提供手动排序，展示时一律按名称。后端已经按名称排过一遍，这里再用
+   界面语言的规则排一次：中文按拼音走，与歌曲列表用的是同一条规则。 */
+function sortedAuthors() {
+  return ((state.data && state.data.library.authors) || []).slice().sort(function (a, b) {
+    return a.name.localeCompare(b.name, "zh-CN");
+  });
 }
 
 function tagMap() {

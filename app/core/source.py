@@ -25,6 +25,7 @@ from app.core.library import Library
 from app.core.naming import sanitize_filename
 from app.core.playlists import PlaylistStore
 from app.core.stats import StatsStore
+from app.core.totals import TotalStore
 from app.errors import ActionError
 from app.models import AUDIO_EXTS, Music
 from app.system import ffmpeg, recycle
@@ -110,6 +111,7 @@ def apply_replacement(
     playlists: PlaylistStore,
     stats: StatsStore,
     defaults: Params,
+    totals: TotalStore | None = None,
 ) -> ReplaceReport:
     old_md5 = music.md5
     old_ext = music.ext
@@ -167,6 +169,12 @@ def apply_replacement(
         except Exception:  # 统计不是关键数据，失败不阻断换源
             logger.exception("迁移统计失败：{}", playlist.uid)
 
+    if totals is not None:
+        try:
+            totals.move_key(old_md5, prepared.md5)
+        except Exception:  # 同上：总播放次数也是附加物
+            logger.exception("迁移总播放次数失败：{}", old_md5)
+
     old_path = paths.music_path(old_md5, old_ext)
     recycled = recycle.recycle_as(old_path, f"{sanitize_filename(title)}（旧源）")
 
@@ -185,6 +193,7 @@ def delete_musics(
     library: Library,
     playlists: PlaylistStore,
     stats: StatsStore,
+    totals: TotalStore | None = None,
 ) -> DeleteReport:
     report = DeleteReport()
     library_backup = library.to_payload()
@@ -201,6 +210,8 @@ def delete_musics(
             for playlist in playlists.all():
                 if stats.drop(playlist.uid, md5):
                     report.stats += 1
+            if totals is not None:
+                totals.drop(md5)
             if recycle.recycle_as(paths.music_path(md5, music.ext), sanitize_filename(music.title)):
                 report.recycled += 1
         library.save()

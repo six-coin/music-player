@@ -55,9 +55,9 @@ function renderTagList() {
         T("tag.group_summary", { tags: (group.tags || []).length, songs: group.count || 0 }) +
         (flags.length ? " · " + flags.join(" / ") : "");
       return (
-        '<li class="' + classes.join(" ") + '" data-tag-group="' + esc(group.uid) +
-        '" tabindex="0"><div class="song-body"><span class="song-title">' + esc(group.name) +
-        '</span><span class="song-sub">' + esc(sub) + "</span></div></li>"
+        '<li class="' + classes.join(" ") + '" draggable="true" data-tag-group="' +
+        esc(group.uid) + '" tabindex="0"><div class="song-body"><span class="song-title">' +
+        esc(group.name) + '</span><span class="song-sub">' + esc(sub) + "</span></div></li>"
       );
     })
     .join("");
@@ -79,15 +79,16 @@ function renderTagDetail() {
     return;
   }
 
-  const tags = (group.tags || []).slice().sort(function (a, b) {
-    return a.name.localeCompare(b.name, "zh-CN");
-  });
+  // 顺序由用户拖出来，所以不再按名称排序：排序与拖动同时存在会互相打架。
+  const tags = group.tags || [];
 
   const rows = tags.length
     ? tags
         .map(function (tag) {
           return (
-            '<div class="tag-edit-row">' +
+            '<div class="tag-edit-row" data-tag-row="' + esc(tag.uid) + '">' +
+            '<span class="grip tag-grip" data-tag-grip="1" title="' +
+            esc(T("tag.drag_hint")) + '" aria-hidden="true">⋮⋮</span>' +
             '<input class="input" data-tag-name="' + esc(tag.uid) + '" data-tag-original="' +
             esc(tag.name) + '" value="' + esc(tag.name) + '" maxlength="60">' +
             '<span class="tag-count">' + esc(T("tag.usage", { count: tag.count || 0 })) + "</span>" +
@@ -153,7 +154,7 @@ function authorByUid(uid) {
 }
 
 function visibleAuthors() {
-  const list = (state.data && state.data.library.authors) || [];
+  const list = sortedAuthors();
   const query = state.authorQuery.trim().toLowerCase();
   if (!query) return list;
   return list.filter(function (author) {
@@ -196,7 +197,7 @@ function renderAuthorList() {
         classes.push("is-active");
       }
       return (
-        '<li class="' + classes.join(" ") + '" draggable="true" data-author-uid="' +
+        '<li class="' + classes.join(" ") + '" data-author-uid="' +
         esc(author.uid) + '" tabindex="0"><div class="song-body"><span class="song-title">' +
         esc(author.name) + '</span><span class="song-sub">' +
         esc(T("author.count", { count: author.count || 0 })) + "</span></div></li>"

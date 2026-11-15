@@ -1,9 +1,6 @@
 /* 歌单、标签、作者的编辑动作：新建、删除、条件取值、拖拽排序。 */
 /* ---------- 删除前的从属关系 ---------- */
 
-/* 二次确认里最多列三项：再多就不是「提醒」，而是把弹窗变成清单了。 */
-const DEPENDENCY_LIMIT = 3;
-
 function allMusics() {
   return (state.data && state.data.library.musics) || [];
 }
@@ -55,9 +52,8 @@ function playlistReferrers(uid) {
 
 function dependencyMarkup(items) {
   if (!items || !items.length) return "";
-  const shown = items.slice(0, DEPENDENCY_LIMIT);
-  const rest = items.length - shown.length;
-  const rows = shown
+  // 全部列出来：清单框有固定高度，装不下就在框里滚动，不再只报「另有 N 项」。
+  const rows = items
     .map(function (item) {
       return (
         '<li><span class="dep-kind">' + esc(item.kind) + "</span>" +
@@ -67,11 +63,7 @@ function dependencyMarkup(items) {
     .join("");
   return (
     '<div class="deps"><p class="deps-title">' + esc(T("delete.deps_title")) + "</p>" +
-    '<ul class="deps-list">' + rows + "</ul>" +
-    (rest > 0
-      ? '<p class="deps-more">' + esc(T("delete.deps_more", { count: rest })) + "</p>"
-      : "") +
-    "</div>"
+    '<ul class="deps-list">' + rows + "</ul></div>"
   );
 }
 
@@ -645,7 +637,3 @@ function confirmDeleteAuthor(author) {
   });
 }
 
-async function moveAuthor(uid, delta) {
-  const data = await call("move_author", uid, delta);
-  if (data) apply(data);
-}

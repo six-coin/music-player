@@ -30,6 +30,7 @@ DEFAULTS: dict[str, Any] = {
         "theme": "light",
         "language": "zh-CN",
         "debug": False,
+        "record_total_plays": True,
         "adaptation": {
             "window": 100,
             "min_plays": 10,
@@ -121,6 +122,8 @@ def clamp(raw: dict[str, Any]) -> dict[str, Any]:
         common.get("language"), tuple(i18n.available()), i18n.initial_language()
     )
     common["debug"] = _bool(common.get("debug"), False)
+    # 总播放次数只有一个开关；它不进 adaptive 那一组，也不受歌单的自适应开关影响。
+    common["record_total_plays"] = _bool(common.get("record_total_plays"), True)
     adaptation = Adaptation.from_dict(common.get("adaptation"))
     adaptation.normalize()
     common["adaptation"] = adaptation.to_dict()
@@ -161,7 +164,7 @@ class SettingsStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.data: dict[str, Any] = defaults()
-        self._debug_cache: tuple[float, bool] | None = None
+        self._flag_cache: dict[str, tuple[float, bool]] = {}
 
     def _lock_path(self) -> Path:
         return paths.lock_for(self.path)
@@ -190,7 +193,7 @@ class SettingsStore:
             warnings.append(str(error))
             raw = {}
         self.data = clamp(raw)
-        self._debug_cache = None
+        self._flag_cache.clear()
         return warnings
 
     def save(self) -> None:
@@ -201,7 +204,7 @@ class SettingsStore:
         with exclusive(self._lock_path()):
             self.data = defaults()
             atomic.write_json(self.path, self.data)
-        self._debug_cache = None
+        self._flag_cache.clear()
         return self.data
 
     def update(self, patch: dict[str, Any]) -> dict[str, Any]:
@@ -209,7 +212,7 @@ class SettingsStore:
         with exclusive(self._lock_path()):
             self.data = clamp(_merge(self._read_disk(), patch))
             atomic.write_json(self.path, self.data)
-        self._debug_cache = None
+        self._flag_cache.clear()
         return self.data
 
     def patch_player(self, patch: dict[str, Any]) -> dict[str, Any]:
@@ -225,27 +228,37 @@ class SettingsStore:
             merged.update(patch)
             self.data = clamp(_merge(raw, {"player": merged}))
             atomic.write_json(self.path, self.data)
-        self._debug_cache = None
+        self._flag_cache.clear()
         return self.data
 
-    def debug_enabled(self) -> bool:
-        """跨进程读取调试开关，缓存两秒。
+    def _cached_common_flag(self, key: str, fallback: bool) -> bool:
+        """跨进程读 ``common`` 里的一个布尔开关，缓存两秒。
 
-        这个值在自动跳过判定里是逐曲调用的：一轮扫几百首就是几百次读盘，
-        而调试开关的语义是「下次判定就生效」，两秒的延迟看不出来。
+        这些值在逐曲判定里会被反复读：一轮扫几百首就是几百次读盘，而开关的
+        语义是「下次判定就生效」，两秒的延迟看不出来。
         """
         now = time.monotonic()
-        if self._debug_cache is not None and now - self._debug_cache[0] < DEBUG_CACHE_SECONDS:
-            return self._debug_cache[1]
+        cached = self._flag_cache.get(key)
+        if cached is not None and now - cached[0] < DEBUG_CACHE_SECONDS:
+            return cached[1]
         try:
             raw = atomic.read_json(self.path)
         except (ConfigError, OSError):
-            self._debug_cache = (now, False)
-            return False
+            self._flag_cache[key] = (now, fallback)
+            return fallback
         common = raw.get("common") if isinstance(raw, dict) else None
-        enabled = bool(common.get("debug")) if isinstance(common, dict) else False
-        self._debug_cache = (now, enabled)
+        value = common.get(key) if isinstance(common, dict) else None
+        enabled = value if isinstance(value, bool) else fallback
+        self._flag_cache[key] = (now, enabled)
         return enabled
+
+    def debug_enabled(self) -> bool:
+        """调试状态：为真时两个播放器都不判定也不记录自适应。"""
+        return self._cached_common_flag("debug", False)
+
+    def record_total_plays_enabled(self) -> bool:
+        """总播放次数的总开关；读不出来时按「记录」处理。"""
+        return self._cached_common_flag("record_total_plays", True)
 
     def get(self, *keys: str, default: Any = None) -> Any:
         node: Any = self.data

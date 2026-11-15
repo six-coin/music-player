@@ -20,6 +20,7 @@ from app.cli.simple import Deps, Session  # noqa: E402
 from app.core.adaptation import Params  # noqa: E402
 from app.core.library import Library  # noqa: E402
 from app.core.stats import StatsStore  # noqa: E402
+from app.core.totals import TotalStore  # noqa: E402
 from app.models import Adaptation, Music, Playlist  # noqa: E402
 
 
@@ -158,6 +159,7 @@ class SimpleEnv:
     def __init__(self, root: Path) -> None:
         self.library = Library(root / "library.json")
         self.stats = StatsStore(root / "stats")
+        self.totals = TotalStore(root / "totals.json")
         self.playlist = Playlist(
             uid="f" * 32,
             name=None,
@@ -191,6 +193,9 @@ class SimpleEnv:
         entry = self.stats.load(self.playlist.uid).get(md5)
         return entry.records if entry else ""
 
+    def total_plays(self, md5: str) -> int:
+        return self.totals.get(md5)
+
     def run(self, order: str = "list_loop") -> int:
         deps = Deps(
             library=self.library,
@@ -200,6 +205,7 @@ class SimpleEnv:
             keys=self.keys,
             clock=self.clock,
             rng=self.rng,
+            totals=self.totals,
         )
         session = Session(deps, self.playlist, self.params, order, self.songs)
         return session.run()

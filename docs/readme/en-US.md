@@ -96,7 +96,7 @@ Detail cards:
 |-------------------|-------------------------------------------------------------------------------------------|
 | Basics            | Title, artists (searchable, move up/down to reorder), tags (grouped checkboxes)           |
 | File              | MD5, path, size, duration, import date                                                    |
-| Adaptive skipping | Records, skip rate, auto skips and next probability for this song in the default playlist |
+| Adaptive skipping | Records, skip rate, total plays, full plays, auto skips and next probability for this song in the default playlist |
 
 "More" in the top right holds four actions:
 
@@ -132,9 +132,11 @@ Each rule row reads "Include/Exclude · Target · Values":
 
 Rules evaluate top to bottom: includes add, excludes subtract. An empty rule matches nothing.
 
-The Adaptive skipping card in the playlist detail configures that playlist; View statistics slides a drawer in from the right with records, skip rate, auto skips and next probability per song.
+The playlist list can be reordered by dragging: grab a row, drop it where it belongs, and the order is written to `playlists.json` (the playlist column in the player follows the same order).
 
-Deleting: the built-in playlist cannot be deleted. If another rule-based playlist references this one, you are told which, and must remove those references first.
+The Adaptive skipping card in the playlist detail configures that playlist; View statistics slides a drawer in from the right with records, skip rate, total plays, full plays, auto skips and next probability per song. Each row has a "Clear" button on the right, and it asks first — even the smallest record cannot be undone.
+
+Deleting: the built-in playlist cannot be deleted. If other rule-based playlists reference this one, every referrer is listed (the box scrolls when there are many) and you must remove those references first.
 
 ## 7. Tags and artists
 
@@ -145,7 +147,9 @@ A tag group is a container for tags, with two switches:
 | Required | Every song needs at least one tag from this group   |
 | Single   | Every song may have at most one tag from this group |
 
-Artists have a name and notes. The artist order is the order used by the artist picker in song details; drag rows or use the context menu. Artists with no songs can be removed in one go.
+The tag group list can be reordered by dragging; inside a group, every tag has a handle to the left of its input — hold it and drag to change the order, and the order is saved when you drop.
+
+Artists have a name and notes. The artist list is sorted by name and cannot be reordered by hand; the artist picker in song details uses the same order. Artists with no songs can be removed in one go.
 
 Deleting a referenced artist or tag group lists the affected songs first; confirming removes the references along with it.
 
@@ -182,6 +186,8 @@ What gets recorded:
 Automatic skipping is **silent**: no toast, no flash, the player simply moves on and marks that row as played.
 
 "Full plays" is how many times a song was played past the threshold without being switched away **in that playlist**. It is shown in the statistics drawer and never used for the decision.
+
+"Total plays" is a separate ledger: **one file for the whole library**, not per playlist, and clearing adaptation never clears it. The only switch that turns it off is "General → Playback records → Record total play counts"; turning adaptation off for a playlist, or turning on debug mode, does not stop it. The criterion comes from whatever is playing at the time: inside a playlist it uses the skip threshold of that playlist, single-song loop uses the global one, and a natural end always counts.
 
 While "Library manager → Maintenance · Debug mode" is on, neither player decides nor records anything — useful when troubleshooting.
 
@@ -266,8 +272,8 @@ Five pages; changes apply immediately and there is no Save button.
 
 | Page            | Contents                                                                                                                                                                                                  |
 |-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| General         | Theme (light / dark only, no follow-system option), language (sorted by language code), adaptive defaults (window, minimum plays, skip base, skip threshold)                                              |
-| Library manager | Preview volume, import (default folder, clean audio on import, FFmpeg and ffprobe status), maintenance (integrity check, clean orphan files, clear all statistics, open data and log folders, debug mode) |
+| General         | Theme (light / dark only, no follow-system option), language (sorted by language code), adaptive defaults (window, minimum plays, skip base, skip threshold), playback records (record total play counts) |
+| Library manager | Preview volume, import (default folder, clean audio on import, FFmpeg and ffprobe status), maintenance (integrity check, clean orphan files, clear adaptation stats, open data and log folders, debug mode) |
 | Simple player   | Play mode, default playlist (read-only, with a link)                                                                                                                                                      |
 | Player          | Default volume, play mode, remember position                                                                                                                                                              |
 | About           | Data folder (an input box with "Change" and "Reset"), user manual, reset all settings, version                                                                                                            |
@@ -303,6 +309,7 @@ Music Player\
 ├─ playlists.json                            playlists and the default one
 ├─ player.json                               window size, queue visibility
 ├─ stats\<playlist id>.json                   adaptive statistics per playlist
+├─ totals.json                               total play counts per song (one file for the library)
 └─ music\<md5>.<ext>                          imported audio, file name is the MD5
 
 %LOCALAPPDATA%\six-coin\music-player\

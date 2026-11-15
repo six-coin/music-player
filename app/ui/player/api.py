@@ -29,6 +29,7 @@ from app.core.player_session import (
 )
 from app.core.playlists import PlaylistStore
 from app.core.stats import SongStats, StatsStore
+from app.core.totals import TotalStore
 from app.errors import AppError, ConfigError
 from app.models import Music, Playlist
 from app.settings import SettingsStore
@@ -63,6 +64,7 @@ class PlayerApi:
         self.library = Library(base / "library.json")
         self.playlists = PlaylistStore(base / "playlists.json")
         self.stats = StatsStore(base / "stats")
+        self.totals = TotalStore(base / "totals.json")
         self.state_path = base / "player.json"
 
         self.warnings: list[str] = []
@@ -466,11 +468,15 @@ class PlayerApi:
     def _record(self, md5: str, played_ms: int, *, natural: bool) -> None:
         uid = self.session.playlist_uid
         playlist = self.playlists.get(uid) if uid else None
-        if playlist is None or not playlist.adaptation.enabled or self.settings.debug_enabled():
+        if playlist is None:
+            return
+        params = self._params(playlist)
+        # 总播放次数先记：它不受歌单的自适应开关与调试状态影响。
+        self._count_total(md5, played_ms, params, natural=natural)
+        if not playlist.adaptation.enabled or self.settings.debug_enabled():
             return
         if uid != self._records_uid:
             self._reload_records()
-        params = self._params(playlist)
         skipped = False if natural else played_ms < params.skip_seconds * 1000
         try:
             self.stats.record(uid, md5, skipped, params.window)
@@ -480,6 +486,28 @@ class PlayerApi:
         entry = self._records.setdefault(md5, SongStats())
         entry.records = adaptation.push(entry.records, skipped, params.window)
         entry.last_played_at = int(time.time())
+
+    def _count_total(
+        self, md5: str, played_ms: int, params: adaptation.Params, *, natural: bool
+    ) -> None:
+        """总播放次数：只受设置里那个总开关控制，判定标准看当时的环境。
+
+        单曲循环用全局阈值——这时放的可能是一首不在任何歌单里的歌，套用当前
+        歌单的阈值没有依据。
+        """
+        if not self.settings.record_total_plays_enabled():
+            return
+        seconds = (
+            self._defaults().skip_seconds
+            if self.session.mode == "repeat_one"
+            else params.skip_seconds
+        )
+        if not adaptation.is_full_play(played_ms, seconds, natural=natural):
+            return
+        try:
+            self.totals.add(md5)
+        except Exception:  # 同上：附加数据写不进去不该打断播放
+            logger.exception("记录总播放次数失败：{}", md5)
 
     def _reload_records(self) -> None:
         uid = self.session.playlist_uid
@@ -495,11 +523,11 @@ class PlayerApi:
             self._records = {}
         self._records_uid = uid
 
+    def _defaults(self) -> adaptation.Params:
+        return adaptation.params_from_dict(self.settings.get("common", "adaptation", default={}))
+
     def _params(self, playlist: Playlist) -> adaptation.Params:
-        defaults = adaptation.params_from_dict(
-            self.settings.get("common", "adaptation", default={})
-        )
-        return adaptation.effective(playlist.adaptation, defaults)
+        return adaptation.effective(playlist.adaptation, self._defaults())
 
     # ---------- 持久化 ----------
 

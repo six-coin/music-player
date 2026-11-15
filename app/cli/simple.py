@@ -29,6 +29,7 @@ from app.core.library import Library
 from app.core.playlists import PlaylistStore
 from app.core.queue import build_round, play_order
 from app.core.stats import SongStats, StatsStore
+from app.core.totals import TotalStore
 from app.errors import AppError
 from app.models import Music, Playlist
 from app.settings import SettingsStore
@@ -69,6 +70,9 @@ class Deps:
     clock: Callable[[], float] = time.monotonic
     rng: random.Random = field(default_factory=random.Random)
     debug: Callable[[], bool] = lambda: False
+    #: 总播放次数：与自适应完全独立，只受设置里那个总开关控制。
+    totals: TotalStore | None = None
+    record_totals: Callable[[], bool] = lambda: True
 
 
 # ---------- 播放循环 ----------
@@ -217,13 +221,29 @@ class Session:
         return True
 
     def _remember(self, md5: str, outcome: Outcome, seconds: float) -> None:
+        if outcome is Outcome.PLAYED:
+            skipped = False
+        elif outcome is Outcome.SKIPPED:
+            skipped = seconds < self._params.skip_seconds
+        else:
+            return
+        # 总播放次数先记：它不看自适应开关，也不看调试状态。
+        if not skipped:
+            self._count_total(md5)
         # 自适应没开就不写统计：记录只服务于自适应，用户关掉它就别再动文件。
         if not self._adaptation_active():
             return
-        if outcome is Outcome.PLAYED:
-            self._record(md5, skipped=False)
-        elif outcome is Outcome.SKIPPED:
-            self._record(md5, skipped=seconds < self._params.skip_seconds)
+        self._record(md5, skipped=skipped)
+
+    def _count_total(self, md5: str) -> None:
+        """simple 只播默认歌单，阈值就是这份配置里的跳过阈值。"""
+        totals = self._deps.totals
+        if totals is None or not self._deps.record_totals():
+            return
+        try:
+            totals.add(md5)
+        except Exception:  # 附加数据写不进去不该打断播放
+            logger.exception("记录总播放次数失败：{}", md5)
 
     def _record(self, md5: str, skipped: bool) -> None:
         try:
@@ -306,6 +326,7 @@ def _run(log_file: Path) -> int:
     warning = i18n.t("simple.settings_warning") if warnings else ""
 
     stats = StatsStore(paths.STATS_DIR)
+    totals = TotalStore(paths.TOTALS_PATH)
     player = vlc.VlcPlayer()
     screen = render.Screen()
     try:
@@ -331,6 +352,8 @@ def _run(log_file: Path) -> int:
                     player=player,
                     screen=screen,
                     debug=settings.debug_enabled,
+                    totals=totals,
+                    record_totals=settings.record_total_plays_enabled,
                 ),
                 playlist,
                 params,

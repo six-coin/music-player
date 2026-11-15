@@ -31,6 +31,7 @@ from app.core.library import Library
 from app.core.naming import parse_filename
 from app.core.playlists import PlaylistStore
 from app.core.stats import StatsStore
+from app.core.totals import TotalStore
 from app.errors import ActionError, PlaylistCycleError
 from app.models import (
     FILTER_MODES,
@@ -86,6 +87,7 @@ class ManagerApi:
         self.playlists = PlaylistStore(base / "playlists.json")
         self.settings = SettingsStore(base / "settings.json")
         self.stats = StatsStore(base / "stats")
+        self.totals = TotalStore(base / "totals.json")
         self.warnings: list[str] = []
         self.section = "overview"
         self.selection: dict[str, str] | None = None
@@ -225,16 +227,18 @@ class ManagerApi:
 
     def _library_payload(self, missing: set[str], tag_issues: set[str]) -> dict[str, Any]:
         tag_counts, group_counts, author_counts = self._reference_counts()
+        # 标签组的顺序就是文件里的顺序：用户拖出来的顺序要能留住。
         tag_groups: list[dict[str, Any]] = []
-        for group in sorted(self.library.tag_groups.values(), key=lambda item: item.name):
+        for group in self.library.tag_groups.values():
             payload = group.to_dict()
             payload["count"] = group_counts.get(group.uid, 0)
             for tag in payload["tags"]:
                 tag["count"] = tag_counts.get(tag["uid"], 0)
             tag_groups.append(payload)
 
+        # 作者不提供手动排序，展示时一律按名称。
         authors: list[dict[str, Any]] = []
-        for author in self.library.authors.values():
+        for author in sorted(self.library.authors.values(), key=lambda item: item.name.casefold()):
             payload = author.to_dict()
             payload["count"] = author_counts.get(author.uid, 0)
             authors.append(payload)
@@ -261,6 +265,7 @@ class ManagerApi:
         return sorted(self.library.musics.values(), key=lambda item: item.title.lower())
 
     def _playlist_payload(self) -> list[dict[str, Any]]:
+        # 顺序即文件里的数组顺序：歌单列表可以拖拽排序，排序结果要能留住。
         result: list[dict[str, Any]] = []
         for playlist in self.playlists.all():
             payload = playlist.to_dict()
@@ -279,7 +284,7 @@ class ManagerApi:
                 payload["error"] = str(error)
                 payload["error_detail"] = {"kind": "error", "chain": [], "text": str(error)}
             result.append(payload)
-        return sorted(result, key=lambda item: (not item["builtin"], item["title"]))
+        return result
 
     def _playlist_title(self, uid: str) -> str:
         playlist = self.playlists.get(uid)
@@ -606,6 +611,30 @@ class ManagerApi:
             self.library.save()
             return self._snapshot()
 
+    def reorder_tags(self, group_uid: str, uids: list[str]) -> dict[str, Any]:
+        """组里的小标签按拖出来的顺序落盘；没提到的留在末尾。"""
+        with self._lock:
+            group = self.library.tag_groups.get(group_uid)
+            if group is None:
+                return self._snapshot()
+            remaining = {tag.uid: tag for tag in group.tags}
+            tags: list[Tag] = []
+            for uid in uids or []:
+                tag = remaining.pop(str(uid), None)
+                if tag is not None:
+                    tags.append(tag)
+            tags.extend(remaining.values())
+            if [tag.uid for tag in tags] != [tag.uid for tag in group.tags]:
+                group.tags = tags
+                self.library.save()
+            return self._snapshot()
+
+    def reorder_tag_groups(self, uids: list[str]) -> dict[str, Any]:
+        with self._lock:
+            self.library.reorder_tag_groups([str(uid) for uid in uids or []])
+            self.library.save()
+            return self._snapshot()
+
     # ---------- 作者 ----------
 
     def update_author(self, uid: str, patch: dict[str, Any]) -> dict[str, Any]:
@@ -662,18 +691,6 @@ class ManagerApi:
             snapshot = self._snapshot()
             snapshot["message"] = i18n.t("author.cleaned", count=len(empty))
             return snapshot
-
-    def reorder_authors(self, uids: list[str]) -> dict[str, Any]:
-        with self._lock:
-            self.library.reorder_authors([str(uid) for uid in uids or []])
-            self.library.save()
-            return self._snapshot()
-
-    def move_author(self, uid: str, delta: int) -> dict[str, Any]:
-        with self._lock:
-            if self.library.move_author(uid, int(delta)):
-                self.library.save()
-            return self._snapshot()
 
     # ---------- 批量操作 ----------
 
@@ -783,6 +800,13 @@ class ManagerApi:
                     names.append(self._playlist_title(playlist.uid))
                     break
         return names
+
+    def reorder_playlists(self, uids: list[str]) -> dict[str, Any]:
+        """歌单列表按拖出来的顺序落盘；播放器也照这个顺序展示。"""
+        with self._lock:
+            self.playlists.reorder([str(uid) for uid in uids or []])
+            self.playlists.save()
+            return self._snapshot()
 
     def set_playlist_entries(self, uid: str, md5s: list[str]) -> dict[str, Any]:
         with self._lock:
@@ -950,6 +974,7 @@ class ManagerApi:
                 return {"ok": False, "message": f"解析歌单失败：{error}", "rows": []}
 
             summary = self.stats.summary(uid)
+            totals = self.totals.summary()
             rows: list[dict[str, Any]] = []
             for md5 in content.md5s:
                 music = self.library.musics.get(md5)
@@ -966,6 +991,8 @@ class ManagerApi:
                         "rate": skip_rate(records),
                         "auto_skipped": int(item.get("auto_skipped", 0) or 0),
                         "full_plays": int(item.get("full_plays", 0) or 0),
+                        # 总播放次数与自适应无关：换个歌单看也是同一个数。
+                        "total_plays": int(totals.get(md5, 0)),
                         "probability": skip_probability(records, params),
                     }
                 )
@@ -1013,6 +1040,8 @@ class ManagerApi:
                 "rate": skip_rate(records),
                 "auto_skipped": int(summary.get("auto_skipped", 0) or 0),
                 "full_plays": int(summary.get("full_plays", 0) or 0),
+                # 总播放次数是全库一份，与这首歌在不在默认歌单里无关。
+                "total_plays": self.totals.get(md5),
                 "probability": skip_probability(records, params),
             }
 
@@ -1269,6 +1298,7 @@ class ManagerApi:
                     self.playlists,
                     self.stats,
                     self._adaptation_defaults(),
+                    self.totals,
                 )
             except ActionError as error:
                 self._finish_task(task_id, error=str(error))
@@ -1314,7 +1344,9 @@ class ManagerApi:
             if not targets:
                 return self._snapshot()
             try:
-                report = source.delete_musics(targets, self.library, self.playlists, self.stats)
+                report = source.delete_musics(
+                    targets, self.library, self.playlists, self.stats, self.totals
+                )
             except ActionError as error:
                 return self._fail_message(str(error))
             if self.selection and self.selection.get("uid") in targets:
