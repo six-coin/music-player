@@ -164,18 +164,6 @@ function bindPlaylistEvents() {
       return;
     }
 
-    const up = event.target.closest("[data-filter-up]");
-    if (up) {
-      const data = await call("move_filter", playlist.uid, Number(up.dataset.filterUp), -1);
-      if (data) apply(data);
-      return;
-    }
-    const down = event.target.closest("[data-filter-down]");
-    if (down) {
-      const data = await call("move_filter", playlist.uid, Number(down.dataset.filterDown), 1);
-      if (data) apply(data);
-      return;
-    }
     const remove = event.target.closest("[data-filter-remove]");
     if (remove) {
       const data = await call("remove_filter", playlist.uid, Number(remove.dataset.filterRemove));
@@ -196,53 +184,38 @@ function bindPlaylistEvents() {
     }
   });
 
-  playlistDetail.addEventListener("dragstart", function (event) {
-    const row = event.target.closest(".entry-row");
-    if (!row) return;
-    state.dragMd5 = row.dataset.entry;
-    row.classList.add("is-dragging");
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", state.dragMd5);
-    }
+  // 条件行：按住左边的手柄拖，顺序写回这个歌单的条件数组。
+  bindDragSort(playlistDetail, {
+    row: "[data-filter-row]",
+    handle: "[data-filter-grip]",
+    key: function (node) {
+      return node.dataset.filterRow;
+    },
+    commit: async function (order) {
+      const playlist = playlistByUid(state.active);
+      if (!playlist) return;
+      const data = await call(
+        "reorder_filters",
+        playlist.uid,
+        order.map(function (index) {
+          return Number(index);
+        })
+      );
+      if (data) apply(data);
+    },
   });
 
-  playlistDetail.addEventListener("dragover", function (event) {
-    const row = event.target.closest(".entry-row");
-    if (!row || !state.dragMd5) return;
-    event.preventDefault();
-    qsa(".entry-row", playlistDetail).forEach(function (node) {
-      node.classList.remove("drop-before", "drop-after");
-    });
-    const rect = row.getBoundingClientRect();
-    row.classList.add(event.clientY > rect.top + rect.height / 2 ? "drop-after" : "drop-before");
-  });
-
-  playlistDetail.addEventListener("drop", async function (event) {
-    const row = event.target.closest(".entry-row");
-    const playlist = playlistByUid(state.active);
-    if (!row || !state.dragMd5 || !playlist) return;
-    event.preventDefault();
-
-    const after = row.classList.contains("drop-after");
-    const entries = (playlist.entries || []).slice();
-    const from = entries.indexOf(state.dragMd5);
-    if (from === -1) return;
-    entries.splice(from, 1);
-    let index = entries.indexOf(row.dataset.entry);
-    if (index === -1) index = entries.length;
-    if (after) index += 1;
-    entries.splice(index, 0, state.dragMd5);
-
-    state.dragMd5 = null;
-    const data = await call("set_playlist_entries", playlist.uid, entries);
-    if (data) apply(data);
-  });
-
-  playlistDetail.addEventListener("dragend", function () {
-    state.dragMd5 = null;
-    qsa(".entry-row", playlistDetail).forEach(function (node) {
-      node.classList.remove("is-dragging", "drop-before", "drop-after");
-    });
+  // 手动歌单的曲目：整行可拖，顺序写回 entries。
+  bindDragSort(playlistDetail, {
+    row: ".entry-row",
+    key: function (node) {
+      return node.dataset.entry;
+    },
+    commit: async function (order) {
+      const playlist = playlistByUid(state.active);
+      if (!playlist) return;
+      const data = await call("set_playlist_entries", playlist.uid, order);
+      if (data) apply(data);
+    },
   });
 }

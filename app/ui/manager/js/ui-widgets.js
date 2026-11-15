@@ -156,8 +156,10 @@ function bindDragSort(list, options) {
   const handle = options.handle || "";
   const allow = options.allow || null;
   let dragging = null;
+  let draggingRow = null;
 
   const clear = function () {
+    draggingRow = null;
     qsa(selector, list).forEach(function (node) {
       node.classList.remove("is-dragging", "drop-before", "drop-after");
       if (handle) node.draggable = false;
@@ -175,13 +177,17 @@ function bindDragSort(list, options) {
 
   list.addEventListener("dragstart", function (event) {
     const row = event.target.closest(selector);
+    // 不是本列表的行就直接走开：同一个容器上可能绑着两套排序（歌单详情里
+    // 曲目和条件行各一套），在这里 preventDefault 会把对方的拖动一起取消。
+    if (!row) return;
     // 列表被搜索过滤过时不允许拖：这时 DOM 里只有一部分行，按它排会把
     // 没显示出来的那些甩到末尾去。
-    if (!row || (allow && !allow())) {
+    if (allow && !allow()) {
       event.preventDefault();
       return;
     }
     dragging = keyOf(row);
+    draggingRow = row;
     row.classList.add("is-dragging");
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = "move";
@@ -206,16 +212,25 @@ function bindDragSort(list, options) {
     event.preventDefault();
     const after = row.classList.contains("drop-after");
     const moved = dragging;
+    const source = draggingRow;
     dragging = null;
-    const keys = qsa(selector, list).map(function (node) {
+    const nodes = qsa(selector, list);
+    const from = nodes.indexOf(source);
+    const target = nodes.indexOf(row);
+    // 落在自己身上（包括「拖到自己的上一条」这种手抖）什么都不做：
+    // 先把源摘掉再按目标找位置，会把「自己」算成找不到、甩到末尾去。
+    if (from === -1 || target === -1 || from === target) {
+      draggingRow = null;
+      return;
+    }
+    let index = target + (after ? 1 : 0);
+    if (from < index) index -= 1;
+    draggingRow = null;
+    if (index === from) return;
+    const keys = nodes.map(function (node) {
       return keyOf(node);
     });
-    const from = keys.indexOf(moved);
-    if (from === -1) return;
     keys.splice(from, 1);
-    let index = keys.indexOf(keyOf(row));
-    if (index === -1) index = keys.length;
-    if (after) index += 1;
     keys.splice(index, 0, moved);
     commit(keys);
   });

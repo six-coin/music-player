@@ -20,7 +20,6 @@ const state = {
   taskId: null,
   nameTimer: null,
   playlistNameTimer: null,
-  dragMd5: null,
 };
 
 function qs(selector, root) {

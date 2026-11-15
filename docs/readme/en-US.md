@@ -96,7 +96,7 @@ Detail cards:
 |-------------------|-------------------------------------------------------------------------------------------|
 | Basics            | Title, artists (searchable, move up/down to reorder), tags (grouped checkboxes)           |
 | File              | MD5, path, size, duration, import date                                                    |
-| Adaptive skipping | Records, skip rate, total plays, full plays, auto skips and next probability for this song in the default playlist |
+| Adaptive skipping | Total plays for this song, then its records, skip rate, full plays, auto skips and next probability in the default playlist |
 
 "More" in the top right holds four actions:
 
@@ -131,6 +131,8 @@ Each rule row reads "Include/Exclude · Target · Values":
 | Artists   | pick artists; any match counts                                                      |
 
 Rules evaluate top to bottom: includes add, excludes subtract. An empty rule matches nothing.
+
+Each row has a handle on the left; hold it and drag to change the order of the rules.
 
 The playlist list can be reordered by dragging: grab a row, drop it where it belongs, and the order is written to `playlists.json` (the playlist column in the player follows the same order).
 

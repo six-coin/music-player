@@ -300,15 +300,13 @@ function filterRowMarkup(condition, index) {
         esc(T("playlist.filter_pick")) + "</button>";
 
   return (
-    '<div class="filter-row" data-filter-index="' + index + '">' +
+    '<div class="filter-row" data-filter-row="' + index + '" data-filter-index="' + index + '">' +
+    '<span class="grip drag-grip" data-filter-grip="1" title="' +
+    esc(T("common.drag_hint")) + '" aria-hidden="true">⋮⋮</span>' +
     selectMarkup('data-filter-mode="' + index + '"', modeOptions, condition.mode) +
     selectMarkup('data-filter-target="' + index + '"', targetOptions, condition.target) +
     '<div class="filter-values">' + values + "</div>" +
     '<div class="filter-tools">' +
-    '<button class="icon-btn" data-filter-up="' + index + '" aria-label="' +
-    esc(T("action.up")) + '">↑</button>' +
-    '<button class="icon-btn" data-filter-down="' + index + '" aria-label="' +
-    esc(T("action.down")) + '">↓</button>' +
     '<button class="icon-btn" data-filter-remove="' + index + '" aria-label="' +
     esc(T("action.remove")) + '">×</button>' +
     "</div></div>"

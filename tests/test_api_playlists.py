@@ -120,11 +120,26 @@ def test_filter_crud(api):
     api.update_filter(playlist.uid, 1, {"target": "all"})
     assert playlist.filters[1].values == []
 
-    api.move_filter(playlist.uid, 1, -1)
-    assert playlist.filters[0].target == "all"
+    api.reorder_filters(playlist.uid, [1, 0])
+    assert playlist.filters[0].mode == "exclude"
+    assert playlist.filters[1].mode == "include"
 
     api.remove_filter(playlist.uid, 0)
     assert len(playlist.filters) == 1
+
+
+def test_reorder_filters_keeps_the_ones_left_out(api):
+    """只传拖过的那一行时，其余条件保持原来的相对顺序。"""
+    playlist = api.playlists.create("条件", "filter")
+    api.add_filter(playlist.uid)
+    api.add_filter(playlist.uid)
+    api.update_filter(playlist.uid, 0, {"target": "music", "values": [SONG_A]})
+    api.update_filter(playlist.uid, 1, {"target": "author", "values": [AUTHOR]})
+    api.update_filter(playlist.uid, 2, {"target": "tag", "values": [TAG]})
+
+    api.reorder_filters(playlist.uid, [2])
+
+    assert [item.target for item in playlist.filters] == ["tag", "music", "author"]
 
 
 def test_delete_manual_playlist_clears_selection(api):

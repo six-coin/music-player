@@ -87,8 +87,8 @@ function renderTagDetail() {
         .map(function (tag) {
           return (
             '<div class="tag-edit-row" data-tag-row="' + esc(tag.uid) + '">' +
-            '<span class="grip tag-grip" data-tag-grip="1" title="' +
-            esc(T("tag.drag_hint")) + '" aria-hidden="true">⋮⋮</span>' +
+            '<span class="grip drag-grip" data-tag-grip="1" title="' +
+            esc(T("common.drag_hint")) + '" aria-hidden="true">⋮⋮</span>' +
             '<input class="input" data-tag-name="' + esc(tag.uid) + '" data-tag-original="' +
             esc(tag.name) + '" value="' + esc(tag.name) + '" maxlength="60">' +
             '<span class="tag-count">' + esc(T("tag.usage", { count: tag.count || 0 })) + "</span>" +

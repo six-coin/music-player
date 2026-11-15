@@ -179,10 +179,11 @@ async function loadMusicStats(md5) {
       '<p class="tag-hint">' + esc(T("adaptation.not_in_default")) + "</p>";
     return;
   }
+  // 总播放次数放第一位：它是全库口径，和下面几项按歌单算的指标不是一回事。
   host.innerHTML =
+    cell(String(data.total_plays || 0), T("adaptation.col_total")) +
     cell(String(data.total), T("adaptation.col_records")) +
     cell(percent(data.rate), T("adaptation.col_rate")) +
-    cell(String(data.total_plays || 0), T("adaptation.col_total")) +
     cell(String(data.full_plays || 0), T("adaptation.col_full")) +
     cell(String(data.auto_skipped), T("adaptation.col_auto")) +
     cell(percent(data.probability), T("adaptation.col_probability"));

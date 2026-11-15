@@ -894,17 +894,31 @@ class ManagerApi:
                 self.playlists.save()
             return self._snapshot()
 
-    def move_filter(self, uid: str, index: int, delta: int) -> dict[str, Any]:
+    def reorder_filters(self, uid: str, order: list[int]) -> dict[str, Any]:
+        """条件行按拖出来的顺序落盘；``order`` 是拖动前的下标顺序。
+
+        没出现在 ``order`` 里的条件留在末尾，不会被丢掉——界面只传可见的那些。
+        """
         with self._lock:
             playlist = self.playlists.get(uid)
             if playlist is None or playlist.kind != "filter":
                 return self._snapshot()
-            target = index + delta
-            if 0 <= index < len(playlist.filters) and 0 <= target < len(playlist.filters):
-                playlist.filters[index], playlist.filters[target] = (
-                    playlist.filters[target],
-                    playlist.filters[index],
-                )
+            current = list(playlist.filters)
+            picked: list[Filter] = []
+            used: set[int] = set()
+            for raw in order or []:
+                try:
+                    index = int(raw)
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= index < len(current) and index not in used:
+                    used.add(index)
+                    picked.append(current[index])
+            for index, condition in enumerate(current):
+                if index not in used:
+                    picked.append(condition)
+            if any(before is not after for before, after in zip(picked, current, strict=True)):
+                playlist.filters = picked
                 self.playlists.touch(uid)
                 self.playlists.save()
             return self._snapshot()

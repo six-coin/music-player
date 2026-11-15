@@ -1456,18 +1456,6 @@ input[type="checkbox"]:disabled {
   background: var(--surface-hover);
 }
 
-.entry-row.is-dragging {
-  opacity: 0.45;
-}
-
-.entry-row.drop-before {
-  box-shadow: inset 0 2px 0 var(--blue);
-}
-
-.entry-row.drop-after {
-  box-shadow: inset 0 -2px 0 var(--blue);
-}
-
 .grip {
   flex: none;
   width: 12px;
@@ -1503,7 +1491,8 @@ input[type="checkbox"]:disabled {
 
 .filter-row {
   display: grid;
-  grid-template-columns: 86px 92px minmax(0, 1fr) auto;
+  /* 手柄 · 包含方式 · 对象 · 取值 · 删除 */
+  grid-template-columns: 16px 86px 92px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 8px 0;
@@ -2140,8 +2129,9 @@ input[type="checkbox"]:disabled {
   flex: none;
 }
 
-/* 小标签的拖动手柄：只有按住它才能拖，输入框里选文字不受影响。 */
-.tag-grip {
+/* 行内拖动手柄（小标签、条件行共用）：只有按住它才能拖，行里的输入框
+   仍然可以正常选文字。 */
+.drag-grip {
   flex: none;
   width: 16px;
   padding-left: 2px;
@@ -2150,20 +2140,8 @@ input[type="checkbox"]:disabled {
   line-height: 1;
 }
 
-.tag-grip:hover {
+.drag-grip:hover {
   color: var(--text-soft);
-}
-
-.tag-edit-row.is-dragging {
-  opacity: 0.45;
-}
-
-.tag-edit-row.drop-before {
-  box-shadow: inset 0 2px 0 var(--blue);
-}
-
-.tag-edit-row.drop-after {
-  box-shadow: inset 0 -2px 0 var(--blue);
 }
 
 .textarea {
@@ -2173,21 +2151,29 @@ input[type="checkbox"]:disabled {
   line-height: 1.6;
 }
 
-/* ---------- 作者列表拖拽 ---------- */
+/* ---------- 拖拽排序 ---------- */
 
 .song-row[draggable="true"] {
   cursor: grab;
 }
 
-.song-row.is-dragging {
+/* 落点那条蓝线：四种可拖的行共用。基态是一条全透明的内阴影，加类时才有
+   颜色和 2px 位移，所以出现与消失都是渐变的，不是硬闪一下。 */
+:is(.song-row, .entry-row, .tag-edit-row, .filter-row) {
+  box-shadow: inset 0 0 0 transparent;
+  transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease,
+    opacity 0.14s ease;
+}
+
+:is(.song-row, .entry-row, .tag-edit-row, .filter-row).is-dragging {
   opacity: 0.45;
 }
 
-.song-row.drop-before {
+:is(.song-row, .entry-row, .tag-edit-row, .filter-row).drop-before {
   box-shadow: inset 0 2px 0 var(--blue);
 }
 
-.song-row.drop-after {
+:is(.song-row, .entry-row, .tag-edit-row, .filter-row).drop-after {
   box-shadow: inset 0 -2px 0 var(--blue);
 }
 
