@@ -6,17 +6,17 @@
 
 一句话：三个进程共用一个 JSON 音乐库，管理器写、播放器只读，界面全部是静态 HTML + 无框架 JS。
 
-| 约束                                          | 原因                                  | 谁在守                                                                                                      |
-|---------------------------------------------|-------------------------------------|----------------------------------------------------------------------------------------------------------|
-| `core` 不导入任何界面库                             | 队列与自适应要能被纯 pytest 覆盖，也要能被三个入口共用     | `test_source_hygiene.py::test_core_has_no_ui_imports`                                                    |
-| `system` 不导入界面库                             | 系统能力是基础设施，不该知道谁在调用                  | `test_source_hygiene.py::test_system_has_no_ui_imports`                                                  |
-| 工作目录钉在程序目录                                  | cwd 会影响相对路径、文件对话框与第三方库的临时文件，只许在一处定死 | `test_source_hygiene.py::test_working_directory_is_pinned_in_one_place`                                  |
-| 入口文件 < 30 行                                 | 装配集中在一处                             | `test_source_hygiene.py::test_manager_entry_stays_thin`、`::test_player_entry_stays_thin`                 |
-| player 不写 `library.json` / `playlists.json` | 播放器不是编辑器；两个进程同时改库必然丢数据              | `test_player_api.py::test_player_leaves_library_untouched`                                               |
-| 队列永远是完整歌单                                   | 队列是承诺，不是装饰                          | `test_player_session.py::test_queue_shows_the_whole_playlist_with_states`                                |
-| 两份 `styles.css` 的设计令牌一致                     | 两个窗口必须看起来是同一个程序                     | `test_player_api.py::test_ui_tokens_match`                                                               |
-| 非法参数不抛异常                                    | 网页收到 Python traceback 是最难排查的一类故障    | `test_player_api.py::test_invalid_arguments_do_not_raise`、`test_api.py::test_invalid_section_is_ignored` |
-| 两份语言包同键同占位符                                 | 缺键会在界面上露出键名                         | `test_i18n.py::test_every_locale_has_the_same_keys`、`::test_placeholders_match_the_default_language`     |
+| 约束                                          | 原因                                                               | 谁在守                                                                                                    |
+|-----------------------------------------------|--------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| `core` 不导入任何界面库                       | 队列与自适应要能被纯 pytest 覆盖，也要能被三个入口共用             | `test_source_hygiene.py::test_core_has_no_ui_imports`                                                     |
+| `system` 不导入界面库                         | 系统能力是基础设施，不该知道谁在调用                               | `test_source_hygiene.py::test_system_has_no_ui_imports`                                                   |
+| 工作目录钉在程序目录                          | cwd 会影响相对路径、文件对话框与第三方库的临时文件，只许在一处定死 | `test_source_hygiene.py::test_working_directory_is_pinned_in_one_place`                                   |
+| 入口文件 < 30 行                              | 装配集中在一处                                                     | `test_source_hygiene.py::test_manager_entry_stays_thin`、`::test_player_entry_stays_thin`                 |
+| player 不写 `library.json` / `playlists.json` | 播放器不是编辑器；两个进程同时改库必然丢数据                       | `test_player_api.py::test_player_leaves_library_untouched`                                                |
+| 队列永远是完整歌单                            | 队列是承诺，不是装饰                                               | `test_player_session.py::test_queue_shows_the_whole_playlist_with_states`                                 |
+| 两份 `styles.css` 的设计令牌一致              | 两个窗口必须看起来是同一个程序                                     | `test_player_api.py::test_ui_tokens_match`                                                                |
+| 非法参数不抛异常                              | 网页收到 Python traceback 是最难排查的一类故障                     | `test_player_api.py::test_invalid_arguments_do_not_raise`、`test_api.py::test_invalid_section_is_ignored` |
+| 两份语言包同键同占位符                        | 缺键会在界面上露出键名                                             | `test_i18n.py::test_every_locale_has_the_same_keys`、`::test_placeholders_match_the_default_language`     |
 
 ## 2. 目录结构
 
@@ -67,25 +67,25 @@ Music Player/
 
 界面没有构建步骤。两个页面各拆成多个普通 `<script>`，共享全局作用域，加载顺序写在 `index.html` 里：
 
-| 目录              | 文件                                                                              | 职责                                    |
-|-----------------|---------------------------------------------------------------------------------|---------------------------------------|
-| `ui/manager/js` | `core.js`                                                                       | 全局状态、DOM 选择器、JS 桥、文案、格式化、主题、Toast     |
-|                 | `navigation.js`                                                                 | 分区跳转与「当前选中项」                          |
-|                 | `ui-widgets.js`                                                                 | 自绘下拉框、拖拽排序、右键菜单、弹窗                    |
-|                 | `render-*.js`                                                                   | 五个分区与设置页的渲染，`apply()` 是总入口            |
-|                 | `stats.js` / `integrity.js` / `import.js`                                       | 统计抽屉、完整性报告、导入与批量向导                    |
-|                 | `actions-*.js`                                                                  | 用户动作：编辑、删除、换源、批量、试听                   |
-|                 | `events-*.js`                                                                   | 四组事件绑定，`main.js` 里的 `bindEvents()` 汇总 |
-| `ui/player/js`  | `core.js` / `render.js` / `playback.js` / `picker.js` / `events.js` / `main.js` | 基础设施、渲染、播放执行、选歌弹窗、事件、启动               |
+| 目录            | 文件                                                                            | 职责                                                   |
+|-----------------|---------------------------------------------------------------------------------|--------------------------------------------------------|
+| `ui/manager/js` | `core.js`                                                                       | 全局状态、DOM 选择器、JS 桥、文案、格式化、主题、Toast |
+|                 | `navigation.js`                                                                 | 分区跳转与「当前选中项」                               |
+|                 | `ui-widgets.js`                                                                 | 自绘下拉框、拖拽排序、右键菜单、弹窗                   |
+|                 | `render-*.js`                                                                   | 五个分区与设置页的渲染，`apply()` 是总入口             |
+|                 | `stats.js` / `integrity.js` / `import.js`                                       | 统计抽屉、完整性报告、导入与批量向导                   |
+|                 | `actions-*.js`                                                                  | 用户动作：编辑、删除、换源、批量、试听                 |
+|                 | `events-*.js`                                                                   | 四组事件绑定，`main.js` 里的 `bindEvents()` 汇总       |
+| `ui/player/js`  | `core.js` / `render.js` / `playback.js` / `picker.js` / `events.js` / `main.js` | 基础设施、渲染、播放执行、选歌弹窗、事件、启动         |
 
 ## 2.5 路径、版本与首次运行
 
-| 位置   | 内容                              | 默认                                     |
-|------|---------------------------------|----------------------------------------|
-| 程序目录 | 代码与示例音频                         | 仓库根目录                                  |
-| 数据目录 | 音乐库、歌单、统计、设置、播放器状态、`music/`     | `%PROGRAMDATA%\six-coin\music-player`  |
-| 本地目录 | `logs/`、`locks/`、`data-dir.txt` | `%LOCALAPPDATA%\six-coin\music-player` |
-| 临时目录 | 清洗音频、换源的中间文件                    | `%TEMP%\six-coin\music-player`         |
+| 位置     | 内容                                           | 默认                                   |
+|----------|------------------------------------------------|----------------------------------------|
+| 程序目录 | 代码与示例音频                                 | 仓库根目录                             |
+| 数据目录 | 音乐库、歌单、统计、设置、播放器状态、`music/` | `%PROGRAMDATA%\six-coin\music-player`  |
+| 本地目录 | `logs/`、`locks/`、`data-dir.txt`              | `%LOCALAPPDATA%\six-coin\music-player` |
+| 临时目录 | 清洗音频、换源的中间文件                       | `%TEMP%\six-coin\music-player`         |
 
 - 数据目录可改：设置页写 `data-dir.pending`，**下次启动**把旧目录的内容搬过去再改 `data-dir.txt`；落点恒以项目代号结尾，`paths.normalize_data_dir()` 负责补齐。`paths.resolve_user_path()` 的相对路径以数据目录为基准。
 - 启动时 `paths._reconcile_data_dir()` 只做一件事：有 `data-dir.pending` 就把旧目录的内容搬到那里并改指针；没有标记就什么都不做。
@@ -119,14 +119,14 @@ manager.pyw   player.pyw   simple.py          入口
 
 四份数据 + 一份设置 + 每歌单一份统计，字段级说明见 [configuration.md](configuration.md)。
 
-| 文件                        | 内容            | 谁写                               |
-|---------------------------|---------------|----------------------------------|
-| `<数据目录>/library.json`     | 作者、标签组、歌曲（实体） | manager                          |
-| `<数据目录>/playlists.json`   | 歌单（引用）与默认歌单   | manager                          |
-| `<数据目录>/stats/<uid>.json` | 每个歌单的自适应记录    | manager、player、simple            |
-| `<数据目录>/totals.json`      | 歌曲级总播放次数      | manager、player、simple            |
-| `<数据目录>/settings.json`    | 设置，六个分节       | manager 写全部，player 只写 `player` 节 |
-| `<数据目录>/player.json`      | 窗口尺寸、队列开合     | player                           |
+| 文件                          | 内容                       | 谁写                                    |
+|-------------------------------|----------------------------|-----------------------------------------|
+| `<数据目录>/library.json`     | 作者、标签组、歌曲（实体） | manager                                 |
+| `<数据目录>/playlists.json`   | 歌单（引用）与默认歌单     | manager                                 |
+| `<数据目录>/stats/<uid>.json` | 每个歌单的自适应记录       | manager、player、simple                 |
+| `<数据目录>/totals.json`      | 歌曲级总播放次数           | manager、player、simple                 |
+| `<数据目录>/settings.json`    | 设置，六个分节             | manager 写全部，player 只写 `player` 节 |
+| `<数据目录>/player.json`      | 窗口尺寸、队列开合         | player                                  |
 
 **为什么必须分开存：**
 
@@ -142,27 +142,27 @@ manager.pyw   player.pyw   simple.py          入口
 
 ## 5. 模块职责
 
-| 模块               | 只做                                  | 不做             |
-|------------------|-------------------------------------|----------------|
-| `paths`          | 由 `__file__` 推导绝对路径、解析配置里的相对路径      | 不判断文件是否存在、不建目录 |
-| `settings`       | 读盘、夹取、合并、原子写                        | 不缓存界面状态        |
-| `keymap`         | 认快捷键写法、给默认值、控制台字节映射                 | 不读设置、不响应按键     |
-| `models`         | 结构、归一化、校验、`to_dict` 只输出约定键          | 不读写文件          |
-| `i18n`           | 扫目录、查表、填占位符                         | 不关心调用者是谁       |
-| `library`        | 实体读写与查询、引用统计                        | 不解析歌单、不判约束是否阻断 |
-| `playlists`      | 歌单读写、条件求值、环检测                       | 不写统计、不碰界面      |
-| `adaptation`     | 概率公式、记录串的追加与截断                      | 不读文件           |
-| `stats`          | 一歌单一文件，锁内读改写                        | 不算概率           |
-| `totals`         | 全库一份的总播放次数，锁内读改写                    | 不算概率、不按歌单分     |
-| `importer`       | 准备（清洗、MD5、时长）与提交（落盘、写库）两段           | 不弹窗、不报进度       |
-| `source`         | 换源与删除的多文件事务，失败回滚                    | 不判断该不该做        |
-| `integrity`      | 检查与按类别修复；深检额外重算 MD5、用 ffprobe 查码率虚标 | 不做二次确认         |
-| `queue`          | 一轮怎么排（洗牌、接缝、按名排序）                   | 不知道「播到哪」       |
-| `player_session` | 当前歌单、轮次、索引、模式、pin、命令                | 不读文件、不碰文案与界面   |
-| `ui/*/api.py`    | 快照组装、调用翻译、写盘                        | 不实现队列规则、不做业务校验 |
-| `ui/*/app.py`    | 建窗口、算尺寸、主题落地、关闭保存                   | 不碰业务           |
-| `js/render-*`    | 把快照画成 DOM                           | 不决定播哪首、不改业务数据  |
-| `js/playback`    | 执行 `command`、统计真实播放秒数               | 不决定播哪首         |
+| 模块             | 只做                                                      | 不做                         |
+|------------------|-----------------------------------------------------------|------------------------------|
+| `paths`          | 由 `__file__` 推导绝对路径、解析配置里的相对路径          | 不判断文件是否存在、不建目录 |
+| `settings`       | 读盘、夹取、合并、原子写                                  | 不缓存界面状态               |
+| `keymap`         | 认快捷键写法、给默认值、控制台字节映射                    | 不读设置、不响应按键         |
+| `models`         | 结构、归一化、校验、`to_dict` 只输出约定键                | 不读写文件                   |
+| `i18n`           | 扫目录、查表、填占位符                                    | 不关心调用者是谁             |
+| `library`        | 实体读写与查询、引用统计                                  | 不解析歌单、不判约束是否阻断 |
+| `playlists`      | 歌单读写、条件求值、环检测                                | 不写统计、不碰界面           |
+| `adaptation`     | 概率公式、记录串的追加与截断                              | 不读文件                     |
+| `stats`          | 一歌单一文件，锁内读改写                                  | 不算概率                     |
+| `totals`         | 全库一份的总播放次数，锁内读改写                          | 不算概率、不按歌单分         |
+| `importer`       | 准备（清洗、MD5、时长）与提交（落盘、写库）两段           | 不弹窗、不报进度             |
+| `source`         | 换源与删除的多文件事务，失败回滚                          | 不判断该不该做               |
+| `integrity`      | 检查与按类别修复；深检额外重算 MD5、用 ffprobe 查码率虚标 | 不做二次确认                 |
+| `queue`          | 一轮怎么排（洗牌、接缝、按名排序）                        | 不知道「播到哪」             |
+| `player_session` | 当前歌单、轮次、索引、模式、pin、命令                     | 不读文件、不碰文案与界面     |
+| `ui/*/api.py`    | 快照组装、调用翻译、写盘                                  | 不实现队列规则、不做业务校验 |
+| `ui/*/app.py`    | 建窗口、算尺寸、主题落地、关闭保存                        | 不碰业务                     |
+| `js/render-*`    | 把快照画成 DOM                                            | 不决定播哪首、不改业务数据   |
+| `js/playback`    | 执行 `command`、统计真实播放秒数                          | 不决定播哪首                 |
 
 ## 6. 关键流程
 
@@ -266,20 +266,20 @@ next / ended / failed
 }
 ```
 
-| 类别     | 方法                                                                                                                                                                                                                                    | 返回                                                            |
-|--------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------|
-| 读取     | `get_strings` / `get_state` / `get_playlist_songs` / `get_playlist_stats` / `get_music_stats`                                                                                                                                         | 数据                                                            |
-| 导航     | `select_section` / `select_item` / `clear_selection`                                                                                                                                                                                  | 快照                                                            |
-| 歌曲     | `update_music_name` / `set_music_authors` / `toggle_music_tag` / `add_alias` / `remove_alias` / `move_alias`                                                                                                                          | `{"ok"}` 或快照                                                  |
-| 批量     | `batch_add_tags` / `batch_add_to_playlist` / `delete_musics`                                                                                                                                                                          | 快照                                                            |
-| 歌单     | `create_playlist` / `update_playlist_name` / `set_playlist_entries` / `add_playlist_songs` / `remove_playlist_song` / `add_filter` / `update_filter` / `reorder_filters` / `remove_filter` / `delete_playlist` / `reorder_playlists`  | 快照                                                            |
-| 自适应    | `update_adaptation` / `reset_stats`                                                                                                                                                                                                   | 快照                                                            |
-| 标签作者   | `create_tag_group` / `update_tag_group` / `add_tag` / `rename_tag` / `remove_tag` / `reorder_tags` / `reorder_tag_groups` / `delete_tag_group` / `create_author` / `update_author` / `delete_author` / `delete_empty_authors`         | 快照                                                            |
-| 设置     | `update_settings` / `set_shortcut` / `set_theme` / `set_language` / `clear_all_stats` / `refresh_status` / `browse_folder`                                                                                                             | 快照 / 值                                                        |
-| 系统     | `browse_import` / `browse_audio` / `open_data_dir` / `open_log_dir` / `run_integrity` / `start_integrity` / `fix_issues` / `launch_player` / `launch_simple`                                                                          | 值或快照                                                          |
+| 类别     | 方法                                                                                                                                                                                                                                  | 返回                                                          |
+|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------|
+| 读取     | `get_strings` / `get_state` / `get_playlist_songs` / `get_playlist_stats` / `get_music_stats`                                                                                                                                         | 数据                                                          |
+| 导航     | `select_section` / `select_item` / `clear_selection`                                                                                                                                                                                  | 快照                                                          |
+| 歌曲     | `update_music_name` / `set_music_authors` / `toggle_music_tag` / `add_alias` / `remove_alias` / `move_alias`                                                                                                                          | `{"ok"}` 或快照                                               |
+| 批量     | `batch_add_tags` / `batch_add_to_playlist` / `delete_musics`                                                                                                                                                                          | 快照                                                          |
+| 歌单     | `create_playlist` / `update_playlist_name` / `set_playlist_entries` / `add_playlist_songs` / `remove_playlist_song` / `add_filter` / `update_filter` / `reorder_filters` / `remove_filter` / `delete_playlist` / `reorder_playlists`  | 快照                                                          |
+| 自适应   | `update_adaptation` / `reset_stats`                                                                                                                                                                                                   | 快照                                                          |
+| 标签作者 | `create_tag_group` / `update_tag_group` / `add_tag` / `rename_tag` / `remove_tag` / `reorder_tags` / `reorder_tag_groups` / `delete_tag_group` / `create_author` / `update_author` / `delete_author` / `delete_empty_authors`         | 快照                                                          |
+| 设置     | `update_settings` / `set_shortcut` / `set_theme` / `set_language` / `clear_all_stats` / `refresh_status` / `browse_folder`                                                                                                            | 快照 / 值                                                     |
+| 系统     | `browse_import` / `browse_audio` / `open_data_dir` / `open_log_dir` / `run_integrity` / `start_integrity` / `fix_issues` / `launch_player` / `launch_simple`                                                                          | 值或快照                                                      |
 | 试听     | `audition_url`                                                                                                                                                                                                                        | `{ok, url, title, duration_ms}`                               |
 | 任务     | `start_import` / `start_replace_source` / `poll_task` / `cancel_task`                                                                                                                                                                 | `{task_id}` / `{state, done, total, current, errors, result}` |
-| player | `select_playlist` / `next_track` / `prev_track` / `jump_to` / `track_ended` / `track_failed` / `set_mode` / `pick_loop_song` / `set_playing` / `report_position` / `set_volume` / `set_queue_visible` / `list_songs` / `open_manager` | 快照或 `{"ok"}`                                                  |
+| player   | `select_playlist` / `next_track` / `prev_track` / `jump_to` / `track_ended` / `track_failed` / `set_mode` / `pick_loop_song` / `set_playing` / `report_position` / `set_volume` / `set_queue_visible` / `list_songs` / `open_manager` | 快照或 `{"ok"}`                                               |
 
 规则：
 
@@ -291,13 +291,13 @@ next / ended / failed
 
 ## 8. 线程模型
 
-| 线程          | 归属                              | 做什么                   | 禁止                             |
-|-------------|---------------------------------|-----------------------|--------------------------------|
-| UI 线程       | pywebview                       | 窗口、`closing`、尺寸读写     | 阻塞、在 `closing` 里 `evaluate_js` |
-| `js_api` 线程 | pywebview，每次调用一个                | 读写 JSON、算队列、组装快照（毫秒级） | 长任务、`sleep`、等网络                |
-| 任务线程        | `threading.Thread(daemon=True)` | 导入、换源、深检              | 直接调 `evaluate_js`、长时间持锁        |
-| 媒体服务        | `ThreadingHTTPServer`           | Range 响应              | 碰业务数据                          |
-| 音频解码        | WebView2 渲染进程                   | 解码与播放                 | 与 Python 共享状态                  |
+| 线程          | 归属                            | 做什么                                | 禁止                                |
+|---------------|---------------------------------|---------------------------------------|-------------------------------------|
+| UI 线程       | pywebview                       | 窗口、`closing`、尺寸读写             | 阻塞、在 `closing` 里 `evaluate_js` |
+| `js_api` 线程 | pywebview，每次调用一个         | 读写 JSON、算队列、组装快照（毫秒级） | 长任务、`sleep`、等网络             |
+| 任务线程      | `threading.Thread(daemon=True)` | 导入、换源、深检                      | 直接调 `evaluate_js`、长时间持锁    |
+| 媒体服务      | `ThreadingHTTPServer`           | Range 响应                            | 碰业务数据                          |
+| 音频解码      | WebView2 渲染进程               | 解码与播放                            | 与 Python 共享状态                  |
 
 规则：
 
@@ -309,15 +309,15 @@ next / ended / failed
 
 ## 9. 错误处理
 
-| 场景                                     | 策略                                                                                          |
-|----------------------------------------|---------------------------------------------------------------------------------------------|
-| `library.json` / `playlists.json` 结构损坏 | `ConfigError` → 记日志 → 弹窗给日志路径 → 退出，不静默重建                                                    |
-| `settings.json` 缺字段、越界、分节被写成标量         | 读时夹取、整节回退默认值，记 warning，继续运行                                                                 |
-| 单条记录字段非法                               | 跳过该条，记 warning，其余照常                                                                         |
-| 导入单个文件失败                               | 记入批次错误清单，继续处理下一个                                                                            |
-| 播放失败 / 文件缺失                            | 跳过 + 队列标灰 + 一行提示，不中断整个队列                                                                    |
-| 写盘失败                                   | Toast + 日志，界面保持原值，不假装成功                                                                     |
-| 未捕获异常                                  | `sys.excepthook` 记录 → `logger.complete()` → 原生 `MessageBoxW` → `os._exit(1)`；弹窗文案固定中文，不查语言包 |
+| 场景                                         | 策略                                                                                                           |
+|----------------------------------------------|----------------------------------------------------------------------------------------------------------------|
+| `library.json` / `playlists.json` 结构损坏   | `ConfigError` → 记日志 → 弹窗给日志路径 → 退出，不静默重建                                                     |
+| `settings.json` 缺字段、越界、分节被写成标量 | 读时夹取、整节回退默认值，记 warning，继续运行                                                                 |
+| 单条记录字段非法                             | 跳过该条，记 warning，其余照常                                                                                 |
+| 导入单个文件失败                             | 记入批次错误清单，继续处理下一个                                                                               |
+| 播放失败 / 文件缺失                          | 跳过 + 队列标灰 + 一行提示，不中断整个队列                                                                     |
+| 写盘失败                                     | Toast + 日志，界面保持原值，不假装成功                                                                         |
+| 未捕获异常                                   | `sys.excepthook` 记录 → `logger.complete()` → 原生 `MessageBoxW` → `os._exit(1)`；弹窗文案固定中文，不查语言包 |
 
 原则：**能降级的降级，不能降级的必须留下可读的原因。任何静默失败都算缺陷。**
 
@@ -397,15 +397,15 @@ uv run ruff format --check .
 
 ## 13. 偏离标准
 
-| 标准条目       | 偏离                                | 原因                                                                           |
-|------------|-----------------------------------|------------------------------------------------------------------------------|
-| 3.1 选型     | 播放器也用 pywebview，不用 Qt             | 与管理器共用同一套 HTML/CSS 与设计令牌，改样式刷新即可见；播放器没有需要原生窗口的场景，引入 Qt 等于多一套界面技术栈和 150 MB 依赖 |
-| 3.2 窗口尺寸   | 播放器固定 960×620、最小 760×480，不按屏幕 85% | 播放器是常驻小窗，铺满屏幕反而难用；尺寸记在 `player.json` 里                                       |
-| 1.6 目录     | 多一个 `<数据目录>/player.json`          | 窗口尺寸与队列开合是 player 私有的界面状态，不该进三端共享的 `settings.json`                           |
-| 3.x 界面     | 轻量音乐播放器没有 `ui/`，界面由 `cli/` 承担     | 命令行没有 DOM，按「输入 / 渲染 / 编排」切分更合适；启动速度是这类工具的核心体验                                |
-| 2.10 本地化   | 异常路径与内部日志固定中文，不进语言包               | 崩溃弹窗、日志、完整性报告只给本机用户看，且崩溃时语言包本身可能读不出来；查表失败会让弹窗里只剩一个键名                         |
-| 3.10 键盘    | 不做硬件媒体键与全局热键                      | 只服务单机听歌，窗口内按键够用，也避免抢别的程序的键                                                   |
-| 3.10.2 快捷键 | 不设 `Ctrl+S`                       | 全自动保存，每次改动都已落盘                                                               |
-| 3.3.4 关闭握手 | 关闭时不等网页回话，直接用内存里最多 2 秒旧的播放位置      | 在 `closing` 里等网页回话会死锁；用 2 秒的陈旧值换掉一次死锁风险                                      |
-| 2.11 线程    | 音频状态由网页持有，Python 只持镜像             | `<audio>` 是唯一真相；Python 轮询会引入延迟与两套状态                                          |
-| 4.1 文档     | 使用手册出中英两份，维护者文档只出中文               | 与标准一致；`docs/old/` 里是重构前的实施计划，只作历史参考，不参与维护                                    |
+| 标准条目       | 偏离                                                  | 原因                                                                                                                               |
+|----------------|-------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
+| 3.1 选型       | 播放器也用 pywebview，不用 Qt                         | 与管理器共用同一套 HTML/CSS 与设计令牌，改样式刷新即可见；播放器没有需要原生窗口的场景，引入 Qt 等于多一套界面技术栈和 150 MB 依赖 |
+| 3.2 窗口尺寸   | 播放器固定 960×620、最小 760×480，不按屏幕 85%        | 播放器是常驻小窗，铺满屏幕反而难用；尺寸记在 `player.json` 里                                                                      |
+| 1.6 目录       | 多一个 `<数据目录>/player.json`                       | 窗口尺寸与队列开合是 player 私有的界面状态，不该进三端共享的 `settings.json`                                                       |
+| 3.x 界面       | 轻量音乐播放器没有 `ui/`，界面由 `cli/` 承担          | 命令行没有 DOM，按「输入 / 渲染 / 编排」切分更合适；启动速度是这类工具的核心体验                                                   |
+| 2.10 本地化    | 异常路径与内部日志固定中文，不进语言包                | 崩溃弹窗、日志、完整性报告只给本机用户看，且崩溃时语言包本身可能读不出来；查表失败会让弹窗里只剩一个键名                           |
+| 3.10 键盘      | 不做硬件媒体键与全局热键                              | 只服务单机听歌，窗口内按键够用，也避免抢别的程序的键                                                                               |
+| 3.10.2 快捷键  | 不设 `Ctrl+S`                                         | 全自动保存，每次改动都已落盘                                                                                                       |
+| 3.3.4 关闭握手 | 关闭时不等网页回话，直接用内存里最多 2 秒旧的播放位置 | 在 `closing` 里等网页回话会死锁；用 2 秒的陈旧值换掉一次死锁风险                                                                   |
+| 2.11 线程      | 音频状态由网页持有，Python 只持镜像                   | `<audio>` 是唯一真相；Python 轮询会引入延迟与两套状态                                                                              |
+| 4.1 文档       | 使用手册出中英两份，维护者文档只出中文                | 与标准一致；`docs/old/` 里是重构前的实施计划，只作历史参考，不参与维护                                                             |
