@@ -119,6 +119,11 @@ function pomodoroRowSub(kind, item) {
   return formatDuration(item.duration_ms) + " · " + formatSize(item.size);
 }
 
+/* 详情里的下拉框用普通尺寸（不是筛选行那种小号），菜单与框同宽。 */
+function pomoSelect(attrs, options, value, disabled) {
+  return selectMarkup(attrs, options, value, "", disabled ? "is-disabled" : "");
+}
+
 /* ---------- 左侧列表 ---------- */
 
 function pomodoroCollapsed(kind) {
@@ -374,27 +379,30 @@ function pomoValueOptions(prefix, values) {
 
 function pomoPhaseCard(item, phase, title, hint) {
   const config = item[phase] || {};
+  const play = !!config.play;
   return (
     '<section class="card"><h3 class="card-title">' + esc(title) + "</h3>" +
-    pomoField(
-      T("pomodoro.item.playlist"),
-      selectMarkup(
-        'data-pomo-phase="' + phase + '" data-pomo-field="playlist"',
-        pomoPlaylistOptions(),
-        config.playlist || ""
-      )
-    ) +
     '<div class="toggle-row"><div class="toggle-body"><div class="toggle-title">' +
     esc(T("pomodoro.item.play")) + '</div><p class="toggle-hint">' + esc(hint) +
     '</p></div><button class="switch" type="button" role="switch" data-pomo-phase="' +
-    phase + '" data-pomo-field="play" aria-checked="' + (config.play ? "true" : "false") +
+    phase + '" data-pomo-field="play" aria-checked="' + (play ? "true" : "false") +
     '"><span class="switch-knob"></span></button></div>' +
     pomoField(
+      T("pomodoro.item.playlist"),
+      pomoSelect(
+        'data-pomo-phase="' + phase + '" data-pomo-field="playlist"',
+        pomoPlaylistOptions(),
+        config.playlist || "",
+        !play
+      )
+    ) +
+    pomoField(
       T("pomodoro.item.order"),
-      selectMarkup(
+      pomoSelect(
         'data-pomo-phase="' + phase + '" data-pomo-field="order"',
         pomoValueOptions("pomodoro.order", pomodoroOptions().orders || []),
-        config.order || "shuffle"
+        config.order || "shuffle",
+        !play
       )
     ) +
     "</section>"
@@ -432,7 +440,7 @@ function pomodoroItemMarkup(item) {
     '<section class="card"><h3 class="card-title">' + esc(T("pomodoro.item.timing")) + "</h3>" +
     pomoField(
       T("pomodoro.item.duration_mode"),
-      selectMarkup(
+      pomoSelect(
         'data-pomo-field="duration_mode"',
         modeOptions,
         item.duration_mode || ""
@@ -444,7 +452,7 @@ function pomodoroItemMarkup(item) {
     "</h3>" +
     pomoField(
       T("pomodoro.item.background"),
-      selectMarkup(
+      pomoSelect(
         'data-pomo-field="background"',
         backgroundOptions,
         item.background || ""
@@ -452,7 +460,7 @@ function pomodoroItemMarkup(item) {
     ) +
     pomoField(
       T("pomodoro.item.background_mode"),
-      selectMarkup(
+      pomoSelect(
         'data-pomo-field="background_mode"',
         pomoValueOptions("pomodoro.bg_mode", pomodoroOptions().background_modes || []),
         item.background_mode || "cover"
@@ -471,11 +479,11 @@ function pomodoroItemMarkup(item) {
     '<section class="card"><h3 class="card-title">' + esc(T("pomodoro.item.sound")) + "</h3>" +
     pomoField(
       T("pomodoro.item.ring"),
-      selectMarkup('data-pomo-field="ring"', pomoRingOptions(), item.ring || "")
+      pomoSelect('data-pomo-field="ring"', pomoRingOptions(), item.ring || "")
     ) +
     pomoField(
       T("pomodoro.item.environment"),
-      selectMarkup(
+      pomoSelect(
         'data-pomo-field="environment"',
         pomoEnvironmentOptions(),
         item.environment || ""
@@ -493,7 +501,7 @@ function pomodoroItemMarkup(item) {
     "</h3>" +
     pomoField(
       T("pomodoro.item.font"),
-      selectMarkup(
+      pomoSelect(
         'data-pomo-field="font"',
         pomoValueOptions("pomodoro.font", pomodoroOptions().fonts || []),
         item.font || "system"

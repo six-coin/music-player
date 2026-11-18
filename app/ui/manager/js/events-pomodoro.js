@@ -6,7 +6,7 @@ function bindPomodoroEvents() {
 
   nav.addEventListener("click", function (event) {
     if (event.target.closest("[data-pomodoro-overview]")) {
-      call("select_pomodoro_overview").then(apply);
+      selectPomodoroOverview();
       return;
     }
     const toggle = event.target.closest("[data-pomo-toggle]");
@@ -26,8 +26,20 @@ function bindPomodoroEvents() {
     }
     const row = event.target.closest("[data-pomo-row]");
     if (row) {
-      call("select_item", row.dataset.pomoKind, row.dataset.pomoUid).then(apply);
+      selectPomodoroItem(row.dataset.pomoKind, row.dataset.pomoUid);
     }
+  });
+
+  nav.addEventListener("contextmenu", function (event) {
+    const row = event.target.closest("[data-pomo-row]");
+    if (!row) return;
+    event.preventDefault();
+    const kind = row.dataset.pomoKind;
+    const uid = row.dataset.pomoUid;
+    if (state.active !== uid || state.activeKind !== kind) {
+      selectPomodoroItem(kind, uid);
+    }
+    openPomodoroMenu(kind, uid, { x: event.clientX, y: event.clientY });
   });
 
   nav.addEventListener("keydown", function (event) {
@@ -35,7 +47,7 @@ function bindPomodoroEvents() {
     const row = event.target.closest("[data-pomo-row]");
     if (!row) return;
     event.preventDefault();
-    call("select_item", row.dataset.pomoKind, row.dataset.pomoUid).then(apply);
+    selectPomodoroItem(row.dataset.pomoKind, row.dataset.pomoUid);
   });
 
   detail.addEventListener("click", function (event) {
@@ -46,7 +58,7 @@ function bindPomodoroEvents() {
     }
     const goto = event.target.closest("[data-pomo-goto]");
     if (goto) {
-      call("select_item", "pomodoro", goto.dataset.pomoGoto).then(apply);
+      selectPomodoroItem("pomodoro", goto.dataset.pomoGoto);
       return;
     }
     if (event.target.closest("[data-pomo-add-segment]")) {
@@ -70,12 +82,17 @@ function bindPomodoroEvents() {
     }
   });
 
+  detail.addEventListener("selectchange", function (event) {
+    const select = event.target.closest("[data-pomo-field]");
+    if (!select) return;
+    pomodoroPatchField(
+      select.dataset.pomoPhase,
+      select.dataset.pomoField,
+      event.detail.value
+    );
+  });
+
   detail.addEventListener("change", function (event) {
-    const select = event.target.closest("select[data-pomo-field]");
-    if (select) {
-      pomodoroPatchField(select.dataset.pomoPhase, select.dataset.pomoField, select.value);
-      return;
-    }
     const segment = event.target.closest("[data-pomo-segment-minutes]");
     if (segment) {
       pomodoroUpdateSegment(
@@ -148,8 +165,23 @@ function bindPomodoroEvents() {
   }
 }
 
-function pomodoroPatchField(phase, field, value) {
-  if (!state.active || state.activeKind !== "pomodoro") return;
+async function selectPomodoroOverview() {
+  const same = state.activeKind === "pomodoro_overview";
+  const data = await call("select_pomodoro_overview");
+  if (!data) return;
+  apply(data);
+  if (!same) animateDetail("pomodoro-detail");
+}
+
+async function selectPomodoroItem(kind, uid) {
+  const same = state.activeKind === kind && state.active === uid;
+  const data = await call("select_item", kind, uid);
+  if (!data) return;
+  apply(data);
+  if (!same) animateDetail("pomodoro-detail");
+}
+
+function pomodoroPatchField(phase, field, value) {  if (!state.active || state.activeKind !== "pomodoro") return;
   const patch = {};
   if (phase) {
     patch[phase] = {};

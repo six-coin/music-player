@@ -35,6 +35,11 @@ AUDIO_EXTS = ("mp3", "ogg")
 
 VOLUME_DEFAULT = {"music": 0.5, "environment": 0.35}
 
+#: 左下角计时器的整体缩放。默认 1.5，比最初那版大 50%。
+HUD_SCALE_DEFAULT = 1.5
+HUD_SCALE_MIN = 0.5
+HUD_SCALE_MAX = 3.0
+
 
 def _now() -> int:
     return int(time.time())
@@ -47,6 +52,15 @@ def _ratio(value: object, fallback: float) -> float:
     if number != number:  # NaN
         return fallback
     return min(1.0, max(0.0, number))
+
+
+def _scale(value: object, fallback: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return fallback
+    number = float(value)
+    if number != number:  # NaN
+        return fallback
+    return min(HUD_SCALE_MAX, max(HUD_SCALE_MIN, number))
 
 
 def _uid_or_none(value: object, label: str) -> str | None:

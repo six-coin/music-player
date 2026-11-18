@@ -3291,3 +3291,23 @@ input[type="checkbox"]:disabled {
 .pomodoro-nav::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-hover);
 }
+
+/* 详情里的下拉框与输入框同宽；小号下拉只留给筛选行。 */
+.field-body > .select {
+  width: 100%;
+}
+
+.select.is-disabled {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* 「什么都不做」与「循环交叉淡化」之间留一口气。 */
+#pomo-trim-options {
+  margin-top: 14px;
+}
+
+#pomo-trim-options > .detail-hint {
+  margin-bottom: 10px;
+}

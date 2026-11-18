@@ -160,6 +160,7 @@ def test_payload_roundtrip(tmp_path):
     item = first.create_item("晨间")
     first.add_time(item.uid, focus_ms=1234, rest_ms=56, completed=True)
     first.set_volumes(0.7, 0.2)
+    first.set_hud_scale(2.1)
 
     second = PomodoroStore(tmp_path / "pomodoro.json")
     assert second.load() == []
@@ -168,6 +169,18 @@ def test_payload_roundtrip(tmp_path):
     assert second.total.rest_ms == 56
     assert second.music_volume == 0.7
     assert second.environment_volume == 0.2
+    assert second.hud_scale == 2.1
+
+
+def test_hud_scale_default_and_clamp(store):
+    assert store.hud_scale == 1.5
+
+    store.set_hud_scale(9)
+    assert store.hud_scale == 3.0
+    store.set_hud_scale(0)
+    assert store.hud_scale == 0.5
+    store.set_hud_scale(1.8)
+    assert store.hud_scale == 1.8
 
 
 def test_broken_file_is_backed_up(tmp_path):

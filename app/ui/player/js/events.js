@@ -3,6 +3,7 @@
 
 function bindEvents() {
   bindPomodoroStageEvents();
+  pomoInitSelects();
   qs("#play").addEventListener("click", togglePlay);
   qs("#prev").addEventListener("click", function () {
     callTrack("prev_track");
@@ -45,9 +46,24 @@ function bindEvents() {
     }
   });
 
+  qs("#pomodoro-detail").addEventListener("selectchange", function (event) {
+    const select = event.target.closest("[data-pomo-override]");
+    if (select) setPomodoroOverride(select, event.detail.value);
+  });
+
+  qs("#pomodoro-detail").addEventListener("input", function (event) {
+    if (event.target.id !== "pomo-hud-scale") return;
+    const label = qs("#pomo-hud-scale-value");
+    if (label) label.textContent = event.target.value + "%";
+  });
+
   qs("#pomodoro-detail").addEventListener("change", function (event) {
-    const select = event.target.closest("select[data-pomo-override]");
-    if (select) setPomodoroOverride(select, select.value);
+    if (event.target.id !== "pomo-hud-scale") return;
+    const value = Number(event.target.value) / 100;
+    if (state.data && state.data.pomodoros && state.data.pomodoros.preferences) {
+      state.data.pomodoros.preferences.hud_scale = value;
+    }
+    call("pomodoro_set_hud_scale", value);
   });
 
   qs("#queue-list").addEventListener("click", function (event) {
@@ -189,6 +205,8 @@ function bindEvents() {
     }
     const tag = (event.target && event.target.tagName ? event.target.tagName : "").toLowerCase();
     if (tag === "input" || tag === "textarea") return;
+    // 下拉框自己处理方向键 / 回车 / Esc，别让全局快捷键抢走。
+    if (event.target.closest(".pomo-select")) return;
     if (runShortcut(event)) event.preventDefault();
   });
 }

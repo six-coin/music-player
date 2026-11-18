@@ -1,7 +1,7 @@
 /* 通用控件：自绘下拉框、右键菜单、弹窗。 */
 /* ---------- 自绘下拉框 ---------- */
 
-function selectMarkup(attrs, options, value, size) {
+function selectMarkup(attrs, options, value, size, extraClass) {
   const current = options.find(function (item) {
     return item.value === value;
   });
@@ -14,8 +14,10 @@ function selectMarkup(attrs, options, value, size) {
       );
     })
     .join("");
+  const classes =
+    "select " + (size === undefined ? "small" : size) + (extraClass ? " " + extraClass : "");
   return (
-    '<div class="select ' + (size === undefined ? "small" : size) + '" ' + attrs +
+    '<div class="' + classes + '" ' + attrs +
     ' role="combobox" tabindex="0" aria-expanded="false" aria-haspopup="listbox" data-value="' +
     esc(value) + '"><span class="select-value">' + esc(current ? current.label : "") +
     '</span><svg class="select-arrow" viewBox="0 0 12 12" aria-hidden="true">' +
@@ -76,6 +78,7 @@ function initSelects() {
     }
     const select = event.target.closest(".select");
     if (select) {
+      if (select.classList.contains("is-disabled")) return;
       toggleSelect(select);
       return;
     }
@@ -85,6 +88,7 @@ function initSelects() {
   document.addEventListener("keydown", function (event) {
     const select = event.target.closest(".select");
     if (!select) return;
+    if (select.classList.contains("is-disabled")) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       event.stopPropagation();

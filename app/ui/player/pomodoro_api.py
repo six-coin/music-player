@@ -129,6 +129,7 @@ class PomodoroApiMixin:
             "preferences": {
                 "music_volume": self.pomodoro.music_volume,
                 "environment_volume": self.pomodoro.environment_volume,
+                "hud_scale": self.pomodoro.hud_scale,
             },
         }
 
@@ -354,6 +355,14 @@ class PomodoroApiMixin:
             return {"ok": False}
         return {"ok": True}
 
+    def pomodoro_set_hud_scale(self, value: object = 1.5) -> dict[str, Any]:
+        try:
+            self.pomodoro.set_hud_scale(float(value) if isinstance(value, (int, float)) else 1.5)
+        except Exception:
+            logger.exception("保存番茄钟计时器比例失败")
+            return {"ok": False}
+        return {"ok": True}
+
     def pomodoro_finish(self, uid: object = "") -> dict[str, Any]:
         with self._lock:
             self._pomo_active = None
@@ -431,6 +440,7 @@ class PomodoroApiMixin:
             "font": font,
             "music_volume": self.pomodoro.music_volume,
             "environment_volume": self.pomodoro.environment_volume,
+            "hud_scale": self.pomodoro.hud_scale,
             "prep_seconds": PREP_SECONDS,
         }
 

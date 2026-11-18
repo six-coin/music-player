@@ -1177,20 +1177,118 @@ input:focus-visible {
 }
 
 .pomo-select {
+  position: relative;
+  display: flex;
+  align-items: center;
   width: 100%;
   height: 34px;
-  padding: 0 10px;
+  padding: 0 32px 0 11px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-sunken);
   color: var(--text);
-  font-family: inherit;
   font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    border-color 0.14s var(--ease),
+    box-shadow 0.14s var(--ease);
 }
 
-.pomo-select:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 1px;
+.pomo-select:hover {
+  border-color: var(--border-strong);
+}
+
+.pomo-select:focus-visible,
+.pomo-select.open {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.pomo-select.is-disabled {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+
+.pomo-select-value {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pomo-select-arrow {
+  position: absolute;
+  right: 11px;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.15s var(--ease);
+}
+
+.pomo-select.open .pomo-select-arrow {
+  transform: rotate(180deg);
+}
+
+.pomo-select-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  display: none;
+  max-height: 240px;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 12px 28px var(--shadow);
+}
+
+.pomo-select.open .pomo-select-menu {
+  display: block;
+  animation: pomo-menu-in 0.14s var(--ease);
+}
+
+.pomo-option {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pomo-option:hover {
+  background: var(--surface-hover);
+}
+
+.pomo-option.is-active {
+  background: var(--blue-soft);
+  color: var(--blue-text);
+}
+
+@keyframes pomo-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .pomo-switch {
@@ -1336,6 +1434,8 @@ body.pomo-mode {
   gap: 2px;
   text-shadow: 0 2px 22px rgba(0, 0, 0, 0.5);
   pointer-events: none;
+  transform: scale(var(--pomo-hud-scale, 1.5));
+  transform-origin: bottom left;
 }
 
 .pomo-hud-phase {
@@ -1616,4 +1716,40 @@ body.pomo-mode {
   .pomo-hud-time {
     font-size: 44px;
   }
+}
+
+/* 计时器比例：滑杆与百分比。 */
+.pomo-scale {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pomo-scale .slider {
+  flex: 1;
+}
+
+.pomo-scale-value {
+  flex: none;
+  width: 42px;
+  color: var(--muted);
+  font-size: 11.5px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 歌单卡片与番茄钟详情切换时的入场。 */
+@keyframes pomo-view-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.pomo-view-in {
+  animation: pomo-view-in 0.24s var(--ease);
 }

@@ -230,6 +230,16 @@ def test_player_applies_the_phase_order_with_the_same_playlist(player):
     assert player._pomo_session.mode == "list_loop"
 
 
+def test_player_hud_scale_is_a_global_preference(player):
+    item = player.pomodoro.create_item("晨间")
+
+    assert player.pomodoro_set_hud_scale(1.8)["ok"] is True
+    plan = player.pomodoro_start(item.uid, {})["plan"]
+
+    assert plan["hud_scale"] == 1.8
+    assert player.get_state()["pomodoros"]["preferences"]["hud_scale"] == 1.8
+
+
 def test_player_cannot_start_twice(player):
     item = player.pomodoro.create_item("晨间")
 

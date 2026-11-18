@@ -17,6 +17,10 @@ function pomodoroOptions() {
   return pomodoroData().options || {};
 }
 
+function pomodoroPreferences() {
+  return pomodoroData().preferences || {};
+}
+
 function pomodoroSelectedUid() {
   const selected = pomodoroSelected();
   return selected ? selected.uid : null;
@@ -65,20 +69,110 @@ function pomoPhaseValue(phase, key, fallback) {
   return nested[key] !== undefined ? nested[key] : fallback;
 }
 
-function pomoSelect(attr, options, value) {
+function pomoSelect(attr, options, value, disabled) {
+  const current = options.find(function (option) {
+    return option.value === value;
+  });
+  const menu = options
+    .map(function (option) {
+      return (
+        '<button class="pomo-option' + (option.value === value ? " is-active" : "") +
+        '" type="button" role="option" data-value="' + esc(option.value) + '">' +
+        esc(option.label) + "</button>"
+      );
+    })
+    .join("");
   return (
-    '<select class="pomo-select" ' + attr + ">" +
-    options
-      .map(function (option) {
-        return (
-          '<option value="' + esc(option.value) + '"' +
-          (option.value === value ? " selected" : "") + ">" +
-          esc(option.label) + "</option>"
-        );
-      })
-      .join("") +
-    "</select>"
+    '<div class="pomo-select' + (disabled ? " is-disabled" : "") + '" ' + attr +
+    ' role="combobox" tabindex="0" aria-expanded="false" aria-haspopup="listbox" data-value="' +
+    esc(value) + '"><span class="pomo-select-value">' +
+    esc(current ? current.label : "") +
+    '</span><svg class="pomo-select-arrow" viewBox="0 0 12 12" aria-hidden="true">' +
+    '<path d="M2.5 4.5L6 8l3.5-3.5"/></svg>' +
+    '<div class="pomo-select-menu" role="listbox">' + menu + "</div></div>"
   );
+}
+
+function pomoSetSelectValue(select, value, notify) {
+  select.dataset.value = value;
+  const option = select.querySelector('.pomo-option[data-value="' + value + '"]');
+  const label = select.querySelector(".pomo-select-value");
+  if (label) label.textContent = option ? option.textContent : value;
+  select.querySelectorAll(".pomo-option").forEach(function (node) {
+    node.classList.toggle("is-active", node.dataset.value === value);
+  });
+  if (notify) {
+    select.dispatchEvent(
+      new CustomEvent("selectchange", { bubbles: true, detail: { value: value } })
+    );
+  }
+}
+
+function pomoCloseSelects(except) {
+  qsa(".pomo-select.open").forEach(function (select) {
+    if (select === except) return;
+    select.classList.remove("open");
+    select.setAttribute("aria-expanded", "false");
+  });
+}
+
+function pomoToggleSelect(select) {
+  const open = select.classList.contains("open");
+  pomoCloseSelects(select);
+  select.classList.toggle("open", !open);
+  select.setAttribute("aria-expanded", String(!open));
+}
+
+function pomoStepSelect(select, delta) {
+  const options = qsa(".pomo-option", select);
+  if (!options.length) return;
+  let index = options.findIndex(function (node) {
+    return node.dataset.value === select.dataset.value;
+  });
+  if (index === -1) index = 0;
+  index = Math.min(options.length - 1, Math.max(0, index + delta));
+  pomoSetSelectValue(select, options[index].dataset.value, true);
+}
+
+function pomoInitSelects() {
+  document.addEventListener("click", function (event) {
+    const option = event.target.closest(".pomo-option");
+    if (option) {
+      const select = option.closest(".pomo-select");
+      if (select) {
+        pomoSetSelectValue(select, option.dataset.value, true);
+        pomoCloseSelects();
+      }
+      return;
+    }
+    const select = event.target.closest(".pomo-select");
+    if (select) {
+      if (select.classList.contains("is-disabled")) return;
+      pomoToggleSelect(select);
+      return;
+    }
+    pomoCloseSelects();
+  });
+
+  document.addEventListener("keydown", function (event) {
+    const select = event.target.closest(".pomo-select");
+    if (!select) return;
+    if (select.classList.contains("is-disabled")) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      event.stopPropagation();
+      pomoToggleSelect(select);
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      pomoStepSelect(select, event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      pomoCloseSelects();
+      select.blur();
+    }
+  });
 }
 
 function pomoPlaylistOptions() {
@@ -126,22 +220,24 @@ function pomoSwitch(attr, on, label) {
 
 function pomoPhaseBlock(selected, phase, title) {
   const config = selected[phase] || {};
+  const play = pomoPhaseValue(phase, "play", !!config.play);
   return (
     '<div class="pomo-detail-section"><h3>' + esc(title) + "</h3>" +
+    pomoDetailRow(
+      T("pomodoro.item.play"),
+      pomoSwitch(
+        'data-pomo-phase="' + phase + '" data-pomo-override="play"',
+        play,
+        T("pomodoro.item.play")
+      )
+    ) +
     pomoDetailRow(
       T("pomodoro.item.playlist"),
       pomoSelect(
         'data-pomo-phase="' + phase + '" data-pomo-override="playlist"',
         pomoPlaylistOptions(),
-        pomoPhaseValue(phase, "playlist", config.playlist || "")
-      )
-    ) +
-    pomoDetailRow(
-      T("pomodoro.item.play"),
-      pomoSwitch(
-        'data-pomo-phase="' + phase + '" data-pomo-override="play"',
-        pomoPhaseValue(phase, "play", !!config.play),
-        T("pomodoro.item.play")
+        pomoPhaseValue(phase, "playlist", config.playlist || ""),
+        !play
       )
     ) +
     pomoDetailRow(
@@ -149,10 +245,24 @@ function pomoPhaseBlock(selected, phase, title) {
       pomoSelect(
         'data-pomo-phase="' + phase + '" data-pomo-override="order"',
         pomoValueOptions("pomodoro.order", pomodoroOptions().orders || []),
-        pomoPhaseValue(phase, "order", config.order || "shuffle")
+        pomoPhaseValue(phase, "order", config.order || "shuffle"),
+        !play
       )
     ) +
     "</div>"
+  );
+}
+
+/* 左下角计时器的整体比例。语言文件这一轮不写，标签先固定中文。 */
+function pomoScaleRow() {
+  const scale = Number(pomodoroPreferences().hud_scale) || 1.5;
+  const percent = Math.round(scale * 100);
+  return (
+    '<div class="pomo-detail-row"><span class="pomo-detail-label">计时器大小</span>' +
+    '<div class="pomo-scale"><input class="slider" id="pomo-hud-scale" type="range" ' +
+    'min="80" max="250" step="5" value="' + percent + '">' +
+    '<span class="pomo-scale-value" id="pomo-hud-scale-value">' + percent +
+    "%</span></div></div>"
   );
 }
 
@@ -228,6 +338,7 @@ function pomodoroDetailMarkup(selected) {
         pomoOverrideValue("font", selected.font || "system")
       )
     ) +
+    pomoScaleRow() +
     "</div>" +
     "</div>" +
     '<div class="pomo-detail-stats">' +
@@ -254,6 +365,14 @@ function renderPomodoroDetail() {
   if (uid !== state.pomoDetailUid) {
     state.pomoDetailUid = uid;
     state.pomoOverrides = {};
+  }
+  const view = selected ? "pomodoro" : "music";
+  if (state.pomoView !== view) {
+    state.pomoView = view;
+    const target = selected ? detail : body;
+    target.classList.remove("pomo-view-in");
+    void target.offsetWidth;
+    target.classList.add("pomo-view-in");
   }
   if (!selected) {
     detail.hidden = true;

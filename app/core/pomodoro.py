@@ -27,6 +27,7 @@ from app.core.pomodoro_models import (
     BACKGROUND_KINDS,
     BACKGROUND_MODES,
     FONTS,
+    HUD_SCALE_DEFAULT,
     MODE_MAX_SEGMENTS,
     MODE_MIN_SEGMENTS,
     PHASES,
@@ -47,6 +48,7 @@ from app.core.pomodoro_models import (
     _now,
     _ratio,
     _repair_references,
+    _scale,
     _uid_or_none,
 )
 from app.errors import ConfigError, DataError
@@ -99,6 +101,7 @@ class PomodoroStore:
         self.item_stats: dict[str, TimeStats] = {}
         self.music_volume = VOLUME_DEFAULT["music"]
         self.environment_volume = VOLUME_DEFAULT["environment"]
+        self.hud_scale = HUD_SCALE_DEFAULT
         self.warnings: list[str] = []
         self._signature: tuple[int, int] | None = None
 
@@ -128,6 +131,7 @@ class PomodoroStore:
         total = TimeStats()
         music_volume = VOLUME_DEFAULT["music"]
         environment_volume = VOLUME_DEFAULT["environment"]
+        hud_scale = HUD_SCALE_DEFAULT
         changed = False
 
         def commit() -> list[str]:
@@ -140,6 +144,7 @@ class PomodoroStore:
             self.total = total
             self.music_volume = music_volume
             self.environment_volume = environment_volume
+            self.hud_scale = hud_scale
             return list(warnings)
 
         if not self.path.exists():
@@ -191,6 +196,7 @@ class PomodoroStore:
             environment_volume = _ratio(
                 preferences.get("environment_volume"), VOLUME_DEFAULT["environment"]
             )
+            hud_scale = _scale(preferences.get("hud_scale"), HUD_SCALE_DEFAULT)
 
         commit()
         if changed:
@@ -275,6 +281,7 @@ class PomodoroStore:
             "preferences": {
                 "music_volume": self.music_volume,
                 "environment_volume": self.environment_volume,
+                "hud_scale": self.hud_scale,
             },
         }
 
@@ -288,6 +295,7 @@ class PomodoroStore:
         self.item_stats = other.item_stats
         self.music_volume = other.music_volume
         self.environment_volume = other.environment_volume
+        self.hud_scale = other.hud_scale
         self.warnings = other.warnings
         self._signature = other._signature
 
@@ -682,6 +690,12 @@ class PomodoroStore:
     def _set_volumes(self, music: float, environment: float) -> None:
         self.music_volume = _ratio(music, VOLUME_DEFAULT["music"])
         self.environment_volume = _ratio(environment, VOLUME_DEFAULT["environment"])
+
+    def set_hud_scale(self, value: float) -> None:
+        self._transact(lambda store: store._set_hud_scale(value))
+
+    def _set_hud_scale(self, value: float) -> None:
+        self.hud_scale = _scale(value, HUD_SCALE_DEFAULT)
 
 
 def default_store() -> PomodoroStore:

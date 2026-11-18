@@ -36,6 +36,10 @@ async function savePomodoroName(input) {
     input.dataset.pomoName || input.dataset.pomoModeName || input.dataset.pomoAssetName;
   const row = qs('.pomo-row[data-pomo-uid="' + uid + '"] .pomo-row-name');
   if (row) row.textContent = value;
+  if (state.active === uid) {
+    const title = qs("#pomodoro-detail .detail-title h2");
+    if (title) title.textContent = value;
+  }
 }
 
 async function flushPomodoroNameSave() {
@@ -323,6 +327,8 @@ function openPomodoroSegmentModal(kind, path, info) {
   openModal({
     title: pomodoroAssetLabel(kind),
     wide: true,
+    dismissible: false,
+    backdropDismissible: false,
     body: pomodoroSegmentBody(kind, info),
     actions: [
       { label: T("action.cancel"), onClick: closeModal },

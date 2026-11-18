@@ -125,6 +125,10 @@ function openPomodoroStage() {
   qs("#pomo-bg").innerHTML = "";
   qs("#pomo-bg").className = "pomo-bg";
   applyPomodoroFont(pomo.plan.font);
+  qs("#pomo-stage").style.setProperty(
+    "--pomo-hud-scale",
+    String(Number(pomo.plan.hud_scale) || 1.5)
+  );
   syncPomodoroVolumes();
   pomo.active = true;
 }

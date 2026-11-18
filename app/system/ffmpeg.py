@@ -245,14 +245,16 @@ def convert_image_to_png(source: Path, target: Path) -> None:
 
 
 def _video_encode_args() -> list[str]:
+    # 背景视频是循环播放的底图，不值得为画质用 medium；veryfast + CRF 23
+    # 在 1080p 上通常能把转码时间压到原来的三分之一左右。
     return [
         "-an",
         "-c:v",
         VIDEO_CODEC,
         "-preset",
-        "medium",
+        "veryfast",
         "-crf",
-        "20",
+        "23",
         "-pix_fmt",
         "yuv420p",
         "-movflags",
