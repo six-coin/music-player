@@ -80,3 +80,52 @@ def test_preview_language_ignores_an_unknown_code(tmp_path):
     result = api.preview_language("xx-XX")
 
     assert result["language"] == "en-US"
+
+
+# ---------- 快捷键 ----------
+
+
+def test_snapshot_lists_shortcut_actions(tmp_path):
+    api = ManagerApi(config_dir=tmp_path)
+
+    keys = api.get_state()["keys"]
+
+    assert keys["actions"]["player"][0] == "play_pause"
+    assert keys["defaults"]["simple"]["quit"] == "Ctrl+Q"
+
+
+def test_set_shortcut_normalizes_and_persists(tmp_path):
+    api = ManagerApi(config_dir=tmp_path)
+
+    state = api.set_shortcut("player", "next", "ctrl+n")
+
+    assert state["ok"] is True
+    assert state["shortcut"] == {"group": "player", "action": "next", "spec": "Ctrl+N"}
+    assert state["settings"]["player"]["keys"]["next"] == "Ctrl+N"
+
+
+def test_set_shortcut_rejects_a_duplicate(tmp_path):
+    api = ManagerApi(config_dir=tmp_path)
+
+    result = api.set_shortcut("player", "prev", "Ctrl+C")
+
+    assert result == {"ok": False, "reason": "conflict", "action": "next"}
+
+
+def test_set_shortcut_rejects_what_the_console_cannot_read(tmp_path):
+    api = ManagerApi(config_dir=tmp_path)
+
+    assert api.set_shortcut("simple", "skip", "Alt+S")["reason"] == "unsupported"
+
+
+def test_set_shortcut_rejects_a_modifier_only_combo(tmp_path):
+    api = ManagerApi(config_dir=tmp_path)
+
+    assert api.set_shortcut("player", "next", "Ctrl")["reason"] == "invalid"
+
+
+def test_set_shortcut_ignores_unknown_actions(tmp_path):
+    api = ManagerApi(config_dir=tmp_path)
+
+    assert api.set_shortcut("player", "nope", "Ctrl+J")["ok"] is False
+    assert api.set_shortcut("nope", "next", "Ctrl+J")["ok"] is False

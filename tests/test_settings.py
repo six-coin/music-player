@@ -142,3 +142,52 @@ def test_debug_flag_follows_the_file(tmp_path):
     store.update({"common": {"debug": True}})
 
     assert store.debug_enabled() is True
+
+
+def test_shortcuts_get_defaults(tmp_path):
+    store = SettingsStore(tmp_path / "settings.json")
+    store.load()
+
+    assert store.get("player", "keys", "pick_loop") == "Ctrl+L"
+    assert store.get("simple", "keys", "quit") == "Ctrl+Q"
+    assert store.get("manager", "keys", "search") == "Ctrl+F"
+
+
+def test_shortcuts_are_normalized(tmp_path):
+    """手写的组合先认成规范形式再落盘，三端拿到的写法才一致。"""
+    store = SettingsStore(tmp_path / "settings.json")
+    store.load()
+
+    store.update(
+        {
+            "player": {"keys": {"next": "ctrl+left", "prev": "CTRL + ARROWLEFT"}},
+            "simple": {"keys": {"skip": "  ctrl+n  "}},
+        }
+    )
+
+    assert store.get("player", "keys", "next") == "Ctrl+ArrowLeft"
+    assert store.get("player", "keys", "prev") == "Ctrl+ArrowLeft"
+    assert store.get("simple", "keys", "skip") == "Ctrl+N"
+
+
+def test_unreadable_shortcut_falls_back_to_default(tmp_path):
+    store = SettingsStore(tmp_path / "settings.json")
+    store.load()
+
+    store.update({"player": {"keys": {"next": "Ctrl", "prev": 42, "pick_loop": "NoSuchKey"}}})
+
+    assert store.get("player", "keys", "next") == "Ctrl+C"
+    assert store.get("player", "keys", "prev") == "Ctrl+ArrowLeft"
+    assert store.get("player", "keys", "pick_loop") == "Ctrl+L"
+
+
+def test_unknown_shortcut_action_is_kept(tmp_path):
+    """设置文件的未知键不丢：将来加了动作，旧版本管理器也不该把它抹掉。"""
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"player": {"keys": {"future": "Ctrl+J"}}}), encoding="utf-8")
+
+    store = SettingsStore(path)
+    store.load()
+
+    assert store.get("player", "keys", "future") == "Ctrl+J"
+    assert store.get("player", "keys", "next") == "Ctrl+C"

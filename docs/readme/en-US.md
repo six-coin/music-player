@@ -197,6 +197,8 @@ While "Library manager → Maintenance · Debug mode" is on, neither player deci
 
 Three columns: playlists on the left, the current track in the middle, the queue on the right. All settings live in the manager; the player only reads them.
 
+The middle column is a song card. Its top line shows the current playlist plus a badge saying whether that playlist has adaptation on ("Adaptive on" / "Adaptive off" — hover for an explanation, which also mentions when debug mode is suppressing it). Below it come the title, artist, progress, controls and volume. In a large window the card and its contents stay centred, so the empty space sits outside the card instead of between the lines.
+
 | Behaviour                        | Detail                                                           |
 |----------------------------------|------------------------------------------------------------------|
 | Click a playlist                 | Loads it and starts from the first song                          |
@@ -204,7 +206,7 @@ Three columns: playlists on the left, the current track in the middle, the queue
 | Click a queue row                | Jumps there immediately, from 0; played rows can be clicked too  |
 | Previous / Next                  | Wraps according to the mode; playback never stops                |
 | Three modes                      | Shuffle, list loop, repeat one — all endless                     |
-| Repeat one, other song           | "Pick one to loop" beside the title picks from the whole library |
+| Repeat one, other song           | "Pick one to loop" beside the title picks from the whole library; `Ctrl+L` opens the same dialog in any mode and switches to repeat one once you choose |
 
 The queue always shows the **whole playlist**: played rows dimmed, the current one highlighted, upcoming ones normal. The next round is only generated after the last song ends, and Previous is disabled in a fresh round.
 
@@ -214,16 +216,18 @@ Closing the window quits. Reopening returns to the last playlist and position, p
 
 Double-click and the default playlist starts. No menu, no picker. Everything is configured in the manager; this program only reads.
 
-The console draws a single box: title, artist, playlist with "N / M", play mode, the adaptive switch, and a key hint on the last line.
+The console draws a single box: title, artist, playlist with "N / M", play mode, the adaptive switch, and a key hint on the last line — the hint shows the keys you actually bound.
 
 | Behaviour         | Detail                                                                              |
 |-------------------|-------------------------------------------------------------------------------------|
 | Play modes        | Shuffle or list loop, from the manager's Simple player page                         |
 | Volume            | The program never sets it: VLC uses its own level, adjustable from the system mixer |
-| Skip              | `Ctrl+C` moves to the next song without quitting                                    |
-| Quit              | `Ctrl+Q`; `Alt+F4` and the window's × also exit cleanly                             |
+| Skip              | `Ctrl+C` by default: next song, no quit (configurable)                              |
+| Quit              | `Ctrl+Q` by default (configurable); `Alt+F4` and the window's × always exit cleanly |
 | Adaptive skipping | Uses the default playlist's configuration; the screen only shows on/off             |
 | Language          | Follows the language chosen in the manager; read once at startup                    |
+
+The console can only read a limited set of keys: `Ctrl+` one letter, Space, Enter, Tab, Esc and Backspace. The settings page refuses anything else, and a hand-edited file that asks for more falls back to the factory key with a line in the log.
 
 Exit codes: `0` normal, `1` startup failure (no VLC, empty default playlist…), `2` fatal error while running.
 
@@ -247,6 +251,8 @@ Fixes run per category, or all fixable ones at once. They only delete data that 
 
 They only apply while the window (or console) is in the foreground; no system-wide hooks.
 
+What follows are the **factory bindings**. All three programs can be rebound on their own page in the manager's settings, under a "Shortcuts" card. System defaults such as `Ctrl+C` / `Ctrl+V` and the `Esc` / `Tab` behaviour inside dialogs are not part of that.
+
 Music Player:
 
 | Key                 | Action                               |
@@ -256,6 +262,7 @@ Music Player:
 | `Ctrl+←` / `Ctrl+→` | Previous / next                      |
 | `↑` / `↓`           | Volume ±5%                           |
 | `Ctrl+C`            | Skip the current song (same as Next) |
+| `Ctrl+L`            | Open the loop picker                 |
 | `Esc`               | Hide the queue                       |
 
 Simple Player:
@@ -266,7 +273,9 @@ Simple Player:
 | `Ctrl+Q` | Quit                  |
 | `Alt+F4` | Quit                  |
 
-Manager: `Esc` closes a dialog, drawer or context menu; `Tab` cycles inside dialogs. There is no `Ctrl+S` — every change is saved immediately.
+`Alt+F4` and `F4` stay hard-wired as the escape hatch, even after rebinding skip or quit.
+
+Manager: `Ctrl+F` focuses the search box, `Ctrl+I` imports music, `Ctrl+,` opens settings. `Esc` closes a dialog, drawer or context menu and `Tab` cycles inside dialogs — those belong to the widgets and stay fixed. There is no `Ctrl+S` — every change is saved immediately.
 
 ## 13. Settings
 
@@ -275,14 +284,16 @@ Five pages; changes apply immediately and there is no Save button.
 | Page            | Contents                                                                                                                                                                                                    |
 |-----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | General         | Theme (light / dark only, no follow-system option), language (sorted by language code), adaptive defaults (window, minimum plays, skip base, skip threshold), playback records (record total play counts)   |
-| Library manager | Preview volume, import (default folder, clean audio on import, FFmpeg and ffprobe status), maintenance (integrity check, clean orphan files, clear adaptation stats, open data and log folders, debug mode) |
-| Simple player   | Play mode, default playlist (read-only, with a link)                                                                                                                                                        |
-| Player          | Default volume, play mode, remember position                                                                                                                                                                |
+| Library manager | Preview volume, import (default folder, clean audio on import, FFmpeg and ffprobe status), maintenance (integrity check, clean orphan files, clear adaptation stats, open data and log folders, debug mode), shortcuts |
+| Simple player   | Play mode, default playlist (read-only, with a link), shortcuts                                                                                                                                             |
+| Player          | Default volume, play mode, remember position, shortcuts                                                                                                                                                     |
 | About           | Data folder (an input box with "Change" and "Reset"), user manual, reset all settings, version                                                                                                              |
 
 The skip base is a percentage from 1 to 99: the real probability is base × the song's recent skip rate.
 
-Switching the language takes effect immediately: labels, the window title and the sort dropdown change together. The Music Player and Simple Player read the language at startup, so restart them to follow a change.
+To rebind: click a key cap, it turns into "Press keys…", then press the new combination. Modifiers alone do not count; `Esc` cancels. Two actions on the same page cannot share a key — the toast names the one already holding it. "Reset" on a row restores just that row; "Reset this page" at the bottom of the card restores all of them. The console page only accepts `Ctrl+letter`, Space, Enter, Tab, Esc and Backspace, and explains why anything else is refused.
+
+Switching the language takes effect immediately: labels, the window title and the sort dropdown change together. The Music Player and Simple Player read the language and the shortcuts at startup, so restart them to follow a change.
 
 "Reset all settings" also restores language and appearance; the library, playlists and statistics are untouched. A data folder change appends `music-player` automatically and applies after a restart, moving the old contents (audio included); existing files in the target are never overwritten.
 

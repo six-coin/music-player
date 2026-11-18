@@ -3,8 +3,9 @@
 把「按键」变成「动作」：进入时关掉行输入、回显与已处理输入，于是 ``Ctrl+C``
 不再触发 SIGINT，而是和别的键一样作为一个字节被读到；退出时原样恢复。
 
-绑定表是数据而不是代码——加一个键只需在 ``BINDINGS`` 里加一行、在 ``Action``
-里加一项，主循环不用动。
+绑定表是数据而不是代码——加一个动作只需在 ``Action`` 里加一项、在
+``DEFAULT_SPECS`` 里写一个出厂键，主循环不用动。键的写法与设置文件里的
+一致（``Ctrl+C``），由 ``app.keymap`` 负责认。
 """
 
 from __future__ import annotations
@@ -12,8 +13,10 @@ from __future__ import annotations
 import ctypes
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from enum import Enum
+
+from app import keymap
 
 STD_INPUT_HANDLE = -10
 STD_OUTPUT_HANDLE = -11
@@ -47,28 +50,58 @@ class Action(Enum):
     QUIT = "quit"
 
 
-BINDINGS: dict[bytes, Action] = {
-    b"\x03": Action.SKIP,  # Ctrl+C
-    b"\x11": Action.QUIT,  # Ctrl+Q
-    # 关掉 ENABLE_PROCESSED_INPUT 之后 Alt+F4 不再由窗口处理，而是当按键送进来：
-    # 功能键是两字节（0x00 + 码），控制台给 Alt+F4 的是 0x6B、裸 F4 是 0x3E。
-    # 两个都绑上，免得键盘/控制台版本不同时漏掉。
+#: 出厂绑定。设置里认不出来的组合一律退回这里，退出键永远不会没有。
+DEFAULT_SPECS: dict[Action, str] = {
+    Action.SKIP: "Ctrl+C",
+    Action.QUIT: "Ctrl+Q",
+}
+
+#: 关掉 ENABLE_PROCESSED_INPUT 之后 Alt+F4 不再由窗口处理，而是当按键送进来：
+#: 功能键是两字节（0x00 + 码），控制台给 Alt+F4 的是 0x6B、裸 F4 是 0x3E。
+#: 两个都绑上，免得键盘/控制台版本不同时漏掉。它们是逃逸出口，不参与自定义。
+FIXED_BINDINGS: dict[bytes, Action] = {
     b"\x00\x6b": Action.QUIT,  # Alt+F4
     b"\x00\x3e": Action.QUIT,  # F4
 }
 
+#: 当前的绑定表：规范键 -> 动作。``configure()`` 按设置重建。
+BINDINGS: dict[str, Action] = {}
+
 # 功能键（F1–F12、方向键等）的 getch 前缀：第一个字节是 0x00 或 0xE0。
 _FUNCTION_PREFIXES = (b"\x00", b"\xe0")
+
+
+def configure(specs: Mapping[Action, object] | None = None) -> dict[Action, str]:
+    """按设置重建绑定表，返回实际生效的键。
+
+    认不出来的组合、控制台读不到的组合都退回出厂键；两个动作抢同一个键时，
+    后一个也退回出厂键——没有退出键的控制台程序是不能接受的。
+    """
+    resolved: dict[Action, str] = {}
+    taken: set[str] = set()
+    for action, fallback in DEFAULT_SPECS.items():
+        spec = keymap.normalize((specs or {}).get(action)) or fallback
+        if not keymap.console_supported(spec) or spec in taken:
+            spec = fallback
+        if spec in taken:  # 出厂键之间不会撞，这一步只是兜底
+            spec = ""
+        if spec:
+            taken.add(spec)
+        resolved[action] = spec
+
+    BINDINGS.clear()
+    BINDINGS.update({spec: action for action, spec in resolved.items() if spec})
+    return resolved
 
 
 def decode(chunk: bytes | None) -> Action | None:
     """把一个输入块翻成动作；没绑定就返回 None。"""
     if not chunk:
         return None
-    action = BINDINGS.get(chunk)
+    action = BINDINGS.get(keymap.from_console(chunk) or "")
     if action is not None:
         return action
-    return BINDINGS.get(chunk[:1])
+    return FIXED_BINDINGS.get(chunk)
 
 
 def read_key(timeout_ms: int = 0) -> bytes | None:
@@ -182,3 +215,7 @@ class ConsoleSession:
                 pass
         self._leave()
         return 1
+
+
+# 导入即生效的出厂绑定：没读设置（测试、启动早期的提示）时也能按键。
+configure()

@@ -55,8 +55,33 @@ function renderTrack() {
   qs("#track-authors").textContent = track
     ? track.authors || T("player.unknown_author")
     : "";
-  qs("#pick-loop").hidden = !track || data.mode !== "repeat_one";
+  renderTrackHead(data.playlist);
+  const pickLoop = qs("#pick-loop");
+  pickLoop.hidden = !track || data.mode !== "repeat_one";
+  pickLoop.title = T("player.action.pick_loop_title", {
+    key: prettyKey(playerKeys().pick_loop),
+  });
   qs("#play").disabled = !track;
+}
+
+/* 卡片顶部：这是哪个歌单，以及它有没有开自适应。 */
+function renderTrackHead(playlist) {
+  const head = qs("#track-head");
+  head.hidden = !playlist;
+  if (!playlist) return;
+  qs("#track-playlist").textContent = playlist.title;
+  const badge = qs("#track-adaptation");
+  const on = !!playlist.adaptation;
+  badge.textContent = T(on ? "player.adaptation.on" : "player.adaptation.off");
+  badge.classList.toggle("is-on", on);
+  // 调试状态下自适应既不判定也不记录，徽标只能说明「歌单开着」，得补一句。
+  badge.title = T(
+    on
+      ? playlist.debug
+        ? "player.adaptation.hint_debug"
+        : "player.adaptation.hint_on"
+      : "player.adaptation.hint_off"
+  );
 }
 
 function renderTransport() {

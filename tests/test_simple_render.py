@@ -101,3 +101,11 @@ def test_screen_redraws_only_when_state_changes():
     assert len(stream.writes) == first
     screen.show(make(index=4))
     assert len(stream.writes) == first + 1
+
+
+def test_key_hint_follows_the_binding():
+    """方框底部那行提示写的是实际绑定的键，不是写死的中文。"""
+    text = strip(render.draw(make(skip_key="Ctrl+N", quit_key="Esc")))
+
+    assert "Ctrl+N 跳过" in text
+    assert "Esc 退出" in text

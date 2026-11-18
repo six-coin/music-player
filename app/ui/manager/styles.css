@@ -2520,6 +2520,40 @@ input[type="checkbox"]:disabled {
   width: 190px;
 }
 
+/* 快捷键的按键帽：看着像一个键，点一下进入录制。 */
+.keycap {
+  min-width: 84px;
+  padding: 5px 12px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 12.5px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.keycap:hover {
+  border-color: var(--blue-border);
+  background: var(--blue-soft);
+  color: var(--blue-text);
+}
+
+.keycap.is-recording {
+  animation: keycap-pulse 1s ease-in-out infinite;
+  border-color: var(--blue);
+  background: var(--blue-soft);
+  color: var(--blue-text);
+}
+
+@keyframes keycap-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
 /* 首次运行的语言选择：标题与分段控件之间留 2px，别贴在一起。 */
 .firstrun-label {
   display: block;

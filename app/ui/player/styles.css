@@ -261,12 +261,57 @@ input:focus-visible {
   overflow: hidden;
 }
 
+/* 歌曲卡片：窗口拉大以后，一块安静的白底比飘在空处的几行字更像「正在播放」。 */
 .playing {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   width: 100%;
-  max-width: 520px;
+  max-width: 560px;
   min-width: 0;
+  min-height: min(440px, 100%);
+  padding: 24px 32px 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow:
+    0 22px 48px -34px var(--shadow-strong),
+    0 1px 2px var(--shadow);
+}
+
+/* 卡片顶部：当前歌单与它的自适应状态。没有歌单时整行不出现。 */
+.playing-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-bottom: 18px;
+}
+
+.playing-playlist {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--text-soft);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.adapt-badge {
+  flex: none;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.adapt-badge.is-on {
+  border-color: var(--blue-border);
+  background: var(--blue-soft);
+  color: var(--blue-text);
 }
 
 .title-row {
@@ -521,6 +566,12 @@ input:focus-visible {
   width: 100%;
   max-width: 300px;
   margin-top: 24px;
+}
+
+/* 卡片里音量条与上面的控件保持一段固定距离，多出来的空白由居中分配，
+   不会在中间留出一个大洞。 */
+.playing .volume-row {
+  margin-top: 26px;
 }
 
 .volume-icon {
@@ -925,6 +976,11 @@ input:focus-visible {
 @media (max-width: 840px) {
   .now-body {
     padding: 0 20px 28px;
+  }
+
+  .playing {
+    min-height: min(360px, 100%);
+    padding: 20px 22px 22px;
   }
 
   .progress-row {

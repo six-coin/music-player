@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 
-from app import i18n, paths
+from app import i18n, keymap, paths
 
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
 UI_PAGES = ("manager", "player")
@@ -92,6 +92,10 @@ def test_dynamic_keys_exist():
         keys.append(f"player.empty.{suffix}.body")
     for suffix in ("title", "created", "duration", "author"):
         keys.append(f"songs.sort_{suffix}")
+    # 设置页的快捷键卡片按「程序 · 动作」拼标签，动作表在 app/keymap.py 里。
+    for group, actions in keymap.DEFAULTS.items():
+        for action in actions:
+            keys.append(f"keys.{group}.{action}")
 
     assert not [key for key in keys if key not in table]
 

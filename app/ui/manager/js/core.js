@@ -20,6 +20,8 @@ const state = {
   taskId: null,
   nameTimer: null,
   playlistNameTimer: null,
+  //: 正在录制快捷键的那一行；非空时全局按键只服务录制。
+  recording: null,
 };
 
 function qs(selector, root) {
@@ -174,6 +176,52 @@ function applyTheme(theme) {
   } catch (error) {
     /* 隐私模式下写不了，忽略 */
   }
+}
+/* ---------- 快捷键 ---------- */
+
+/* 写法与 app/keymap.py 一致：Ctrl → Alt → Shift → 主键。设置页录下来的组合
+   原样交给后端，后端用同一个函数认，所以两边不会各说各话。 */
+const KEY_PRETTY = {
+  ArrowLeft: "←",
+  ArrowRight: "→",
+  ArrowUp: "↑",
+  ArrowDown: "↓",
+  Escape: "Esc",
+  Delete: "Del",
+  PageUp: "PgUp",
+  PageDown: "PgDn",
+};
+
+const MODIFIER_KEYS = ["Control", "Shift", "Alt", "Meta"];
+
+function keySpec(event) {
+  const raw = event.key === " " || event.key === "Spacebar" ? "Space" : event.key;
+  if (!raw || MODIFIER_KEYS.indexOf(raw) !== -1) return "";
+  const parts = [];
+  if (event.ctrlKey) parts.push("Ctrl");
+  if (event.altKey) parts.push("Alt");
+  if (event.shiftKey) parts.push("Shift");
+  parts.push(raw.length === 1 && /[a-z]/i.test(raw) ? raw.toUpperCase() : raw);
+  return parts.join("+");
+}
+
+function prettyKey(spec) {
+  return String(spec || "")
+    .split("+")
+    .map(function (part) {
+      return KEY_PRETTY[part] || part;
+    })
+    .join("+");
+}
+
+function matchKey(event, spec) {
+  return !!spec && keySpec(event) === spec;
+}
+
+/* 管理器自己的按键：跟着设置走，缺了就不响应。 */
+function managerKeys() {
+  const section = (state.data && state.data.settings && state.data.settings.manager) || {};
+  return section.keys || {};
 }
 /* ---------- 交互 ---------- */
 

@@ -44,6 +44,23 @@ function bindPanelEvents() {
   const settingsBody = qs("#settings-body");
 
   settingsBody.addEventListener("click", async function (event) {
+    const keycap = event.target.closest("[data-key-group]");
+    if (keycap) {
+      beginKeyCapture(keycap);
+      return;
+    }
+    const resetKey = event.target.closest("[data-key-reset]");
+    if (resetKey) {
+      const parts = resetKey.dataset.keyReset.split(":");
+      const cap = resetKey.parentNode ? resetKey.parentNode.querySelector("[data-key-group]") : null;
+      await saveKey(parts[0], parts[1], keyDefaults(parts[0])[parts[1]], cap);
+      return;
+    }
+    const resetAll = event.target.closest("[data-key-reset-all]");
+    if (resetAll) {
+      await resetKeyGroup(resetAll.dataset.keyResetAll);
+      return;
+    }
     const theme = event.target.closest("[data-theme-value]");
     if (theme) {
       const data = await call("set_theme", theme.dataset.themeValue);
@@ -119,6 +136,34 @@ function bindPanelEvents() {
     if (!select) return;
     await patchSetting(select.dataset.settingSelect, select.dataset.value);
   });
+
+  /* 录制快捷键：捕获阶段拦下，别让 Esc、方向键先被别处的监听器吃掉。
+     只按修饰键不算一个组合，继续等主键。 */
+  document.addEventListener(
+    "keydown",
+    function (event) {
+      if (!state.recording) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        endKeyCapture();
+        return;
+      }
+      const spec = keySpec(event);
+      if (!spec) return;
+      const recording = state.recording;
+      saveKey(recording.group, recording.action, spec, recording.node);
+    },
+    true
+  );
+
+  /* 点到别处就当放弃：录制状态留在身后，下一次随便按个键都会被吞掉。 */
+  document.addEventListener("click", function (event) {
+    if (!state.recording) return;
+    if (event.target.closest("[data-key-group]")) return;
+    endKeyCapture();
+  });
+
   qs("#drawer-close").addEventListener("click", closeDrawer);
 
   qs("#drawer-body").addEventListener("click", async function (event) {

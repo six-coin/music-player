@@ -151,36 +151,51 @@ function bindEvents() {
     }
     const tag = (event.target && event.target.tagName ? event.target.tagName : "").toLowerCase();
     if (tag === "input" || tag === "textarea") return;
-
-    if (event.code === "Space") {
-      event.preventDefault();
-      togglePlay();
-    } else if (event.ctrlKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "c") {
-      event.preventDefault();
-      callTrack("next_track");
-    } else if (event.key === "ArrowLeft" && event.ctrlKey) {
-      event.preventDefault();
-      callTrack("prev_track");
-    } else if (event.key === "ArrowRight" && event.ctrlKey) {
-      event.preventDefault();
-      callTrack("next_track");
-    } else if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      seekBy(-5000);
-    } else if (event.key === "ArrowRight") {
-      event.preventDefault();
-      seekBy(5000);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      stepVolume(5);
-    } else if (event.key === "ArrowDown") {
-      event.preventDefault();
-      stepVolume(-5);
-    } else if (event.key === "Escape") {
-      if (state.data && state.data.queue.visible) {
-        event.preventDefault();
-        call("set_queue_visible", false).then(apply);
-      }
-    }
+    if (runShortcut(event)) event.preventDefault();
   });
+}
+
+/* 快捷键全部来自设置：快照里的 keys 就是当前绑定，认不出来就不响应。
+   顺序即优先级——设置页会拦住重复绑定，手改出来的重复键按这个顺序取第一个。 */
+function runShortcut(event) {
+  const keys = playerKeys();
+  if (matchKey(event, keys.play_pause)) {
+    togglePlay();
+    return true;
+  }
+  if (matchKey(event, keys.next)) {
+    callTrack("next_track");
+    return true;
+  }
+  if (matchKey(event, keys.prev)) {
+    callTrack("prev_track");
+    return true;
+  }
+  if (matchKey(event, keys.seek_back)) {
+    seekBy(-5000);
+    return true;
+  }
+  if (matchKey(event, keys.seek_forward)) {
+    seekBy(5000);
+    return true;
+  }
+  if (matchKey(event, keys.volume_up)) {
+    stepVolume(5);
+    return true;
+  }
+  if (matchKey(event, keys.volume_down)) {
+    stepVolume(-5);
+    return true;
+  }
+  if (matchKey(event, keys.pick_loop)) {
+    // 任何模式下都能挑一首来循环：选完自动切到单曲循环。
+    if (state.data) openPicker();
+    return true;
+  }
+  if (matchKey(event, keys.queue)) {
+    if (!state.data || !state.data.queue.visible) return false;
+    call("set_queue_visible", false).then(apply);
+    return true;
+  }
+  return false;
 }

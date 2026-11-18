@@ -422,3 +422,55 @@ def test_master_switch_off_stops_counting(tmp_path):
         player.close()
 
     assert total_of(tmp_path, "a") == 0
+
+
+# ---------- 卡片上的歌单与快捷键 ----------
+
+
+def test_snapshot_carries_the_shortcuts(api):
+    keys = api.get_state()["keys"]
+
+    assert keys["play_pause"] == "Space"
+    assert keys["next"] == "Ctrl+C"
+    assert keys["prev"] == "Ctrl+ArrowLeft"
+    assert keys["pick_loop"] == "Ctrl+L"
+
+
+def test_shortcuts_follow_the_settings_file(tmp_path):
+    write_config(tmp_path, patch={"player": {"keys": {"pick_loop": "ctrl+p"}}})
+    player = PlayerApi(config_dir=tmp_path)
+    try:
+        assert player.get_state()["keys"]["pick_loop"] == "Ctrl+P"
+    finally:
+        player.close()
+
+
+def test_snapshot_carries_the_playlist_and_its_adaptation(api):
+    data = api.select_playlist(UID)
+
+    assert data["playlist"] == {
+        "uid": UID,
+        "title": "默认歌单",
+        "adaptation": True,
+        "debug": False,
+    }
+
+
+def test_playlist_payload_says_when_adaptation_is_off(tmp_path):
+    write_config(tmp_path, adaptation=False)
+    player = PlayerApi(config_dir=tmp_path)
+    try:
+        assert player.select_playlist(UID)["playlist"]["adaptation"] is False
+    finally:
+        player.close()
+
+
+def test_playlist_payload_reports_the_debug_switch(tmp_path):
+    write_config(tmp_path, patch={"common": {"debug": True}})
+    player = PlayerApi(config_dir=tmp_path)
+    try:
+        payload = player.select_playlist(UID)["playlist"]
+        assert payload["adaptation"] is True
+        assert payload["debug"] is True
+    finally:
+        player.close()

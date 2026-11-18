@@ -33,6 +33,127 @@ function switchMarkup(attr, on, label) {
   );
 }
 
+/* ---------- 快捷键 ---------- */
+
+/* 动作清单与出厂键都来自快照：后端是唯一的真相，前端不另抄一份表。 */
+function keyMeta() {
+  return (state.data && state.data.keys) || {};
+}
+
+function keyActions(group) {
+  return (keyMeta().actions || {})[group] || [];
+}
+
+function keyDefaults(group) {
+  return (keyMeta().defaults || {})[group] || {};
+}
+
+function currentKey(group, action) {
+  const section = (state.data && state.data.settings && state.data.settings[group]) || {};
+  return (section.keys || {})[action] || keyDefaults(group)[action] || "";
+}
+
+function keyRow(group, action) {
+  const spec = currentKey(group, action);
+  const fallback = keyDefaults(group)[action] || "";
+  return settingsRow(
+    T("keys." + group + "." + action),
+    "",
+    '<button class="keycap" type="button" data-key-group="' + esc(group) +
+      '" data-key-action="' + esc(action) + '">' +
+      esc(prettyKey(spec)) + "</button>" +
+      '<button class="btn ghost small" data-key-reset="' + esc(group + ":" + action) +
+      '" title="' + esc(T("settings.keys_reset_to", { key: prettyKey(fallback) })) + '"' +
+      (spec === fallback ? " disabled" : "") + ">" +
+      esc(T("settings.keys_reset")) + "</button>"
+  );
+}
+
+function settingsKeys(group) {
+  const actions = keyActions(group);
+  if (!actions.length) return "";
+  const notes = {
+    manager: T("settings.keys_fixed"),
+    simple: T("settings.keys_simple_hint"),
+    player: T("settings.keys_player_hint"),
+  };
+  const hint = T("settings.keys_hint") + (notes[group] ? " · " + notes[group] : "");
+  return settingsCard(
+    T("settings.keys_section"),
+    actions
+      .map(function (action) {
+        return keyRow(group, action);
+      })
+      .join("") +
+      '<div class="settings-actions"><button class="btn ghost small" data-key-reset-all="' +
+      esc(group) + '">' + esc(T("settings.keys_reset_all")) + "</button></div>",
+    hint
+  );
+}
+
+/* 录制中的那一行：按键只服务录制，全局快捷键让路。 */
+function beginKeyCapture(node) {
+  endKeyCapture();
+  state.recording = {
+    group: node.dataset.keyGroup,
+    action: node.dataset.keyAction,
+    node: node,
+  };
+  node.classList.add("is-recording");
+  node.textContent = T("settings.keys_recording");
+}
+
+function endKeyCapture() {
+  const recording = state.recording;
+  state.recording = null;
+  if (!recording || !recording.node) return;
+  recording.node.classList.remove("is-recording");
+  recording.node.textContent = prettyKey(currentKey(recording.group, recording.action));
+}
+
+/* 只换这一行的显示：整页重绘会把设置页的滚动位置弹回顶部。 */
+function paintKeyRow(node, group, action) {
+  if (!node) return;
+  node.textContent = prettyKey(currentKey(group, action));
+  const reset = node.parentNode ? node.parentNode.querySelector("[data-key-reset]") : null;
+  if (reset) reset.disabled = currentKey(group, action) === keyDefaults(group)[action];
+}
+
+async function saveKey(group, action, spec, node) {
+  endKeyCapture();
+  const data = await call("set_shortcut", group, action, spec);
+  if (!data) return;
+  if (data.ok === false) {
+    if (data.reason === "conflict") {
+      toast(
+        T("settings.keys_conflict", {
+          key: prettyKey(spec),
+          action: T("keys." + group + "." + (data.action || "")),
+        }),
+        false
+      );
+    } else if (data.reason === "unsupported") {
+      toast(T("settings.keys_console_unsupported"), false);
+    } else {
+      toast(T("settings.keys_invalid"), false);
+    }
+    return;
+  }
+  if (data.settings) state.data.settings = data.settings;
+  if (data.keys) state.data.keys = data.keys;
+  paintKeyRow(node, group, action);
+}
+
+async function resetKeyGroup(group) {
+  const patch = {};
+  patch[group] = { keys: keyDefaults(group) };
+  const data = await call("update_settings", patch);
+  if (!data) return;
+  if (data.settings) state.data.settings = data.settings;
+  renderSettings();
+  toast(T("settings.keys_reset_done"));
+}
+
 function settingsGeneral() {
   const common = (state.data.settings && state.data.settings.common) || {};
   const adapt = common.adaptation || {};
@@ -182,28 +303,30 @@ function settingsImport() {
 
 function settingsSimple() {
   const section = (state.data.settings && state.data.settings.simple) || {};
-  return settingsCard(
-    T("settings.simple_section"),
-    settingsRow(
-        T("settings.play_order"),
-        T("settings.simple_order_hint"),
-        selectMarkup(
-          'data-setting-select="simple.order"',
-          [
-            { value: "shuffle", label: T("settings.order_shuffle") },
-            { value: "list_loop", label: T("settings.order_list_loop") },
-          ],
-          section.order || "shuffle",
-          ""
-        )
-      ) +
+  return (
+    settingsCard(
+      T("settings.simple_section"),
       settingsRow(
-        T("settings.default_playlist"),
-        T("settings.default_playlist_hint"),
-        '<button class="btn ghost small" data-action="goto_default">' +
-          esc(T("settings.goto")) + "</button>"
-      ),
-    T("settings.simple_hint")
+          T("settings.play_order"),
+          T("settings.simple_order_hint"),
+          selectMarkup(
+            'data-setting-select="simple.order"',
+            [
+              { value: "shuffle", label: T("settings.order_shuffle") },
+              { value: "list_loop", label: T("settings.order_list_loop") },
+            ],
+            section.order || "shuffle",
+            ""
+          )
+        ) +
+        settingsRow(
+          T("settings.default_playlist"),
+          T("settings.default_playlist_hint"),
+          '<button class="btn ghost small" data-action="goto_default">' +
+            esc(T("settings.goto")) + "</button>"
+        ),
+      T("settings.simple_hint")
+    ) + settingsKeys("simple")
   );
 }
 
@@ -211,38 +334,40 @@ function settingsPlayer() {
   const section = (state.data.settings && state.data.settings.player) || {};
   const volume = Math.round((section.volume === undefined ? 0.2 : section.volume) * 100);
 
-  return settingsCard(
-    T("settings.player_section"),
-    settingsRow(
-      T("settings.volume"),
-      T("settings.volume_hint"),
-      '<div class="volume-line"><input class="range" id="player-volume" type="range" ' +
-        'min="0" max="100" step="1" value="' + volume + '">' +
-        '<span class="volume-value" id="player-volume-value">' + volume + "%</span></div>"
-    ) +
+  return (
+    settingsCard(
+      T("settings.player_section"),
       settingsRow(
-        T("settings.play_order"),
-        T("settings.player_order_hint"),
-        selectMarkup(
-          'data-setting-select="player.order"',
-          [
-            { value: "shuffle", label: T("settings.order_shuffle") },
-            { value: "list_loop", label: T("settings.order_list_loop") },
-            { value: "repeat_one", label: T("settings.order_repeat_one") },
-          ],
-          section.order || "shuffle",
-          ""
-        )
+        T("settings.volume"),
+        T("settings.volume_hint"),
+        '<div class="volume-line"><input class="range" id="player-volume" type="range" ' +
+          'min="0" max="100" step="1" value="' + volume + '">' +
+          '<span class="volume-value" id="player-volume-value">' + volume + "%</span></div>"
       ) +
-      settingsRow(
-        T("settings.remember_progress"),
-        T("settings.remember_progress_hint"),
-        switchMarkup(
-          'data-setting-switch="player.remember_progress"',
-          section.remember_progress !== false,
-          T("settings.remember_progress")
+        settingsRow(
+          T("settings.play_order"),
+          T("settings.player_order_hint"),
+          selectMarkup(
+            'data-setting-select="player.order"',
+            [
+              { value: "shuffle", label: T("settings.order_shuffle") },
+              { value: "list_loop", label: T("settings.order_list_loop") },
+              { value: "repeat_one", label: T("settings.order_repeat_one") },
+            ],
+            section.order || "shuffle",
+            ""
+          )
+        ) +
+        settingsRow(
+          T("settings.remember_progress"),
+          T("settings.remember_progress_hint"),
+          switchMarkup(
+            'data-setting-switch="player.remember_progress"',
+            section.remember_progress !== false,
+            T("settings.remember_progress")
+          )
         )
-      )
+    ) + settingsKeys("player")
   );
 }
 
@@ -301,7 +426,7 @@ function settingsManager() {
           T("settings.debug_hint"),
           switchMarkup('data-setting-switch="common.debug"', debugOn, T("settings.debug"))
         )
-    )
+    ) + settingsKeys("manager")
   );
 }
 
@@ -344,6 +469,8 @@ function settingsAbout() {
 }
 
 function renderSettings(animate) {
+  // 重绘会换掉正在录制的那一行，录制状态先收干净。
+  endKeyCapture();
   qsa(".settings-tab").forEach(function (tab) {
     tab.classList.toggle("is-active", tab.dataset.settings === state.settingsTab);
   });

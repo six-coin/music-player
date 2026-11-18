@@ -53,13 +53,35 @@
     "audition": {
         "volume": 0.2
     },
+    "manager": {
+        "keys": {
+            "search": "Ctrl+F",
+            "import": "Ctrl+I",
+            "settings": "Ctrl+,"
+        }
+    },
     "simple": {
-        "order": "shuffle"
+        "order": "shuffle",
+        "keys": {
+            "skip": "Ctrl+C",
+            "quit": "Ctrl+Q"
+        }
     },
     "player": {
         "volume": 0.2,
         "order": "shuffle",
         "remember_progress": true,
+        "keys": {
+            "play_pause": "Space",
+            "next": "Ctrl+C",
+            "prev": "Ctrl+ArrowLeft",
+            "seek_back": "ArrowLeft",
+            "seek_forward": "ArrowRight",
+            "volume_up": "ArrowUp",
+            "volume_down": "ArrowDown",
+            "queue": "Escape",
+            "pick_loop": "Ctrl+L"
+        },
         "last_playlist": null,
         "last_md5": null,
         "last_position_ms": 0
@@ -100,6 +122,7 @@
 | 字段      | 类型  | 默认        | 取值与行为                                                   |
 |---------|-----|-----------|---------------------------------------------------------|
 | `order` | str | `shuffle` | `shuffle` / `list_loop`；其它值回退 `shuffle`。simple 没有「顺序播放」 |
+| `keys`  | obj | 见 1.7   | 控制台的跳过与退出键                                              |
 
 simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的那个值。旧配置里残留的 `volume` 在读取时丢掉。
 
@@ -110,13 +133,52 @@ simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的
 | `volume`            | float       | `0.2`     | 0–1，越界夹取；player 拖动音量时回写                                |
 | `order`             | str         | `shuffle` | `shuffle` / `list_loop` / `repeat_one`；其它值回退 `shuffle` |
 | `remember_progress` | bool        | `true`    | 为假时 `last_position_ms` 恒写 0，但歌单与曲目仍记住                  |
+| `keys`              | obj         | 见 1.7    | 播放器窗口里的九个动作                                            |
 | `last_playlist`     | str \| null | `null`    | 上次的歌单 uid；歌单已被删除时启动回落到「选个歌单开始」                         |
 | `last_md5`          | str \| null | `null`    | 上次的曲目；不在歌单里时落到第一首                                      |
 | `last_position_ms`  | int         | `0`       | 负数夹到 0，非整数回退 0；最多每 10 秒写一次                             |
 
-`player` 节里前三个是用户配置（manager 的设置页也写它们），后三个由 player 自写自读，界面上不展示。
+`player` 节里前四个是用户配置（manager 的设置页也写它们），后三个由 player 自写自读，界面上不展示。
 
-### 1.6 夹取规则
+### 1.6 `manager`
+
+只属于管理器的配置。目前只有快捷键。
+
+| 字段     | 类型  | 默认    | 取值与行为  |
+|--------|-----|-------|--------|
+| `keys` | obj | 见 1.7 | 管理器窗口的快捷键 |
+
+### 1.7 快捷键
+
+三端各有一张 `keys` 表：键是动作名（代码里的固定标识，不随语言变），值是按键。
+
+**写法只有一种**：修饰键按 `Ctrl → Alt → Shift` 排列，用 `+` 连接，最后一段是主键，主键按 `KeyboardEvent.key` 的写法（字母大写、方向键 `ArrowLeft` 这类、空格是 `Space`）。读取时会先把任意写法压成规范形式，所以手写 `ctrl+left` 也能用，落盘一律是 `Ctrl+ArrowLeft`。
+
+| 程序    | 动作            | 默认               | 说明                       |
+|-------|---------------|------------------|--------------------------|
+| 管理器   | `search`      | `Ctrl+F`         | 跳到歌曲页并聚焦搜索框              |
+|       | `import`      | `Ctrl+I`         | 打开导入的文件对话框               |
+|       | `settings`    | `Ctrl+,`         | 跳到设置页                    |
+| 轻量播放器 | `skip`        | `Ctrl+C`         | 跳过当前曲                    |
+|       | `quit`        | `Ctrl+Q`         | 退出                       |
+| 播放器   | `play_pause`  | `Space`          | 播放 / 暂停                  |
+|       | `next`        | `Ctrl+C`         | 下一首                      |
+|       | `prev`        | `Ctrl+ArrowLeft` | 上一首                      |
+|       | `seek_back`   | `ArrowLeft`      | 快退 5 秒                   |
+|       | `seek_forward`| `ArrowRight`     | 快进 5 秒                   |
+|       | `volume_up`   | `ArrowUp`        | 音量 +5%                   |
+|       | `volume_down` | `ArrowDown`      | 音量 −5%                   |
+|       | `queue`       | `Escape`         | 收起队列                     |
+|       | `pick_loop`   | `Ctrl+L`         | 打开单曲循环选歌弹窗               |
+
+规则：
+
+- **控制台只读得到一部分键**：`Ctrl+` 一个字母（`Ctrl+H` / `Ctrl+I` / `Ctrl+M` 除外，它们的字节与退格、Tab、回车撞车）、`Space`、`Enter`、`Tab`、`Escape`、`Backspace`。设置页会挡下别的组合；手改文件写了读不到的组合，启动时退回出厂键并记一条日志。
+- **`Alt+F4` 与 `F4` 恒退出**，不占 `keys` 表，改了 `quit` 也仍然有效。
+- **同一页里两个动作不能共用一个键**：设置页在保存前就拦下，手改出来的重复键按动作表顺序取第一个命中。
+- 认不出来的写法（`Ctrl`、`Ctrl+Nope`、数字）退回该动作的出厂键，不让一个坏值把整个程序变成没有快捷键。
+
+### 1.8 夹取规则
 
 | 情况                      | 结果                  |
 |-------------------------|---------------------|
@@ -125,6 +187,7 @@ simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的
 | 数字字段是字符串                | 回退默认值（不做隐式转换）       |
 | 数字越界                    | 夹到范围内，不报错           |
 | 布尔字段不是布尔                | 回退默认值               |
+| 快捷键写法认不出来               | 退回该动作的出厂键           |
 | 未知键                     | 原样保留                |
 
 ## 2. `<数据目录>/library.json`

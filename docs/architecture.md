@@ -28,6 +28,7 @@ Music Player/
 │  ├─ errors.py                             异常类型（AppError 基类 + 4 个子类）
 │  ├─ models.py                             数据结构、归一化、字段校验
 │  ├─ settings.py                           设置读写、夹取、原子写、跨进程读改写
+│  ├─ keymap.py                             快捷键的规范写法、三端默认绑定、控制台字节
 │  ├─ i18n.py                               语言包扫描、查表、占位符
 │  ├─ logging_setup.py                      loguru 配置、致命错误弹窗
 │  ├─ core/
@@ -124,7 +125,7 @@ manager.pyw   player.pyw   simple.py          入口
 | `<数据目录>/playlists.json`   | 歌单（引用）与默认歌单   | manager                          |
 | `<数据目录>/stats/<uid>.json` | 每个歌单的自适应记录    | manager、player、simple            |
 | `<数据目录>/totals.json`      | 歌曲级总播放次数      | manager、player、simple            |
-| `<数据目录>/settings.json`    | 设置，四个分节       | manager 写全部，player 只写 `player` 节 |
+| `<数据目录>/settings.json`    | 设置，六个分节       | manager 写全部，player 只写 `player` 节 |
 | `<数据目录>/player.json`      | 窗口尺寸、队列开合     | player                           |
 
 **为什么必须分开存：**
@@ -145,6 +146,7 @@ manager.pyw   player.pyw   simple.py          入口
 |------------------|-------------------------------------|----------------|
 | `paths`          | 由 `__file__` 推导绝对路径、解析配置里的相对路径      | 不判断文件是否存在、不建目录 |
 | `settings`       | 读盘、夹取、合并、原子写                        | 不缓存界面状态        |
+| `keymap`         | 认快捷键写法、给默认值、控制台字节映射                 | 不读设置、不响应按键     |
 | `models`         | 结构、归一化、校验、`to_dict` 只输出约定键          | 不读写文件          |
 | `i18n`           | 扫目录、查表、填占位符                         | 不关心调用者是谁       |
 | `library`        | 实体读写与查询、引用统计                        | 不解析歌单、不判约束是否阻断 |
@@ -252,6 +254,10 @@ next / ended / failed
     },
     "playlists": [],
     "settings": {},
+    "keys": {
+        "actions": {},
+        "defaults": {}
+    },
     "status": {},
     "counts": {},
     "overview": {},
@@ -269,7 +275,7 @@ next / ended / failed
 | 歌单     | `create_playlist` / `update_playlist_name` / `set_playlist_entries` / `add_playlist_songs` / `remove_playlist_song` / `add_filter` / `update_filter` / `reorder_filters` / `remove_filter` / `delete_playlist` / `reorder_playlists`  | 快照                                                            |
 | 自适应    | `update_adaptation` / `reset_stats`                                                                                                                                                                                                   | 快照                                                            |
 | 标签作者   | `create_tag_group` / `update_tag_group` / `add_tag` / `rename_tag` / `remove_tag` / `reorder_tags` / `reorder_tag_groups` / `delete_tag_group` / `create_author` / `update_author` / `delete_author` / `delete_empty_authors`         | 快照                                                            |
-| 设置     | `update_settings` / `set_theme` / `set_language` / `clear_all_stats` / `refresh_status` / `browse_folder`                                                                                                                             | 快照 / 值                                                        |
+| 设置     | `update_settings` / `set_shortcut` / `set_theme` / `set_language` / `clear_all_stats` / `refresh_status` / `browse_folder`                                                                                                             | 快照 / 值                                                        |
 | 系统     | `browse_import` / `browse_audio` / `open_data_dir` / `open_log_dir` / `run_integrity` / `start_integrity` / `fix_issues` / `launch_player` / `launch_simple`                                                                          | 值或快照                                                          |
 | 试听     | `audition_url`                                                                                                                                                                                                                        | `{ok, url, title, duration_ms}`                               |
 | 任务     | `start_import` / `start_replace_source` / `poll_task` / `cancel_task`                                                                                                                                                                 | `{task_id}` / `{state, done, total, current, errors, result}` |
@@ -281,6 +287,7 @@ next / ended / failed
 - 逐字符触发的写入（名称、简介）返回 `{"ok": bool}`，前端做 420 ms 防抖；结构性操作前先 `flushNameSave()` / `flushPlaylistName()`。
 - 耗时操作（导入、深检、换源）必须走任务通道，`js_api` 里不阻塞。
 - 带 `md5` 的播放事件一律校验「这个 md5 是不是当前曲」，不是就当作过期事件忽略，避免 `ended` 与随后的点击重复记账。
+- 快捷键不走 `update_settings`：`set_shortcut` 先认写法、再看控制台读不读得到、再查同页有没有撞车，失败时返回 `{"ok": false, "reason": "invalid|unsupported|conflict"}`，成功时返回快照并附带 `shortcut` 说明改成了什么。管理器快照里的 `keys` 给出动作清单与出厂键，前端不再抄一份表。
 
 ## 8. 线程模型
 
@@ -316,7 +323,7 @@ next / ended / failed
 
 ## 10. 配置与本地化
 
-- 配置归属规则：**一个配置项只要被三个程序中两个或以上读取，就必须放进 `common`，界面上出现在「通用」页。** 只有单一程序使用的才允许放在自己的节里。
+- 配置归属规则：**一个配置项只要被三个程序中两个或以上读取，就必须放进 `common`，界面上出现在「通用」页。** 只有单一程序使用的才允许放在自己的节里。快捷键按「谁响应它」分节（`manager.keys` / `simple.keys` / `player.keys`）：管理器只是替它们做编辑界面，运行时不读这些键，和 `player.order` 是同一个道理。
 - `settings.update()` 与 `patch_player()` 都先读盘再合并，避免两个进程互相覆盖；写盘走「临时文件 + `os.replace`」。
 - 语言包放 `app/locales/{语言代码}.json`，文件名即语言代码；启动时扫目录，放进去什么语言就支持什么语言。
 - 查表顺序：当前语言 → 默认语言（`zh-CN`）→ 键名本身，绝不抛异常。
@@ -332,6 +339,7 @@ tests/
 ├─ conftest.py              固定语言、隔离 assets、歌曲工厂、simple 的假依赖
 ├─ test_paths.py            路径解析
 ├─ test_settings.py         夹取、默认值、未知键保留、分节损坏
+├─ test_keymap.py           快捷键写法、默认值、控制台字节
 ├─ test_models.py           归一化、校验、to_dict 只输出约定键
 ├─ test_library.py          实体读写与查询
 ├─ test_playlists.py        手动保序、条件集合、环检测、默认歌单落盘
@@ -384,6 +392,7 @@ uv run ruff format --check .
 13. 两份语言包的键集合与占位符集合必须相等。
 14. 界面文案不写死：HTML 里是兜底，运行时由 `data-i18n*` 与 `T()` 覆盖。
 15. 总播放次数只受 `common.record_total_plays` 控制：清空自适应（单曲 / 整张歌单 / 全部）不动它，歌单的自适应开关与调试状态也不影响它。
+16. 快捷键只有一种写法（`app/keymap.py` 的规范形式），三端都从这里取默认值、都用它认字符串；界面上展示的 `Ctrl+←` 只是显示，存盘一律是 `Ctrl+ArrowLeft`。
 
 ## 13. 偏离标准
 

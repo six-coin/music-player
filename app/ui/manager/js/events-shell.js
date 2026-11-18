@@ -182,6 +182,37 @@ function bindShellEvents() {
       closeMenu();
       return;
     }
-    if (!qs("#modal").hidden) trapFocus(event);
+    if (!qs("#modal").hidden) {
+      trapFocus(event);
+      return;
+    }
+    if (state.recording) return;
+    if (runManagerShortcut(event)) event.preventDefault();
   });
+}
+
+/* 管理器自己的快捷键。默认交互（Esc 关弹窗、Tab 循环焦点、列表里的方向键）
+   不在这里——它们跟着控件走，改了反而会坏。 */
+function runManagerShortcut(event) {
+  const keys = managerKeys();
+  if (matchKey(event, keys.search)) {
+    goSection("songs");
+    // 分区切换是异步的，等这一帧画完再聚焦，否则拿到的是还没显示出来的输入框。
+    window.requestAnimationFrame(function () {
+      const box = qs("#songs-search");
+      if (!box) return;
+      box.focus();
+      box.select();
+    });
+    return true;
+  }
+  if (matchKey(event, keys.import)) {
+    doImport();
+    return true;
+  }
+  if (matchKey(event, keys.settings)) {
+    goSection("settings");
+    return true;
+  }
+  return false;
 }

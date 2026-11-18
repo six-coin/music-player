@@ -14,7 +14,7 @@ from typing import Any
 
 from loguru import logger
 
-from app import i18n, paths
+from app import i18n, keymap, paths
 from app.core import adaptation
 from app.core.library import Library
 from app.core.player_session import (
@@ -329,6 +329,8 @@ class PlayerApi:
             "theme": theme_tool.resolve(str(self.settings.get("common", "theme", default="light"))),
             "mode": state["mode"],
             "playlist_uid": state["playlist_uid"],
+            "playlist": self._playlist_payload(state["playlist_uid"]),
+            "keys": keymap.clamp("player", self.settings.get("player", "keys", default={})),
             "playlists": [
                 {
                     "uid": playlist.uid,
@@ -355,6 +357,20 @@ class PlayerApi:
             "notice": self._notice_payload(state["notice"]),
             "warnings": list(self.warnings),
             "command": self._command_payload(state["command"]),
+        }
+
+    def _playlist_payload(self, uid: object) -> dict[str, Any] | None:
+        """当前歌单的展示信息：卡片上要说明这个歌单开没开自适应。"""
+        if not isinstance(uid, str):
+            return None
+        playlist = self.playlists.get(uid)
+        if playlist is None:
+            return None
+        return {
+            "uid": playlist.uid,
+            "title": self._playlist_title(playlist),
+            "adaptation": bool(playlist.adaptation.enabled),
+            "debug": self.settings.debug_enabled(),
         }
 
     def _track_payload(self, md5: object, position_ms: object) -> dict[str, Any] | None:

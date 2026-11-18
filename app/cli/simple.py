@@ -20,7 +20,7 @@ from typing import Protocol
 
 from loguru import logger
 
-from app import bootstrap, i18n, logging_setup, paths
+from app import bootstrap, i18n, keymap, logging_setup, paths
 from app.cli import console, render
 from app.cli.console import Action
 from app.core import adaptation
@@ -73,6 +73,9 @@ class Deps:
     #: 总播放次数：与自适应完全独立，只受设置里那个总开关控制。
     totals: TotalStore | None = None
     record_totals: Callable[[], bool] = lambda: True
+    #: 方框底部那行按键提示用的显示名，与 ``console`` 里实际绑定的键一致。
+    skip_key: str = "Ctrl+C"
+    quit_key: str = "Ctrl+Q"
 
 
 # ---------- 播放循环 ----------
@@ -186,6 +189,8 @@ class Session:
             total=total,
             order=self._order,
             adaptation=self._adaptation_active(),
+            skip_key=self._deps.skip_key,
+            quit_key=self._deps.quit_key,
         )
 
     # ---------- 自适应 ----------
@@ -324,6 +329,7 @@ def _run(log_file: Path) -> int:
     order = str(settings.get("simple", "order", default="shuffle"))
     params = adaptation.params_from_dict(settings.get("common", "adaptation", default={}))
     warning = i18n.t("simple.settings_warning") if warnings else ""
+    skip_key, quit_key = _bind_keys(settings)
 
     stats = StatsStore(paths.STATS_DIR)
     totals = TotalStore(paths.TOTALS_PATH)
@@ -354,6 +360,8 @@ def _run(log_file: Path) -> int:
                     debug=settings.debug_enabled,
                     totals=totals,
                     record_totals=settings.record_total_plays_enabled,
+                    skip_key=skip_key,
+                    quit_key=quit_key,
                 ),
                 playlist,
                 params,
@@ -366,6 +374,22 @@ def _run(log_file: Path) -> int:
         player.close()
         screen.clear()
         logger.info("simple 退出，日志：{}", log_file)
+
+
+def _bind_keys(settings: SettingsStore) -> tuple[str, str]:
+    """把设置里的「跳过 / 退出」绑到控制台，返回方框底部要显示的写法。
+
+    控制台只读得到 Ctrl+字母与几个特殊键：设置里写了别的组合时 ``configure``
+    会退回出厂键，这里顺手记一条日志，排查时不用猜为什么按了没反应。
+    """
+    keys = settings.get("simple", "keys", default={})
+    table = keys if isinstance(keys, dict) else {}
+    resolved = console.configure({Action.SKIP: table.get("skip"), Action.QUIT: table.get("quit")})
+    for action, name in ((Action.SKIP, "skip"), (Action.QUIT, "quit")):
+        wanted = keymap.normalize(table.get(name))
+        if wanted and wanted != resolved[action]:
+            logger.warning("快捷键 {} 在控制台里读不到，{} 改用 {}", wanted, name, resolved[action])
+    return keymap.pretty(resolved[Action.SKIP]), keymap.pretty(resolved[Action.QUIT])
 
 
 def _load_settings() -> tuple[SettingsStore, list[str]]:

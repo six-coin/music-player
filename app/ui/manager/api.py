@@ -15,7 +15,7 @@ from typing import Any
 import webview
 from loguru import logger
 
-from app import i18n, paths
+from app import i18n, keymap, paths
 from app import version as version_module
 from app.core import integrity, source
 from app.core.adaptation import (
@@ -197,6 +197,10 @@ class ManagerApi:
             "library": self._library_payload(missing, tag_issues),
             "playlists": self._playlist_payload(),
             "settings": self.settings.data,
+            "keys": {
+                "actions": {group: list(keymap.DEFAULTS[group]) for group in keymap.GROUPS},
+                "defaults": {group: dict(keymap.DEFAULTS[group]) for group in keymap.GROUPS},
+            },
             "status": self.status,
             "counts": self._counts(),
             "overview": self._overview(missing, tag_issues, orphans, broken),
@@ -1498,6 +1502,33 @@ class ManagerApi:
                 self.settings.update(patch)
                 self._sync_language()
             return self._snapshot()
+
+    def set_shortcut(self, group: object, action: object, spec: object) -> dict[str, Any]:
+        """改一个快捷键。
+
+        走这条路而不是直接 ``update_settings``：认不出来的组合、控制台读不到的
+        组合、和同页另一个动作撞车的组合都在这里拦下，界面按 ``reason`` 给提示。
+        成功时返回完整快照，并额外带一个 ``shortcut`` 说明改成了什么。
+        """
+        with self._lock:
+            if group not in keymap.GROUPS or not isinstance(action, str):
+                return {"ok": False, "reason": "invalid"}
+            table = self.settings.get(group, "keys", default={})
+            if not isinstance(table, dict) or action not in table:
+                return {"ok": False, "reason": "invalid"}
+            wanted = keymap.normalize(spec)
+            if wanted is None:
+                return {"ok": False, "reason": "invalid"}
+            if group == "simple" and not keymap.console_supported(wanted):
+                return {"ok": False, "reason": "unsupported"}
+            for other, current in table.items():
+                if other != action and current == wanted:
+                    return {"ok": False, "reason": "conflict", "action": other}
+
+            self.settings.update({group: {"keys": {action: wanted}}})
+            snapshot = self._snapshot()
+            snapshot["shortcut"] = {"group": group, "action": action, "spec": wanted}
+            return snapshot
 
     def _sync_language(self) -> None:
         """设置里的语言变了就立刻生效：文案、窗口标题一起换。"""

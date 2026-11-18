@@ -47,6 +47,9 @@ class NowPlaying:
     total: int
     order: str
     adaptation: bool = False
+    #: 方框底部的按键提示，跟着设置里改过的绑定走。
+    skip_key: str = "Ctrl+C"
+    quit_key: str = "Ctrl+Q"
 
 
 def char_width(char: str) -> int:
@@ -113,6 +116,7 @@ def draw(state: NowPlaying, warning: str = "") -> str:
         i18n.t("simple.adaptation"),
     )
     label_width = max(width(label) for label in labels)
+    keys_hint = i18n.t("simple.keys", skip=state.skip_key, quit=state.quit_key)
 
     lines: list[str] = []
     if warning:
@@ -139,7 +143,7 @@ def draw(state: NowPlaying, warning: str = "") -> str:
                 label_width,
             ),
             _row([("", "")]),
-            _row([(f"{' ' * INSET}{clip(i18n.t('simple.keys'), WIDTH - INSET * 2)}", GRAY)]),
+            _row([(f"{' ' * INSET}{clip(keys_hint, WIDTH - INSET * 2)}", GRAY)]),
             _border("└", "┘"),
         ]
     )

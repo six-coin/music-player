@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app import i18n, paths
+from app import i18n, keymap, paths
 from app.errors import ConfigError
 from app.models import Adaptation
 from app.system import atomic
@@ -45,13 +45,18 @@ DEFAULTS: dict[str, Any] = {
     "audition": {
         "volume": 0.2,
     },
+    "manager": {
+        "keys": dict(keymap.DEFAULTS["manager"]),
+    },
     "simple": {
         "order": "shuffle",
+        "keys": dict(keymap.DEFAULTS["simple"]),
     },
     "player": {
         "volume": 0.2,
         "order": "shuffle",
         "remember_progress": True,
+        "keys": dict(keymap.DEFAULTS["player"]),
         "last_playlist": None,
         "last_md5": None,
         "last_position_ms": 0,
@@ -142,8 +147,12 @@ def clamp(raw: dict[str, Any]) -> dict[str, Any]:
 
     simple = _section(data, "simple")
     simple["order"] = _choice(simple.get("order"), SIMPLE_ORDERS, "shuffle")
+    simple["keys"] = keymap.clamp("simple", simple.get("keys"))
     # 轻量音乐播放器不再设默认音量：音量完全交给 VLC 与系统混音器。
     simple.pop("volume", None)
+
+    manager = _section(data, "manager")
+    manager["keys"] = keymap.clamp("manager", manager.get("keys"))
 
     player = _section(data, "player")
     player["order"] = _choice(player.get("order"), PLAYER_ORDERS, "shuffle")
@@ -152,6 +161,7 @@ def clamp(raw: dict[str, Any]) -> dict[str, Any]:
         min(1.0, max(0.0, float(volume))) if isinstance(volume, (int, float)) else 0.2
     )
     player["remember_progress"] = _bool(player.get("remember_progress"), True)
+    player["keys"] = keymap.clamp("player", player.get("keys"))
     player["last_playlist"] = _optional_text(player.get("last_playlist"))
     player["last_md5"] = _optional_text(player.get("last_md5"))
     position = player.get("last_position_ms")

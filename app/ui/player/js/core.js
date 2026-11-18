@@ -94,6 +94,68 @@ function formatDuration(ms) {
   const seconds = total % 60;
   return hours > 0 ? hours + ":" + pad(minutes) + ":" + pad(seconds) : minutes + ":" + pad(seconds);
 }
+/* ---------- 快捷键 ---------- */
+
+/* 与 app/keymap.py 的 DEFAULTS["player"] 对应。快照总会带上设置里的真实绑定，
+   这张表只是桥接就绪之前那一下的兜底。写法必须与 Python 侧一致（规范形式）。 */
+const KEY_DEFAULTS = {
+  play_pause: "Space",
+  next: "Ctrl+C",
+  prev: "Ctrl+ArrowLeft",
+  seek_back: "ArrowLeft",
+  seek_forward: "ArrowRight",
+  volume_up: "ArrowUp",
+  volume_down: "ArrowDown",
+  queue: "Escape",
+  pick_loop: "Ctrl+L",
+};
+
+const KEY_PRETTY = {
+  ArrowLeft: "←",
+  ArrowRight: "→",
+  ArrowUp: "↑",
+  ArrowDown: "↓",
+  Escape: "Esc",
+  Delete: "Del",
+  PageUp: "PgUp",
+  PageDown: "PgDn",
+};
+
+const MODIFIER_KEYS = ["Control", "Shift", "Alt", "Meta"];
+
+function playerKeys() {
+  const saved = (state.data && state.data.keys) || {};
+  const table = {};
+  Object.keys(KEY_DEFAULTS).forEach(function (id) {
+    table[id] = saved[id] || KEY_DEFAULTS[id];
+  });
+  return table;
+}
+
+/* 一次按键压成与设置文件同一种写法：Ctrl → Alt → Shift → 主键。 */
+function keySpec(event) {
+  const raw = event.key === " " || event.key === "Spacebar" ? "Space" : event.key;
+  if (!raw || MODIFIER_KEYS.indexOf(raw) !== -1) return "";
+  const parts = [];
+  if (event.ctrlKey) parts.push("Ctrl");
+  if (event.altKey) parts.push("Alt");
+  if (event.shiftKey) parts.push("Shift");
+  parts.push(raw.length === 1 && /[a-z]/i.test(raw) ? raw.toUpperCase() : raw);
+  return parts.join("+");
+}
+
+function prettyKey(spec) {
+  return String(spec || "")
+    .split("+")
+    .map(function (part) {
+      return KEY_PRETTY[part] || part;
+    })
+    .join("+");
+}
+
+function matchKey(event, spec) {
+  return !!spec && keySpec(event) === spec;
+}
 /* ---------- 主题 ---------- */
 
 function applyTheme(theme) {
