@@ -82,6 +82,16 @@ function bindPanelEvents() {
       const next = toggle.getAttribute("aria-checked") !== "true";
       toggle.setAttribute("aria-checked", next ? "true" : "false");
       await patchSetting(toggle.dataset.settingSwitch, next);
+      return;
+    }
+    const logLevel = event.target.closest("[data-log-level]");
+    if (logLevel) {
+      await patchSetting("common.log_level", logLevel.dataset.logLevel);
+      // 写盘成功时不会重绘（重绘会把滚动位置弹回顶部），选中块自己挪过去。
+      const current = ((state.data.settings || {}).common || {}).log_level;
+      qsa("[data-log-level]", settingsBody).forEach(function (node) {
+        node.classList.toggle("is-active", node.dataset.logLevel === current);
+      });
     }
   });
 
@@ -98,6 +108,16 @@ function bindPanelEvents() {
     }
     if (event.target.id === "audition-default") {
       await patchSetting("audition.volume", Number(event.target.value) / 100);
+      return;
+    }
+    if (event.target.id === "log-retention-days") {
+      const value = Number(event.target.value);
+      if (!Number.isFinite(value)) {
+        renderSettings();
+        return;
+      }
+      // 夹取交给后端：写进去的值和界面显示的值永远是同一个。
+      await patchSetting("common.log_retention_days", Math.round(value));
       return;
     }
     const field = event.target.closest("[data-default]");

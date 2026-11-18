@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app import i18n, keymap, paths
+from app import i18n, keymap, logging_setup, paths
 from app.errors import ConfigError
 from app.models import Adaptation
 from app.system import atomic
@@ -31,6 +31,10 @@ DEFAULTS: dict[str, Any] = {
         "language": "zh-CN",
         "debug": False,
         "record_total_plays": True,
+        # 日志三件套：三个程序共用一份，改一处三处都变。
+        "log_level": logging_setup.DEFAULT_LEVEL,
+        "log_cleanup": True,
+        "log_retention_days": logging_setup.DEFAULT_RETENTION_DAYS,
         "adaptation": {
             "window": 100,
             "min_plays": 10,
@@ -104,6 +108,17 @@ def _optional_text(value: Any) -> str | None:
     return None
 
 
+def _days(value: Any) -> int:
+    """日志保留天数夹到 1–365；读不出数字就回退默认值。"""
+    if isinstance(value, bool):
+        return logging_setup.DEFAULT_RETENTION_DAYS
+    try:
+        days = int(str(value).strip())
+    except (TypeError, ValueError):
+        return logging_setup.DEFAULT_RETENTION_DAYS
+    return max(logging_setup.MIN_RETENTION_DAYS, min(days, logging_setup.MAX_RETENTION_DAYS))
+
+
 def _section(data: dict[str, Any], key: str) -> dict[str, Any]:
     """取出一个分节，并保证它是对象。
 
@@ -129,6 +144,11 @@ def clamp(raw: dict[str, Any]) -> dict[str, Any]:
     common["debug"] = _bool(common.get("debug"), False)
     # 总播放次数只有一个开关；它不进 adaptive 那一组，也不受歌单的自适应开关影响。
     common["record_total_plays"] = _bool(common.get("record_total_plays"), True)
+    common["log_level"] = _choice(
+        common.get("log_level"), logging_setup.LOG_LEVELS, logging_setup.DEFAULT_LEVEL
+    )
+    common["log_cleanup"] = _bool(common.get("log_cleanup"), True)
+    common["log_retention_days"] = _days(common.get("log_retention_days"))
     adaptation = Adaptation.from_dict(common.get("adaptation"))
     adaptation.normalize()
     common["adaptation"] = adaptation.to_dict()
@@ -269,6 +289,19 @@ class SettingsStore:
     def record_total_plays_enabled(self) -> bool:
         """总播放次数的总开关；读不出来时按「记录」处理。"""
         return self._cached_common_flag("record_total_plays", True)
+
+    def apply_log_settings(self) -> None:
+        """把日志三件套交给 ``logging_setup``。
+
+        三个程序启动时各调一次，管理界面改完设置再调一次——所以改级别不用重启，
+        写的是同一个日志文件。
+        """
+        default_days = logging_setup.DEFAULT_RETENTION_DAYS
+        logging_setup.configure(
+            level=str(self.get("common", "log_level", default=logging_setup.DEFAULT_LEVEL)),
+            cleanup=bool(self.get("common", "log_cleanup", default=True)),
+            retention_days=int(self.get("common", "log_retention_days", default=default_days)),
+        )
 
     def get(self, *keys: str, default: Any = None) -> Any:
         node: Any = self.data

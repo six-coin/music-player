@@ -325,6 +325,7 @@ next / ended / failed
 
 - 配置归属规则：**一个配置项只要被三个程序中两个或以上读取，就必须放进 `common`，界面上出现在「通用」页。** 只有单一程序使用的才允许放在自己的节里。快捷键按「谁响应它」分节（`manager.keys` / `simple.keys` / `player.keys`）：管理器只是替它们做编辑界面，运行时不读这些键，和 `player.order` 是同一个道理。
 - `settings.update()` 与 `patch_player()` 都先读盘再合并，避免两个进程互相覆盖；写盘走「临时文件 + `os.replace`」。
+- 日志三件套（`common.log_level` / `log_cleanup` / `log_retention_days`）在启动时先用默认值把文件开出来，读到设置后再调 `logging_setup.configure()` 重配：**文件名不变**，级别与清空立刻生效。设置页改这三项走同一条路，所以不需要重启。
 - 语言包放 `app/locales/{语言代码}.json`，文件名即语言代码；启动时扫目录，放进去什么语言就支持什么语言。
 - 查表顺序：当前语言 → 默认语言（`zh-CN`）→ 键名本身，绝不抛异常。
 - 占位符统一 `{name}`；列举分隔符从语言包取（`list.separator`），不写死——中文是「、」，英文是 `, `。

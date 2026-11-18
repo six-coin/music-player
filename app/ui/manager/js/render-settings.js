@@ -201,6 +201,26 @@ function settingsGeneral() {
       "</div>"
     : '<span class="path-text">' + esc(currentLanguage) + "</span>";
 
+  // 级别用与语言同一套分段控件：四个值，点一下就切，不用展开菜单。
+  const logLevels = [
+    ["DEBUG", T("settings.log_level_debug")],
+    ["INFO", T("settings.log_level_info")],
+    ["WARNING", T("settings.log_level_warning")],
+    ["ERROR", T("settings.log_level_error")],
+  ];
+  const currentLevel = common.log_level || "INFO";
+  const logLevelSeg =
+    '<div class="seg" id="log-level-seg">' +
+    logLevels
+      .map(function (item) {
+        return (
+          '<button class="seg-item' + (item[0] === currentLevel ? " is-active" : "") +
+          '" type="button" data-log-level="' + item[0] + '">' + esc(item[1]) + "</button>"
+        );
+      })
+      .join("") +
+    "</div>";
+
   return (
     settingsCard(
       T("settings.appearance"),
@@ -250,6 +270,28 @@ function settingsGeneral() {
           T("settings.record_total_plays")
         )
       )
+    ) +
+    settingsCard(
+      T("settings.logs_section"),
+      settingsRow(T("settings.log_level"), T("settings.log_level_hint"), logLevelSeg) +
+        settingsRow(
+          T("settings.log_cleanup"),
+          T("settings.log_cleanup_hint"),
+          switchMarkup(
+            'data-setting-switch="common.log_cleanup"',
+            common.log_cleanup !== false,
+            T("settings.log_cleanup")
+          )
+        ) +
+        settingsRow(
+          T("settings.log_retention_days"),
+          T("settings.log_retention_days_hint"),
+          '<input class="input" id="log-retention-days" type="number" value="' +
+            esc(common.log_retention_days === undefined ? 30 : common.log_retention_days) +
+            '" min="1" max="365" step="1" style="width:110px">' +
+            '<span class="adapt-unit">' + esc(T("settings.days")) + "</span>"
+        ),
+      T("settings.logs_hint")
     )
   );
 }

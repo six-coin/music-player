@@ -283,7 +283,7 @@ Five pages; changes apply immediately and there is no Save button.
 
 | Page            | Contents                                                                                                                                                                                                    |
 |-----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| General         | Theme (light / dark only, no follow-system option), language (sorted by language code), adaptive defaults (window, minimum plays, skip base, skip threshold), playback records (record total play counts)   |
+| General         | Theme (light / dark only, no follow-system option), language (sorted by language code), adaptive defaults (window, minimum plays, skip base, skip threshold), playback records (record total play counts), logs (level, automatic cleanup, retention days) |
 | Library manager | Preview volume, import (default folder, clean audio on import, FFmpeg and ffprobe status), maintenance (integrity check, clean orphan files, clear adaptation stats, open data and log folders, debug mode), shortcuts |
 | Simple player   | Play mode, default playlist (read-only, with a link), shortcuts                                                                                                                                             |
 | Player          | Default volume, play mode, remember position, shortcuts                                                                                                                                                     |
@@ -293,7 +293,7 @@ The skip base is a percentage from 1 to 99: the real probability is base × the 
 
 To rebind: click a key cap, it turns into "Press keys…", then press the new combination. Modifiers alone do not count; `Esc` cancels. Two actions on the same page cannot share a key — the toast names the one already holding it. "Reset" on a row restores just that row; "Reset this page" at the bottom of the card restores all of them. The console page only accepts `Ctrl+letter`, Space, Enter, Tab, Esc and Backspace, and explains why anything else is refused.
 
-Switching the language takes effect immediately: labels, the window title and the sort dropdown change together. The Music Player and Simple Player read the language and the shortcuts at startup, so restart them to follow a change.
+Switching the language takes effect immediately: labels, the window title and the sort dropdown change together. The Music Player and Simple Player read the language, the shortcuts and the log settings at startup, so restart them to follow a change.
 
 "Reset all settings" also restores language and appearance; the library, playlists and statistics are untouched. A data folder change appends `music-player` automatically and applies after a restart, moving the old contents (audio included); existing files in the target are never overwritten.
 
@@ -335,7 +335,7 @@ Music Player\
 
 Deleting `settings.json` restores every setting; deleting `library.json` wipes the library; deleting files from `music\` turns those songs into "File missing". To back up, copy the whole data folder.
 
-Log files are named by start time, rotate at 5 MB and are kept for 14 days. When troubleshooting, read the newest one first. The data folder always ends with the project code: picking `D://Data` gives `D://Data//music-player`.
+Log files are named by start time and rotate at 5 MB. Only the last 30 days are kept by default: older files are deleted at startup, and the General page lets you turn the cleanup off or change the number of days. All three programs share one set of log settings. When troubleshooting, read the newest one first. The data folder always ends with the project code: picking `D://Data` gives `D://Data//music-player`.
 
 ## 15. Troubleshooting
 

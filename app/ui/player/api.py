@@ -95,6 +95,8 @@ class PlayerApi:
     def _load(self) -> None:
         self._backup_broken_settings()
         self.warnings.extend(self.settings.load())
+        # 日志文件在读到设置之前就开了（默认级别），这里补上用户选的那一份。
+        self.settings.apply_log_settings()
         language = self.settings.get("common", "language", default=i18n.FALLBACK_LANGUAGE)
         i18n.set_language(str(language))
         self.warnings.extend(self.library.load())

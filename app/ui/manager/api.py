@@ -102,6 +102,8 @@ class ManagerApi:
 
     def _load(self) -> None:
         self.warnings.extend(self.settings.load())
+        # 日志文件在读到设置之前就开了（默认级别），这里补上用户选的那一份。
+        self.settings.apply_log_settings()
         language = self.settings.get("common", "language", default=i18n.FALLBACK_LANGUAGE)
         i18n.set_language(str(language))
         self.warnings.extend(self.library.load())
@@ -1501,6 +1503,12 @@ class ManagerApi:
             if isinstance(patch, dict) and patch:
                 self.settings.update(patch)
                 self._sync_language()
+                # 只有动了日志三件套才重配日志：其余设置不该顺手把文件重开一遍。
+                common_patch = patch.get("common")
+                if isinstance(common_patch, dict) and any(
+                    str(key).startswith("log_") for key in common_patch
+                ):
+                    self.settings.apply_log_settings()
             return self._snapshot()
 
     def set_shortcut(self, group: object, action: object, spec: object) -> dict[str, Any]:

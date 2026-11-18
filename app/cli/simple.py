@@ -399,7 +399,9 @@ def _load_settings() -> tuple[SettingsStore, list[str]]:
     except Exception as error:  # 字段类型全错时夹取会抛，不能让设置把启动拦下
         logger.error("读取设置失败，改用默认值：{}", error)
         store.data = settings_defaults()
+        store.apply_log_settings()
         return store, [f"{i18n.t('simple.settings_warning')}：{error}"]
+    store.apply_log_settings()
     return store, warnings
 
 

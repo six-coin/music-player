@@ -39,6 +39,9 @@
         "language": "zh-CN",
         "debug": false,
         "record_total_plays": true,
+        "log_level": "INFO",
+        "log_cleanup": true,
+        "log_retention_days": 30,
         "adaptation": {
             "window": 100,
             "min_plays": 10,
@@ -97,6 +100,9 @@
 | `language`                | str   | 系统语言    | 语言代码，必须存在同名语言包；没有匹配或无法识别时回退 `en-US`                                 |
 | `debug`                   | bool  | `false` | 非布尔回退 `false`。为真时 player 与 simple 既不判定也不记录自适应                       |
 | `record_total_plays`      | bool  | `true`  | 非布尔回退 `true`。为假时 player 与 simple 都不再累计歌曲的总播放次数；与歌单的自适应开关无关          |
+| `log_level`               | str   | `INFO`  | `DEBUG` / `INFO` / `WARNING` / `ERROR`，认不出来的值回退 `INFO`。管理器改完立刻生效，日志仍写在同一个文件里；player 与 simple 在下次启动时读到        |
+| `log_cleanup`             | bool  | `true`  | 非布尔回退 `true`。为真时在启动与保存这三项设置时清空过期日志，为假时一条都不删                          |
+| `log_retention_days`      | int   | `30`    | 1–365，越界夹取，非数字回退 `30`。`log_cleanup` 为假时不起作用                          |
 | `adaptation.window`       | int   | `100`   | 10–1000，越界夹取；决定每首歌保留多少条记录                                           |
 | `adaptation.min_plays`    | int   | `10`    | 0–`window`，越界夹取；记录数不超过它时永不跳过                                        |
 | `adaptation.base`         | float | `0.95`  | 0.01–0.99，越界夹取；界面上是 1–99 的整数百分比，存的是比例；概率 = `min(base, 0.99) × 跳过比例` |
@@ -485,14 +491,16 @@ simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的
 |------------|--------------------------------------------------------------|
 | 位置         | `%LOCALAPPDATA%\six-coin\music-player\logs\`                 |
 | 文件名        | `{manager\|player\|simple}_{YYYY-MM-DD_HH-MM-SS}.log`，每次启动一个 |
+| 级别         | `common.log_level`，`DEBUG` / `INFO` / `WARNING` / `ERROR`     |
 | 轮转         | 单文件 5 MB                                                     |
-| 保留         | 14 天                                                         |
-| 级别         | `DEBUG` 起                                                    |
+| 清空         | `common.log_cleanup` 打开时，启动与保存这三项设置时删掉超过 `common.log_retention_days` 天的 `*.log` |
 | 格式         | `[{level}] [{time:YYYY-MM-DD HH:mm:ss}] {message}`           |
 | `diagnose` | 关闭：不把局部变量写进日志，避免泄露密钥                                         |
 | 写入         | `enqueue=True`，多线程安全；致命错误先 `logger.complete()` 再退出           |
 
-日志内容写「发生了什么 + 关键参数」，不写「进入函数」这类噪音。三个程序共用同一个目录，靠文件名前缀区分。
+日志内容写「发生了什么 + 关键参数」，不写「进入函数」这类噪音。三个程序共用同一个目录，靠文件名前缀区分；日志三件套也在 `common` 里共用一份，在管理器的「通用」页改。
+
+「自动清空」不走 loguru 的 `retention`：它只在轮转那一刻触发，日志目录一直没涨到 5 MB 就永远不清。改成启动时扫一遍 `logs\*.log`，按修改时间删；另一个进程正开着的文件删不掉，跳过，下次启动再试。
 
 ## 10. `assets/`
 
