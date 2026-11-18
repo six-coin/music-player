@@ -257,6 +257,23 @@ def test_player_overrides_do_not_change_the_stored_item(player):
     assert stored.environment is None
 
 
+def test_player_selecting_a_pomodoro_clears_the_playlist(player):
+    """点番茄钟后主区域换成详情：歌单高亮、当前曲、播放状态都要收掉。"""
+    item = player.pomodoro.create_item("晨间")
+    player.select_playlist(UID)
+    assert player.get_state()["playlist_uid"] == UID
+
+    data = player.select_pomodoro(item.uid)
+
+    assert data["playlist_uid"] is None
+    assert data["track"] is None
+    assert [entry["active"] for entry in data["playlists"]] == [False]
+    assert data["command"]["kind"] == "stop"
+    assert data["pomodoros"]["selected"]["uid"] == item.uid
+    # 只是收掉界面状态，不覆盖上次听的那张歌单：重启还要停回原处。
+    assert player.settings.get("player", "last_playlist", default=None) == UID
+
+
 def test_player_selecting_a_playlist_leaves_the_pomodoro_detail(player):
     item = player.pomodoro.create_item("晨间")
     player.select_pomodoro(item.uid)

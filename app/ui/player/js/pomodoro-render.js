@@ -48,8 +48,7 @@ function renderPomodoros() {
         '<button type="button" role="listitem" class="playlist-item pomo-item' +
         (active ? " is-active" : "") + (locked ? " is-locked" : "") +
         '" data-pomodoro-uid="' + esc(item.uid) + '">' +
-        '<span class="name">' + esc(item.name) + "</span>" +
-        '<span class="count">' + esc(item.summary || "") + "</span></button>"
+        '<span class="name">' + esc(item.name) + "</span></button>"
       );
     })
     .join("");

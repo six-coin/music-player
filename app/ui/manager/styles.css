@@ -2918,7 +2918,10 @@ input[type="checkbox"]:disabled {
 .pomodoro-nav {
   flex: 1;
   min-height: 0;
-  padding: 2px 8px 18px;
+  /* 与歌曲 / 歌单列表同一条左边线：list-pane 自己已经有 16px 内边距，
+     这里再叠 8px 会多出一条空带，看起来像列表左边被挖掉一条。 */
+  margin: 6px -6px 0;
+  padding: 0 6px 18px;
   overflow-y: auto;
 }
 
@@ -3027,7 +3030,8 @@ input[type="checkbox"]:disabled {
 
 .pomo-list {
   margin: 2px 0 0;
-  padding: 0 0 0 8px;
+  /* 不再额外缩进：分组行与「总览」、与其他分区的列表行都从同一条线开始。 */
+  padding: 0;
   list-style: none;
 }
 
@@ -3035,7 +3039,9 @@ input[type="checkbox"]:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 8px;
+  /* 左内边距把行名送到分组标题下面（标题在 chevron 右侧），行的底色仍然
+     从列表左边线开始——缩进靠内边距，不靠空白。 */
+  padding: 7px 8px 7px 27px;
   border: 1px solid transparent;
   border-radius: var(--radius);
   cursor: pointer;

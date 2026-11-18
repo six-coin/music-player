@@ -1113,13 +1113,6 @@ input:focus-visible {
 
 /* ---------- 番茄钟 ---------- */
 
-.pomo-item .count {
-  max-width: 86px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
 .pomo-item.is-locked {
   opacity: 0.55;
   cursor: default;

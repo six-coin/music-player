@@ -195,6 +195,12 @@ class PomodoroApiMixin:
                 return self._snapshot()
             if isinstance(uid, str) and uid in self.pomodoro.items:
                 self._pomo_selected = uid
+                # 主区域换成番茄详情后，普通播放器连控件都没有了；歌单高亮和
+                # 正在放的那首一起收掉，否则空格还能把看不见的音频放起来。
+                # 不写 player.json：下次启动仍停在上次听的歌单。
+                if self.session.playlist_uid is not None or self.session.current_md5 is not None:
+                    self.session.clear()
+                    self._reload_records()
             return self._snapshot()
 
     def clear_pomodoro(self) -> dict[str, Any]:

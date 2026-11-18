@@ -192,6 +192,23 @@ class PlayerSession:
             self._advance(judge=False, autoplay=autoplay)
         return True
 
+    def clear(self) -> None:
+        """回到「什么都没选」：停掉当前曲，歌单高亮也一起撤掉。
+
+        点番茄钟时用：主区域换成番茄详情后，普通播放器连控件都没有了，
+        再让音频在后台响着、空格还能恢复播放，是没有道理的。
+        """
+        self.playlist_uid = None
+        self.pin = None
+        self._songs = []
+        self.order = []
+        self.index = -1
+        self.current_md5 = None
+        self.position_ms = 0
+        self.playing = False
+        self.empty = "no_selection"
+        self._emit_stop()
+
     def restore(self, playlist_uid: str | None, md5: str | None, position_ms: int) -> None:
         """按上次记住的歌单、曲目、位置落位；永远不自动播。"""
         playlist = self._playlists.get(playlist_uid) if playlist_uid else None
