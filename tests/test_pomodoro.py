@@ -36,8 +36,10 @@ def test_create_item_uses_a_valid_mode_and_defaults(store):
     item = store.create_item("晨间")
 
     assert item.duration_mode in store.duration_modes
-    assert item.focus.play is True
-    assert item.rest.play is False
+    assert item.focus.playlist is None
+    assert item.rest.playlist is None
+    assert item.environment is None
+    assert item.environment_enabled is False
     assert item.background_mode == "cover"
     assert item.font == "system"
     assert item.to_dict()["uid"] == item.uid
@@ -121,10 +123,7 @@ def test_deleting_an_environment_disables_it(store):
         ext="mp3",
     )
     store.add_environment(environment)
-    store.update_item(
-        item.uid,
-        {"environment": environment.uid, "environment_enabled": True},
-    )
+    store.update_item(item.uid, {"environment": environment.uid})
 
     store.delete_environment(environment.uid)
 
@@ -146,7 +145,7 @@ def test_playlist_references_are_cleared(store):
     playlist = "a" * 32
     store.update_item(
         item.uid,
-        {"focus": {"playlist": playlist, "play": True, "order": "list_loop"}},
+        {"focus": {"playlist": playlist, "order": "list_loop"}},
     )
 
     assert store.sanitize_playlists(set()) == 1
@@ -172,13 +171,41 @@ def test_payload_roundtrip(tmp_path):
     assert second.hud_scale == 2.1
 
 
+def test_missing_hud_scale_keeps_the_default(tmp_path):
+    """更早的文件连 hud_scale 都没有，不能拿默认值再除一次 1.5。"""
+    path = tmp_path / "pomodoro.json"
+    path.write_text(json.dumps({"version": 1, "preferences": {}}), encoding="utf-8")
+
+    store = PomodoroStore(path)
+    assert store.load() == []
+
+    assert store.hud_scale == 1.0
+
+
+def test_legacy_hud_scale_is_converted(tmp_path):
+    """第 1 版存的是「相对 1.5 倍基准的倍数」，读进来要换算成百分比。"""
+    path = tmp_path / "pomodoro.json"
+    path.write_text(
+        json.dumps({"version": 1, "preferences": {"hud_scale": 1.5}}),
+        encoding="utf-8",
+    )
+
+    store = PomodoroStore(path)
+    assert store.load() == []
+
+    assert store.hud_scale == 1.0
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["preferences"]["version"] == 2
+    assert saved["preferences"]["hud_scale"] == 1.0
+
+
 def test_hud_scale_default_and_clamp(store):
-    assert store.hud_scale == 1.5
+    assert store.hud_scale == 1.0
 
     store.set_hud_scale(9)
-    assert store.hud_scale == 3.0
+    assert store.hud_scale == 5.0
     store.set_hud_scale(0)
-    assert store.hud_scale == 0.5
+    assert store.hud_scale == 0.2
     store.set_hud_scale(1.8)
     assert store.hud_scale == 1.8
 

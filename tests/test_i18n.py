@@ -30,21 +30,12 @@ def test_language_name_is_the_first_key():
         assert next(iter(_locale(code))) == "language.name", code
 
 
-def _pomodoro_pending(key: str) -> bool:
-    """番茄钟文案本次只补了 zh-CN；en-US 留到之后统一补。
-
-    放宽只针对这一批键，其余键仍然要求两份语言包完全一致。
-    """
-    return key.startswith("pomodoro.") or key == "nav.pomodoro"
-
-
 def test_every_locale_has_the_same_keys():
     default = set(_locale())
     for code in _codes():
         table = set(_locale(code))
         assert not (table - default), code
-        missing = {key for key in default - table if not _pomodoro_pending(key)}
-        assert not missing, code
+        assert not (default - table), code
 
 
 def test_placeholders_match_the_default_language():

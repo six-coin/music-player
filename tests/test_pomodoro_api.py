@@ -133,9 +133,54 @@ def test_manager_delete_background_clears_item_reference(manager):
     assert result["pomodoro"]["items"][0]["background"] is None
 
 
+def test_manager_switching_to_pomodoro_selects_the_overview(manager):
+    manager.select_item("music", MD5)
+    assert manager.get_state()["selection"]["kind"] == "music"
+
+    data = manager.select_section("pomodoro")
+
+    assert data["section"] == "pomodoro"
+    assert data["selection"] == {"kind": "pomodoro_overview", "uid": ""}
+
+
+def test_manager_keeps_a_pomodoro_selection_when_coming_back(manager):
+    created = manager.create_pomodoro("晨间")
+    uid = created["selection"]["uid"]
+    manager.select_section("songs")
+
+    data = manager.select_section("pomodoro")
+
+    assert data["selection"] == {"kind": "pomodoro", "uid": uid}
+
+
+def test_manager_hud_scale_is_shared_with_the_player(manager):
+    assert manager.get_state()["pomodoro"]["preferences"]["hud_scale"] == 1.0
+
+    data = manager.set_pomodoro_hud_scale(1.4)
+
+    assert data["pomodoro"]["preferences"]["hud_scale"] == 1.4
+    assert data["pomodoro"]["preferences"]["hud_scale_min"] == 0.2
+    assert data["pomodoro"]["preferences"]["hud_scale_max"] == 5.0
+
+
+def test_manager_hud_scale_is_clamped(manager):
+    assert manager.set_pomodoro_hud_scale(99)["pomodoro"]["preferences"]["hud_scale"] == 5.0
+    assert manager.set_pomodoro_hud_scale(0)["pomodoro"]["preferences"]["hud_scale"] == 0.2
+
+
+def test_player_phase_without_a_playlist_plays_nothing(player):
+    item = player.pomodoro.create_item("晨间")
+    player.pomodoro.update_item(item.uid, {"focus": {"playlist": UID}})
+    player.pomodoro_start(item.uid, {"focus": {"playlist": ""}})
+
+    phase = player.pomodoro_phase(0)
+
+    assert phase == {"ok": True, "phase": "focus", "play": False}
+
+
 def test_player_snapshot_lists_pomodoros(player):
     item = player.pomodoro.create_item("晨间")
-    player.pomodoro.update_item(item.uid, {"focus": {"playlist": UID, "play": True}})
+    player.pomodoro.update_item(item.uid, {"focus": {"playlist": UID}})
 
     data = player.get_state()
 
@@ -147,7 +192,7 @@ def test_player_starts_phase_and_records(player):
     item = player.pomodoro.create_item("晨间")
     player.pomodoro.update_item(
         item.uid,
-        {"focus": {"playlist": UID, "play": True, "order": "shuffle"}},
+        {"focus": {"playlist": UID, "order": "shuffle"}},
     )
 
     started = player.pomodoro_start(item.uid, {})
@@ -189,7 +234,6 @@ def test_player_overrides_do_not_change_the_stored_item(player):
             "background": background.uid,
             "background_mode": "contain",
             "font": "kai",
-            "environment_enabled": True,
         },
     )
 
@@ -200,7 +244,7 @@ def test_player_overrides_do_not_change_the_stored_item(player):
     assert stored.background is None
     assert stored.background_mode == "cover"
     assert stored.font == "system"
-    assert stored.environment_enabled is False
+    assert stored.environment is None
 
 
 def test_player_selecting_a_playlist_leaves_the_pomodoro_detail(player):
@@ -218,8 +262,8 @@ def test_player_applies_the_phase_order_with_the_same_playlist(player):
     player.pomodoro.update_item(
         item.uid,
         {
-            "focus": {"playlist": UID, "play": True, "order": "shuffle"},
-            "rest": {"playlist": UID, "play": True, "order": "list_loop"},
+            "focus": {"playlist": UID, "order": "shuffle"},
+            "rest": {"playlist": UID, "order": "list_loop"},
         },
     )
 
@@ -267,11 +311,10 @@ def test_player_ring_and_environment_urls(player):
     touch_asset(environment.file)
     player.pomodoro.update_item(
         item.uid,
-        {"ring": ring.uid, "environment": environment.uid, "environment_enabled": True},
+        {"ring": ring.uid, "environment": environment.uid},
     )
 
     plan = player.pomodoro_start(item.uid, {})["plan"]
 
     assert plan["ring"]["url"].startswith("http://127.0.0.1:")
     assert plan["environment"]["url"].startswith("http://127.0.0.1:")
-    assert plan["environment_enabled"] is True

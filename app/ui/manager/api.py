@@ -48,7 +48,12 @@ from app.system import ffmpeg, launcher
 from app.system import theme as theme_tool
 from app.system.media_server import MediaServer
 from app.system.single_instance import is_running
-from app.ui.manager.pomodoro_api import PomodoroApiMixin, make_media_hub, make_store
+from app.ui.manager.pomodoro_api import (
+    PomodoroApiMixin,
+    is_pomodoro_selection,
+    make_media_hub,
+    make_store,
+)
 
 SECTIONS = ("overview", "songs", "playlists", "tags", "authors", "pomodoro", "settings")
 RECENT_LIMIT = 5
@@ -153,6 +158,10 @@ class ManagerApi(PomodoroApiMixin):
         with self._lock:
             if section in SECTIONS:
                 self.section = section
+                # 从歌曲 / 歌单切进番茄分区时，选中项还指着别的类型；不换成总览的话
+                # 前端会先画一帧空详情，再被随后那次 select_pomodoro_overview 覆盖。
+                if section == "pomodoro" and not is_pomodoro_selection(self.selection.get("kind")):
+                    self.selection = {"kind": "pomodoro_overview", "uid": ""}
             return self._snapshot()
 
     def select_item(self, kind: str, uid: str) -> dict[str, Any]:

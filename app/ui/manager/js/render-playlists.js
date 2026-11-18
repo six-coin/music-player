@@ -29,16 +29,19 @@ function renderPlaylistList() {
   qs("#playlists-count").textContent = T("playlist.total", { count: total });
 
   if (!items.length) {
-    list.innerHTML = total
-      ? '<li class="row-empty">' + esc(T("playlist.no_match")) + "</li>"
-      : emptyList("playlist", T("playlist.empty"), T("playlist.empty_hint"), {
-          action: "new_playlist",
-          label: T("playlist.new"),
-        });
+    setPaneHTML(
+      list,
+      total
+        ? '<li class="row-empty">' + esc(T("playlist.no_match")) + "</li>"
+        : emptyList("playlist", T("playlist.empty"), T("playlist.empty_hint"), {
+            action: "new_playlist",
+            label: T("playlist.new"),
+          })
+    );
     return;
   }
 
-  list.innerHTML = items
+  const html = items
     .map(function (playlist) {
       const classes = ["song-row"];
       if (state.activeKind === "playlist" && state.active === playlist.uid) {
@@ -59,6 +62,7 @@ function renderPlaylistList() {
       );
     })
     .join("");
+  setPaneHTML(list, html);
 }
 
 function renderPlaylistDetail() {
@@ -67,12 +71,14 @@ function renderPlaylistDetail() {
     state.activeKind === "playlist" && state.active ? playlistByUid(state.active) : null;
 
   if (!playlist) {
-    pane.innerHTML =
+    setPaneHTML(
+      pane,
       '<div class="detail-empty">' +
-      '<svg class="empty-art" viewBox="0 0 24 24" aria-hidden="true">' +
-      '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>' +
-      "<h2>" + esc(T("playlist.no_selection_title")) + "</h2>" +
-      "<p>" + esc(T("playlist.no_selection_hint")) + "</p></div>";
+        '<svg class="empty-art" viewBox="0 0 24 24" aria-hidden="true">' +
+        '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>' +
+        "<h2>" + esc(T("playlist.no_selection_title")) + "</h2>" +
+        "<p>" + esc(T("playlist.no_selection_hint")) + "</p></div>"
+    );
     return;
   }
 
@@ -94,18 +100,20 @@ function renderPlaylistDetail() {
   const content =
     playlist.kind === "manual" ? manualPlaylistCard(playlist) : filterPlaylistCard(playlist);
 
-  pane.innerHTML =
+  setPaneHTML(
+    pane,
     '<header class="detail-head"><div class="detail-title"><h2>' +
-    esc(playlist.title) + "</h2><div class=\"detail-meta\">" + badge +
-    "<span>·</span><span>" + esc(count) + "</span></div></div>" +
-    '<div class="detail-tools">' +
-    (playlist.builtin
-      ? ""
-      : '<button class="btn ghost" data-menu="playlist">' + esc(T("action.more")) + "</button>") +
-    "</div></header>" +
-    '<section class="card">' + nameRow + "</section>" +
-    content +
-    adaptationCard(playlist);
+      esc(playlist.title) + '</h2><div class="detail-meta">' + badge +
+      "<span>·</span><span>" + esc(count) + "</span></div></div>" +
+      '<div class="detail-tools">' +
+      (playlist.builtin
+        ? ""
+        : '<button class="btn ghost" data-menu="playlist">' + esc(T("action.more")) + "</button>") +
+      "</div></header>" +
+      '<section class="card">' + nameRow + "</section>" +
+      content +
+      adaptationCard(playlist)
+  );
 }
 
 /* ---------- 自适应 ---------- */

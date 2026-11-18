@@ -42,7 +42,10 @@ Music Player/
 │  │  ├─ integrity.py                       完整性检查与按类别修复
 │  │  ├─ queue.py                           一轮的播放顺序（洗牌与接缝）
 │  │  ├─ player_session.py                  player 的状态机：当前曲、轮次、pin、命令
-│  │  └─ naming.py                          文件名清洗与「歌名 - 作者」解析
+│  │  ├─ naming.py                          文件名清洗与「歌名 - 作者」解析
+│  │  ├─ pomodoro.py                        番茄钟的读写与全部编辑动作（锁内读改写）
+│  │  ├─ pomodoro_models.py                 番茄钟的数据结构、常量、校验与默认模式
+│  │  └─ pomodoro_media.py                  背景 / 提示音 / 环境音的导入预处理
 │  ├─ version.py                           从 pyproject.toml 读版本
 │  ├─ bootstrap.py                         迁移、首次运行、重启、提示框
 │  ├─ system/
@@ -56,8 +59,9 @@ Music Player/
 │  │  ├─ media_server.py                    带 Range 的本地媒体服务
 │  │  └─ vlc.py                             simple 的播放器适配器
 │  ├─ cli/                                  simple 的界面：console 输入、render 绘制、simple 编排
-│  ├─ ui/manager/                           api.py（JS 桥）+ app.py（窗口）+ index.html + styles.css + js/
+│  ├─ ui/manager/                           api.py + pomodoro_api.py（JS 桥）+ app.py + index.html + styles.css + js/
 │  ├─ ui/player/                            同上，多一个 player.json 的读写
+│  ├─ ui/media.py                           按目录复用本地媒体服务（番茄钟资源走这里）
 │  └─ locales/                              zh-CN.json / en-US.json
 ├─ assets/                                  随程序分发的示例音频
 └─ tests/                                   test_*.py
@@ -72,11 +76,13 @@ Music Player/
 | `ui/manager/js` | `core.js`                                                                       | 全局状态、DOM 选择器、JS 桥、文案、格式化、主题、Toast |
 |                 | `navigation.js`                                                                 | 分区跳转与「当前选中项」                               |
 |                 | `ui-widgets.js`                                                                 | 自绘下拉框、拖拽排序、右键菜单、弹窗                   |
-|                 | `render-*.js`                                                                   | 五个分区与设置页的渲染，`apply()` 是总入口             |
+|                 | `render-*.js`                                                                   | 六个分区与设置页的渲染，`apply()` 是总入口             |
+|                 | `render/actions/events-pomodoro.js`                                             | 番茄分区的列表、详情、导入、内嵌试听                   |
 |                 | `stats.js` / `integrity.js` / `import.js`                                       | 统计抽屉、完整性报告、导入与批量向导                   |
 |                 | `actions-*.js`                                                                  | 用户动作：编辑、删除、换源、批量、试听                 |
 |                 | `events-*.js`                                                                   | 四组事件绑定，`main.js` 里的 `bindEvents()` 汇总       |
 | `ui/player/js`  | `core.js` / `render.js` / `playback.js` / `picker.js` / `events.js` / `main.js` | 基础设施、渲染、播放执行、选歌弹窗、事件、启动         |
+|                 | `pomodoro.js` / `pomodoro-render.js`                                            | 计时层（预备、时段推进、音频）与番茄详情渲染           |
 
 ## 2.5 路径、版本与首次运行
 
@@ -127,6 +133,7 @@ manager.pyw   player.pyw   simple.py          入口
 | `<数据目录>/totals.json`      | 歌曲级总播放次数           | manager、player、simple                 |
 | `<数据目录>/settings.json`    | 设置，六个分节             | manager 写全部，player 只写 `player` 节 |
 | `<数据目录>/player.json`      | 窗口尺寸、队列开合         | player                                  |
+| `<数据目录>/pomodoro.json`    | 番茄钟、时长模式、资源登记、统计、偏好 | manager、player（后者只写时长与偏好） |
 
 **为什么必须分开存：**
 
@@ -135,6 +142,7 @@ manager.pyw   player.pyw   simple.py          入口
 3. **设置单独一份**：三端都读，谁都不该为了读一个音量值去解析整个音乐库。
 4. **`player.json` 独立**：窗口尺寸是 player 私有的界面状态，不该进三端共享的 `settings.json`。
 5. **总播放次数单独一份**：它是全库一份、只受一个总开关控制；混进按歌单分的统计里，清空某个歌单的自适应就会把它一起洗掉。
+6. **番茄钟单独一份**：它和音乐库没有外键关系（歌单只按 uid 引用），资源文件也归它自己管；混进 `settings.json` 会让三端共享的设置文件跟着变重，而混进 `library.json` 又会把「听歌」和「计时」两件事绑在一次写入里。
 
 **路径不存进数据。** 文件位置恒为 `<数据目录>/music/{md5}.{ext}`，由 `paths.music_path()` 推导。这样移动程序目录、改盘符都不会让记录失效。
 
@@ -159,6 +167,9 @@ manager.pyw   player.pyw   simple.py          入口
 | `integrity`      | 检查与按类别修复；深检额外重算 MD5、用 ffprobe 查码率虚标 | 不做二次确认                 |
 | `queue`          | 一轮怎么排（洗牌、接缝、按名排序）                        | 不知道「播到哪」             |
 | `player_session` | 当前歌单、轮次、索引、模式、pin、命令                     | 不读文件、不碰文案与界面     |
+| `pomodoro_models`| 番茄钟的 dataclass、常量、归一化与校验                     | 不读写文件                   |
+| `pomodoro`       | 番茄钟配置与统计的锁内读改写、资源引用与排序               | 不转码、不碰界面             |
+| `pomodoro_media` | 背景 / 提示音 / 环境音的转码、取段、交叉淡化               | 不登记、不写 JSON            |
 | `ui/*/api.py`    | 快照组装、调用翻译、写盘                                  | 不实现队列规则、不做业务校验 |
 | `ui/*/app.py`    | 建窗口、算尺寸、主题落地、关闭保存                        | 不碰业务                     |
 | `js/render-*`    | 把快照画成 DOM                                            | 不决定播哪首、不改业务数据   |
@@ -226,6 +237,27 @@ next / ended / failed
 
 `_advance` 是唯一决定「下一首是谁」的地方。`Load` / `Stop` 命令带单调递增的 `seq`，网页只认 `seq`，所以「拉一次状态」与「点一次下一首」走同一条路，重放安全。
 
+### 6.7 番茄钟
+
+```
+开始 → pomodoro_start(uid, 本次覆盖)
+        → Python 解析时长模式 / 背景 / 提示音 / 环境音 / 两个时段歌单
+        → 返回 plan（含每段的 URL、两个音量、计时器比例、预备秒数）
+      → 网页进入预备（120 s，可跳过）
+      → 预备结束：全屏 + 背景 + 环境音 + 第 1 段
+        → pomodoro_phase(0) 决定这一段放不放、放哪张歌单、第一条命令
+      → 每段结束：先上报时长，再 pomodoro_phase(i+1)
+      → 最后一段结束：完成页，环境音继续，音乐按休息时段的设置
+```
+
+- **计时在网页里跑。** Python 不存「还剩多少秒」，只接收 `pomodoro_report(uid, focus_ms, rest_ms, completed)`：网页每 10 秒上报一次，暂停、切段、退出各补一次，`pagehide` 再补一次。这样休眠、断点、窗口最小化都不会让两边各算一套。
+- **暂停不算时长。** 网页只在「没暂停」时累加 delta，Python 只做加法。
+- **时段音乐走独立的 `PlayerSession`。** 普通播放器的队列、模式、进度都不受影响；退出番茄钟后原来的界面还在原处。
+- **环境音用两个 `<audio>` 接力。** `<audio loop>` 在接缝处会空一拍（编码器延迟 + 元素重新起播），对雨声这类连续底噪特别明显；两个元素提前一个淡化时长交叉淡化，听感上没有断点。
+- **提示音前压低音乐。** 结束前 10 秒音乐渐弱到 12%，提示音播完再渐强；这段时间禁止切歌（`holdTrack`）。
+- **资源导入是任务。** 图片转 PNG、视频转 H.264 MP4（去音轨）、音频取段 + B+A 中点交叉淡化、MP4 抽音轨转 MP3，全部在任务线程里跑，进度走 `poll_task`。
+- **写盘与 `settings.json` 同一套。** 读改写全程持 `msvcrt` 文件锁，落盘走原子替换；manager 改配置与 player 记时长不会互相覆盖。
+
 ## 7. 前后端契约
 
 每个改变状态的方法都返回完整快照，前端整体重绘；前端只保留视图状态（搜索词、多选集合、抽屉开合、概览页签）。
@@ -279,6 +311,8 @@ next / ended / failed
 | 系统     | `browse_import` / `browse_audio` / `open_data_dir` / `open_log_dir` / `run_integrity` / `start_integrity` / `fix_issues` / `launch_player` / `launch_simple`                                                                          | 值或快照                                                      |
 | 试听     | `audition_url`                                                                                                                                                                                                                        | `{ok, url, title, duration_ms}`                               |
 | 任务     | `start_import` / `start_replace_source` / `poll_task` / `cancel_task`                                                                                                                                                                 | `{task_id}` / `{state, done, total, current, errors, result}` |
+| 番茄钟   | manager：`create_pomodoro` / `update_pomodoro` / `rename_pomodoro` / `delete_pomodoro` / `reorder_pomodoros` / `create_duration_mode` / `update_duration_mode` / `delete_duration_mode` / `reorder_duration_modes` / `rename_*` / `delete_background` / `delete_ring` / `delete_environment` / `reorder_backgrounds` / `reorder_rings` / `reorder_environments` / `browse_pomodoro_asset` / `probe_pomodoro_source` / `start_pomodoro_import` / `set_pomodoro_hud_scale` / `select_pomodoro_overview` | 快照或 `{task_id}`                                           |
+|          | player：`select_pomodoro` / `clear_pomodoro` / `pomodoro_start` / `pomodoro_phase` / `pomodoro_music_next` / `pomodoro_music_ended` / `pomodoro_music_failed` / `pomodoro_music_playing` / `pomodoro_report` / `pomodoro_finish` / `pomodoro_set_volumes` / `pomodoro_set_hud_scale` / `set_fullscreen` | `{ok, plan}` / `{ok, command}` / 快照                          |
 | player   | `select_playlist` / `next_track` / `prev_track` / `jump_to` / `track_ended` / `track_failed` / `set_mode` / `pick_loop_song` / `set_playing` / `report_position` / `set_volume` / `set_queue_visible` / `list_songs` / `open_manager` | 快照或 `{"ok"}`                                               |
 
 规则：
@@ -306,6 +340,7 @@ next / ended / failed
 - 深检在库的**副本**上跑（`Library.clone()`），拿到一致的时间点，也不会撞上导入线程正在加歌。
 - 跨线程只传数据。任务线程只更新任务表，前端自己轮询。
 - 网页是音频状态的唯一真相；Python 的 `playing` / `position_ms` 是镜像，只用于恢复与落盘。
+- 番茄钟的计时同样以网页为准：Python 只累加网页报上来的时长，不自己数秒。
 
 ## 9. 错误处理
 
@@ -354,6 +389,8 @@ tests/
 ├─ test_player_session.py   模式、轮次、队列、pin、跳过、缺失
 ├─ test_player_restore.py   启动恢复的六个分支
 ├─ test_player_api.py       快照结构、非法参数、不写库、令牌一致
+├─ test_pomodoro.py         番茄钟模型、统计、资源引用、偏好迁移
+├─ test_pomodoro_api.py     两个窗口的番茄钟接口与时段计划
 ├─ test_api*.py             管理器的快照与编辑接口
 ├─ test_console_keys.py     绑定表到动作的映射
 ├─ test_simple_loop.py / test_simple_render.py   播放循环与方框对齐
@@ -368,7 +405,7 @@ tests/
 - 涉及文件系统一律用 `tmp_path`；`conftest.py` 的 `isolated_media` 把 `assets` 指到临时目录，测试绝不碰真实音频。
 - 系统能力注入假实现（假播放器、假时钟、假按键、假屏幕），测试里不起真实进程、不 sleep。
 - 断言文案时用中文，`fixed_language` fixture 把语言钉在 `zh-CN`。
-- 界面不做自动化，按 `reference.md` 3.13 的清单手工过一遍。
+- 界面不做自动化，按 `reference.md` 3.13 的清单手工过一遍。番茄钟的界面改动另用本机 Edge 跑一遍冒烟（分组、详情、导入弹窗、预备、完成页、退出确认），脚本不进仓库。
 
 ```bash
 uv run pytest
@@ -394,6 +431,9 @@ uv run ruff format --check .
 14. 界面文案不写死：HTML 里是兜底，运行时由 `data-i18n*` 与 `T()` 覆盖。
 15. 总播放次数只受 `common.record_total_plays` 控制：清空自适应（单曲 / 整张歌单 / 全部）不动它，歌单的自适应开关与调试状态也不影响它。
 16. 快捷键只有一种写法（`app/keymap.py` 的规范形式），三端都从这里取默认值、都用它认字符串；界面上展示的 `Ctrl+←` 只是显示，存盘一律是 `Ctrl+ArrowLeft`。
+17. 番茄钟的计时以网页为准，Python 只累加网页报上来的「未暂停时长」；不要在 Python 里自己数秒。
+18. 番茄钟的时段音乐与普通播放器共用一套 `PlayerSession` 接口但互不干扰：退出番茄钟不能改变普通播放器的队列、模式与当前曲。
+19. 番茄钟的「放不放」由引用决定：`focus.playlist` / `rest.playlist` / `environment` 为 `null` 就是不放，不再单独存开关。
 
 ## 13. 偏离标准
 

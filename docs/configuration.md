@@ -438,7 +438,103 @@ simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的
 - 删歌时删掉对应的键；换源时键从旧 md5 搬到新 md5，新键已存在就相加。
 - 文件读不出来时按「没有记录」处理并记日志，不阻断播放。
 
-## 6. `<数据目录>/player.json`
+## 6. `<数据目录>/pomodoro.json`
+
+```json
+{
+    "version": 1,
+    "duration_modes": [
+        {
+            "uid": "6f1c…",
+            "name": "经典番茄",
+            "segments": [25, 5, 25, 5, 25, 5, 25],
+            "created_at": 1730000000,
+            "updated_at": 1730000000
+        }
+    ],
+    "backgrounds": [
+        {
+            "uid": "8a2d…",
+            "name": "海边",
+            "file": "pomodoro/background/8a2d….png",
+            "kind": "image",
+            "duration_ms": 0,
+            "width": 0,
+            "height": 0,
+            "size": 812345,
+            "created_at": 1730000000,
+            "updated_at": 1730000000
+        }
+    ],
+    "rings": [
+        {
+            "uid": "9b3e…",
+            "name": "木鱼",
+            "file": "pomodoro/ring/9b3e….mp3",
+            "ext": "mp3",
+            "duration_ms": 3200,
+            "size": 51234,
+            "created_at": 1730000000,
+            "updated_at": 1730000000
+        }
+    ],
+    "environments": [],
+    "items": [
+        {
+            "uid": "c4f0…",
+            "name": "晨间专注",
+            "description": "",
+            "duration_mode": "6f1c…",
+            "background": "8a2d…",
+            "background_mode": "cover",
+            "focus": { "playlist": "d1a9…", "order": "shuffle" },
+            "rest": { "playlist": null, "order": "list_loop" },
+            "ring": "9b3e…",
+            "environment": null,
+            "font": "system",
+            "created_at": 1730000000,
+            "updated_at": 1730000000
+        }
+    ],
+    "stats": {
+        "total": { "focus_ms": 0, "rest_ms": 0, "sessions": 0, "last_used_at": 0 },
+        "items": {}
+    },
+    "preferences": {
+        "version": 2,
+        "music_volume": 0.5,
+        "environment_volume": 0.35,
+        "hud_scale": 1.0
+    }
+}
+```
+
+一份文件装下番茄钟的全部东西：时长模式、三类资源（背景 / 提示音 / 环境音）的登记、番茄钟定义、累计统计与两个全局音量。
+
+| 字段                   | 类型   | 默认   | 取值与行为                                                                 |
+|------------------------|--------|--------|----------------------------------------------------------------------------|
+| `duration_modes[].segments` | int[] | `[]` | 1–99 段，单段 1–180 分钟；偶数下标是专注、奇数下标是休息。至少保留一个模式 |
+| `backgrounds[].kind`   | str    | `image`| `image`（`.png`）或 `video`（`.mp4`），后缀与类型必须对得上                |
+| `backgrounds[].file`   | str    | —      | 必须是 `pomodoro/background/` 下的相对路径，绝对路径与 `..` 一律拒绝       |
+| `rings[].ext`          | str    | `mp3`  | `mp3` / `ogg`，必须与文件后缀一致                                          |
+| `items[].background_mode` | str | `cover`| `stretch` / `fit_width` / `fit_height` / `contain` / `cover`               |
+| `items[].font`         | str    | `system`| `system` / `hei` / `song` / `kai` / `round` / `mono` / `serif`            |
+| `items[].focus` / `rest` | obj  | `{}`   | 只存 `playlist` 与 `order`；`playlist` 为 `null` 就是这一时段不放音乐      |
+| `items[].environment`  | str?   | `null` | `null` 就是不启用环境音——没有单独的开关                                    |
+| `preferences.music_volume` | float | `0.5` | 0–1，夹取                                                              |
+| `preferences.environment_volume` | float | `0.35` | 0–1，夹取                                                          |
+| `preferences.hud_scale`| float  | `1.0`  | 0.2–5.0，左下角计时器的整体比例；`1.0` 就是 100%                          |
+| `preferences.version`  | int    | `2`    | 偏好版本。缺这个键的旧文件把 `hud_scale` 除以 1.5 再落盘（旧口径以 1.5 为基准） |
+
+**资源文件**放在 `<数据目录>/pomodoro/{background,ring,environment}/`，文件名是资源的 uid，登记表只写相对路径。导入时统一转码：图片 → PNG，视频 → H.264 MP4 且去音轨，音频按需取段 + 中点 B+A 交叉淡化，环境音允许 MP4 抽音轨转 MP3。
+
+**统计只存累计值**（总 / 专注 / 休息秒数、完成次数、最近使用时间），不存会话历史。删番茄钟会删掉它的单项统计，`stats.total` 不动。
+
+**并发写入**：manager 改配置与 player 每 10 秒记时长会同时写这份文件，所以每次修改都在 `msvcrt` 文件锁内重新读盘、合并、再原子替换；启动时用 `load_locked()` 避免两个进程各自生成一套默认时长模式。
+
+**损坏处理**：整份读不出来时备份成 `.bad*`，用空白配置继续（并补出两个默认时长模式），不静默重建、也不让程序打不开。
+
+## 7. `<数据目录>/player.json`
 
 ```json
 {
@@ -459,7 +555,7 @@ simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的
 
 只放「manager 不该看到、也不该覆盖」的界面状态。文件损坏时整份忽略，用默认值。
 
-## 7. 校验时机
+## 8. 校验时机
 
 | 时机          | 检查什么                                  | 失败怎么办                                                           |
 |---------------|-------------------------------------------|----------------------------------------------------------------------|
@@ -469,8 +565,10 @@ simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的
 | 保存库 / 歌单 | 写入前 `normalize()` + `validate()`       | 抛 `DataError`，调用方转成界面提示，不写盘                           |
 | 导入 / 换源   | 后缀白名单、MD5、冲突                     | 单条失败记入错误清单，继续下一条                                     |
 | 读统计        | 文件是对象、`songs` 是对象                | 结构错 → `ConfigError`，该歌单按「无记录」处理                       |
+| 读番茄钟      | 顶层是对象；逐条归一化 + 校验             | 单条跳过并记 warning；整份读不出来就备份成 `.bad*` 后从空白开始      |
+| 番茄钟资源引用 | 引用的 uid 必须还在登记表里               | 悬空引用清成 `null`，时长模式退回第一个可用模式，并立刻落盘          |
 
-## 8. 语言包
+## 9. 语言包
 
 | 项         | 规定                                                                           |
 |------------|--------------------------------------------------------------------------------|
@@ -485,7 +583,7 @@ simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的
 
 新增一种语言：把 `{代码}.json` 放进目录即可，设置页的语言选项由目录扫描得出，**按文件名排序、不对中文特判**，不需要改代码。缺键回退 `en-US`。
 
-## 9. 日志
+## 10. 日志
 
 | 项         | 规定                                                                                                 |
 |------------|------------------------------------------------------------------------------------------------------|
@@ -502,7 +600,7 @@ simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的
 
 「自动清空」不走 loguru 的 `retention`：它只在轮转那一刻触发，日志目录一直没涨到 5 MB 就永远不清。改成启动时扫一遍 `logs\*.log`，按修改时间删；另一个进程正开着的文件删不掉，跳过，下次启动再试。
 
-## 10. `assets/`
+## 11. `assets/`
 
 | 目录                | 内容                           | 删了会怎样                           |
 |---------------------|--------------------------------|--------------------------------------|

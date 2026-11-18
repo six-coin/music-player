@@ -180,7 +180,7 @@ function renderPomodoroNav() {
           "</ul>") +
       "</div>";
   });
-  host.innerHTML = html;
+  setPaneHTML(host, html);
 }
 
 /* ---------- 详情入口 ---------- */
@@ -217,45 +217,45 @@ function renderPomodoroDetail() {
   if (kind !== "pomodoro_audition") stopPomodoroAuditionIfChanged(kind, uid);
 
   if (kind === "pomodoro_overview") {
-    pane.innerHTML = pomodoroOverviewMarkup();
+    setPaneHTML(pane, pomodoroOverviewMarkup());
     return;
   }
   if (kind === "pomodoro" && uid) {
     const item = pomodoroItemByUid(uid);
     if (item) {
-      pane.innerHTML = pomodoroItemMarkup(item);
+      setPaneHTML(pane, pomodoroItemMarkup(item));
       return;
     }
   }
   if (kind === "duration_mode" && uid) {
     const mode = pomodoroModeByUid(uid);
     if (mode) {
-      pane.innerHTML = pomodoroModeMarkup(mode);
+      setPaneHTML(pane, pomodoroModeMarkup(mode));
       return;
     }
   }
   if (kind === "background" && uid) {
     const background = pomodoroBackgroundByUid(uid);
     if (background) {
-      pane.innerHTML = pomodoroBackgroundMarkup(background);
+      setPaneHTML(pane, pomodoroBackgroundMarkup(background));
       return;
     }
   }
   if (kind === "ring" && uid) {
     const ring = pomodoroRingByUid(uid);
     if (ring) {
-      pane.innerHTML = pomodoroAudioMarkup(ring, "ring");
+      setPaneHTML(pane, pomodoroAudioMarkup(ring, "ring"));
       return;
     }
   }
   if (kind === "environment" && uid) {
     const environment = pomodoroEnvironmentByUid(uid);
     if (environment) {
-      pane.innerHTML = pomodoroAudioMarkup(environment, "environment");
+      setPaneHTML(pane, pomodoroAudioMarkup(environment, "environment"));
       return;
     }
   }
-  pane.innerHTML = pomodoroEmptyDetail();
+  setPaneHTML(pane, pomodoroEmptyDetail());
 }
 
 /* ---------- 总览 ---------- */
@@ -377,23 +377,18 @@ function pomoValueOptions(prefix, values) {
   });
 }
 
-function pomoPhaseCard(item, phase, title, hint) {
+/* 一个时段只有「用哪张歌单」和「按什么顺序」：歌单选「无」就是不放，
+   不再单独存一个开关——省掉「开着播放却没选歌单」这种空转状态。 */
+function pomoPhaseCard(item, phase, title) {
   const config = item[phase] || {};
-  const play = !!config.play;
   return (
     '<section class="card"><h3 class="card-title">' + esc(title) + "</h3>" +
-    '<div class="toggle-row"><div class="toggle-body"><div class="toggle-title">' +
-    esc(T("pomodoro.item.play")) + '</div><p class="toggle-hint">' + esc(hint) +
-    '</p></div><button class="switch" type="button" role="switch" data-pomo-phase="' +
-    phase + '" data-pomo-field="play" aria-checked="' + (play ? "true" : "false") +
-    '"><span class="switch-knob"></span></button></div>' +
     pomoField(
       T("pomodoro.item.playlist"),
       pomoSelect(
         'data-pomo-phase="' + phase + '" data-pomo-field="playlist"',
         pomoPlaylistOptions(),
-        config.playlist || "",
-        !play
+        config.playlist || ""
       )
     ) +
     pomoField(
@@ -401,12 +396,31 @@ function pomoPhaseCard(item, phase, title, hint) {
       pomoSelect(
         'data-pomo-phase="' + phase + '" data-pomo-field="order"',
         pomoValueOptions("pomodoro.order", pomodoroOptions().orders || []),
-        config.order || "shuffle",
-        !play
+        config.order || "shuffle"
       )
     ) +
     "</section>"
   );
+}
+
+/* 计时器比例是全局偏好（与播放器共用），100% 为默认大小。 */
+function pomoScaleField() {
+  const preferences = pomodoroData().preferences || {};
+  const percent = Math.round((Number(preferences.hud_scale) || 1) * 100);
+  return pomoField(
+    T("pomodoro.item.hud_scale"),
+    '<div class="pomo-scale-line"><input class="range" id="pomo-hud-scale" type="range" ' +
+      'min="20" max="500" step="5" value="' + percent + '" style="--fill: ' +
+      pomoScaleFill(percent) + '%" data-pomo-hud-scale="1">' +
+      '<span class="volume-value" id="pomo-hud-scale-value">' + percent + "%</span></div>",
+    T("pomodoro.item.hud_scale_hint")
+  );
+}
+
+/* 滑杆的填充按 (值 - 最小值) / 区间 算：min 不是 0 时不能直接用百分比。 */
+function pomoScaleFill(percent) {
+  const ratio = (Number(percent) - 20) / 480;
+  return Math.round(Math.min(1, Math.max(0, ratio)) * 1000) / 10;
 }
 
 function pomodoroItemMarkup(item) {
@@ -474,8 +488,8 @@ function pomodoroItemMarkup(item) {
         "</div>"
       : "") +
     "</section>" +
-    pomoPhaseCard(item, "focus", T("pomodoro.item.focus_section"), T("pomodoro.item.focus_hint")) +
-    pomoPhaseCard(item, "rest", T("pomodoro.item.rest_section"), T("pomodoro.item.rest_hint")) +
+    pomoPhaseCard(item, "focus", T("pomodoro.item.focus_section")) +
+    pomoPhaseCard(item, "rest", T("pomodoro.item.rest_section")) +
     '<section class="card"><h3 class="card-title">' + esc(T("pomodoro.item.sound")) + "</h3>" +
     pomoField(
       T("pomodoro.item.ring"),
@@ -487,15 +501,9 @@ function pomodoroItemMarkup(item) {
         'data-pomo-field="environment"',
         pomoEnvironmentOptions(),
         item.environment || ""
-      )
+      ),
+      T("pomodoro.item.environment_hint")
     ) +
-    '<div class="toggle-row"><div class="toggle-body"><div class="toggle-title">' +
-    esc(T("pomodoro.item.environment_enabled")) + '</div><p class="toggle-hint">' +
-    esc(T("pomodoro.item.environment_hint")) +
-    '</p></div><button class="switch" type="button" role="switch" ' +
-    'data-pomo-field="environment_enabled" aria-checked="' +
-    (item.environment_enabled ? "true" : "false") +
-    '"><span class="switch-knob"></span></button></div>' +
     "</section>" +
     '<section class="card"><h3 class="card-title">' + esc(T("pomodoro.item.appearance")) +
     "</h3>" +
@@ -507,6 +515,7 @@ function pomodoroItemMarkup(item) {
         item.font || "system"
       )
     ) +
+    pomoScaleField() +
     "</section>" +
     pomodoroStatsCard(item.stats)
   );

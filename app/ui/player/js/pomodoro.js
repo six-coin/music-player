@@ -35,6 +35,7 @@ const pomo = {
   lastAudioTick: 0,
   pendingAutoplay: false,
   finishSnapshot: null,
+  leaving: false,
 };
 
 const POMO_FONTS = {
@@ -51,12 +52,115 @@ function pomoAudio() {
   return qs("#pomo-audio");
 }
 
-function pomoAmbient() {
-  return qs("#pomo-ambient");
-}
-
 function pomoRing() {
   return qs("#pomo-ring");
+}
+
+/* 环境音：两个 <audio> 交替接力。
+   <audio loop> 在接缝处会空一拍（MP3 的编码器延迟 + 元素重新起播），对雨声这种
+   连续底噪特别明显。这里提前一个淡化时长把备用元素从 0 播起来，两边交叉淡化，
+   听感上就没有断点了。 */
+const AMBIENT_FADE_MS = 320;
+
+const ambient = {
+  a: null,
+  b: null,
+  active: null,
+  timer: null,
+  volume: 0.35,
+  playing: false,
+  url: "",
+};
+
+function ambientElements() {
+  if (!ambient.a) {
+    ambient.a = qs("#pomo-ambient");
+    ambient.b = qs("#pomo-ambient-b");
+  }
+  return [ambient.a, ambient.b];
+}
+
+function ambientStart(url, volume) {
+  const pair = ambientElements();
+  ambientStop();
+  ambient.volume = volume;
+  ambient.url = url;
+  if (!pair[0] || !pair[1] || !url) return;
+  pair.forEach(function (element) {
+    element.src = url;
+    element.loop = false; // 循环由这里接管
+    element.volume = 0;
+  });
+  pair[0].currentTime = 0;
+  ambient.active = pair[0];
+  ambient.playing = true;
+  pair[0].play().catch(function () {});
+  fadeAudio(pair[0], volume, 1200);
+  ambient.timer = window.setInterval(ambientWatch, 80);
+}
+
+function ambientWatch() {
+  const element = ambient.active;
+  if (!ambient.playing || !element) return;
+  const duration = element.duration;
+  if (!duration || !isFinite(duration)) return;
+  const fade = Math.min(AMBIENT_FADE_MS / 1000, duration / 3);
+  if (duration - element.currentTime > fade + 0.08) return;
+  ambientHandoff(fade);
+}
+
+function ambientHandoff(fade) {
+  const pair = ambientElements();
+  const current = ambient.active;
+  const next = current === pair[0] ? pair[1] : pair[0];
+  if (!next) return;
+  ambient.active = next;
+  next.currentTime = 0;
+  next.volume = 0;
+  next.play().catch(function () {});
+  fadeAudio(next, ambient.volume, fade * 1000);
+  fadeAudio(current, 0, fade * 1000);
+  window.setTimeout(function () {
+    if (ambient.active === current) return;
+    current.dataset.fadeToken = String((Number(current.dataset.fadeToken) || 0) + 1);
+    current.pause();
+    current.currentTime = 0;
+  }, fade * 1000 + 80);
+}
+
+function ambientPause() {
+  ambient.playing = false;
+  ambientElements().forEach(function (element) {
+    if (element) fadeOutAndPause(element);
+  });
+}
+
+function ambientResume() {
+  const element = ambient.active;
+  if (!element || !ambient.url) return;
+  ambient.playing = true;
+  playAndFade(element, ambient.volume, 600);
+}
+
+function ambientSetVolume(value) {
+  ambient.volume = value;
+  if (ambient.active) ambient.active.volume = value;
+}
+
+function ambientStop() {
+  window.clearInterval(ambient.timer);
+  ambient.timer = null;
+  ambient.playing = false;
+  ambient.active = null;
+  ambient.url = "";
+  ambientElements().forEach(function (element) {
+    if (!element) return;
+    element.dataset.fadeToken = String((Number(element.dataset.fadeToken) || 0) + 1);
+    element.pause();
+    element.removeAttribute("src");
+    element.load();
+    element.volume = 0;
+  });
 }
 
 function pomoBackgroundVideo() {
@@ -111,10 +215,14 @@ async function startPomodoro() {
 
 function openPomodoroStage() {
   const stage = qs("#pomo-stage");
+  pomo.leaving = false;
+  stage.classList.remove("is-leaving");
   stage.hidden = false;
   document.body.classList.add("pomo-mode");
   qs("#pomo-done").hidden = true;
+  qs("#pomo-done").classList.remove("is-closing");
   qs("#pomo-confirm").hidden = true;
+  qs("#pomo-confirm").classList.remove("is-closing");
   qs("#pomo-prep").hidden = false;
   qs(".pomo-hud").hidden = true;
   qs("#pomo-panel").classList.remove("is-visible");
@@ -127,7 +235,7 @@ function openPomodoroStage() {
   applyPomodoroFont(pomo.plan.font);
   qs("#pomo-stage").style.setProperty(
     "--pomo-hud-scale",
-    String(Number(pomo.plan.hud_scale) || 1.5)
+    String(Number(pomo.plan.hud_scale) || 1)
   );
   syncPomodoroVolumes();
   pomo.active = true;
@@ -363,7 +471,7 @@ function pausePomodoro() {
   pomo.remaining = Math.max(0, pomo.deadline - Date.now());
   reportPomodoroStats();
   fadeOutAndPause(pomoAudio());
-  fadeOutAndPause(pomoAmbient());
+  ambientPause();
   const video = pomoBackgroundVideo();
   if (video) video.pause();
   updatePomodoroPauseButton();
@@ -375,9 +483,7 @@ function resumePomodoro() {
   pomo.deadline = Date.now() + pomo.remaining;
   pomo.lastTick = Date.now();
   if (pomo.musicActive) playAndFade(pomoAudio(), pomo.musicVolume, 600);
-  if (pomo.plan && pomo.plan.environment_enabled) {
-    playAndFade(pomoAmbient(), pomo.environmentVolume, 600);
-  }
+  if (pomo.plan && pomo.plan.environment) ambientResume();
   const video = pomoBackgroundVideo();
   if (video) video.play().catch(function () {});
   updatePomodoroPauseButton();
@@ -425,14 +531,9 @@ function renderPomodoroBackground(plan) {
 }
 
 function startPomodoroAmbient() {
-  const ambient = pomoAmbient();
   const plan = pomo.plan;
-  if (!ambient || !plan || !plan.environment_enabled || !plan.environment) return;
-  ambient.src = plan.environment.url;
-  ambient.loop = true;
-  ambient.volume = 0;
-  ambient.play().catch(function () {});
-  fadeAudio(ambient, pomo.environmentVolume, 1200);
+  if (!plan || !plan.environment || !plan.environment.url) return;
+  ambientStart(plan.environment.url, pomo.environmentVolume);
 }
 
 function applyPomodoroFont(font) {
@@ -463,8 +564,7 @@ function setPomodoroMusicVolume(value) {
 
 function setPomodoroEnvironmentVolume(value) {
   pomo.environmentVolume = Math.min(1, Math.max(0, value));
-  const ambient = pomoAmbient();
-  if (ambient) ambient.volume = pomo.environmentVolume;
+  ambientSetVolume(pomo.environmentVolume);
   qs("#pomo-environment-volume-value").textContent =
     Math.round(pomo.environmentVolume * 100) + "%";
   setFill(qs("#pomo-environment-volume"), pomo.environmentVolume);
@@ -531,7 +631,7 @@ function finishPomodoro(completed) {
     }
   });
   renderPomodoroDone();
-  qs("#pomo-done").hidden = false;
+  showPomodoroLayer("#pomo-done");
 }
 
 function renderPomodoroDone() {
@@ -556,13 +656,34 @@ function reportPomodoroStats(completed) {
   call("pomodoro_report", pomo.uid, focus, rest, !!completed);
 }
 
+function showPomodoroLayer(selector) {
+  const node = qs(selector);
+  if (!node) return;
+  node.classList.remove("is-closing");
+  node.hidden = false;
+}
+
+function hidePomodoroLayer(selector, done) {
+  const node = qs(selector);
+  if (!node || node.hidden) {
+    if (done) done();
+    return;
+  }
+  node.classList.add("is-closing");
+  window.setTimeout(function () {
+    node.hidden = true;
+    node.classList.remove("is-closing");
+    if (done) done();
+  }, 170);
+}
+
 function requestExitPomodoro() {
   if (!pomo.active) return;
-  qs("#pomo-confirm").hidden = false;
+  showPomodoroLayer("#pomo-confirm");
 }
 
 async function confirmExitPomodoro() {
-  qs("#pomo-confirm").hidden = true;
+  hidePomodoroLayer("#pomo-confirm");
   reportPomodoroStats(false);
   stopAllPomodoroAudio();
   const data = await call("pomodoro_finish", pomo.uid);
@@ -571,6 +692,7 @@ async function confirmExitPomodoro() {
 }
 
 async function closePomodoroDone() {
+  hidePomodoroLayer("#pomo-done");
   stopAllPomodoroAudio();
   const data = await call("pomodoro_finish", pomo.uid);
   await setPomodoroFullscreen(false);
@@ -578,6 +700,8 @@ async function closePomodoroDone() {
 }
 
 function leavePomodoroStage(data) {
+  if (pomo.leaving) return; // 连点两下「退出」不该收两次尾
+  pomo.leaving = true;
   stopPomodoroTicker();
   stopAllPomodoroAudio();
   pomo.active = false;
@@ -588,16 +712,24 @@ function leavePomodoroStage(data) {
   pomo.plan = null;
   pomo.uid = null;
   pomo.pendingAfterRing = null;
-  qs("#pomo-stage").hidden = true;
-  qs("#pomo-done").hidden = true;
-  qs("#pomo-confirm").hidden = true;
-  document.body.classList.remove("pomo-mode");
-  if (data) apply(data);
-  else renderPomodoroView();
+  // 淡出期间计时层还盖在窗口上，露出的是底下的播放器：等它透明了再真正收起，
+  // 否则会先闪一下主界面再被盖住。
+  const stage = qs("#pomo-stage");
+  stage.classList.add("is-leaving");
+  window.setTimeout(function () {
+    stage.hidden = true;
+    stage.classList.remove("is-leaving");
+    qs("#pomo-done").hidden = true;
+    qs("#pomo-confirm").hidden = true;
+    document.body.classList.remove("pomo-mode");
+    if (data) apply(data);
+    else renderPomodoroView();
+  }, 220);
 }
 
 function stopAllPomodoroAudio() {
-  [pomoAudio(), pomoAmbient(), pomoRing()].forEach(function (element) {
+  ambientStop();
+  [pomoAudio(), pomoRing()].forEach(function (element) {
     if (!element) return;
     element.dataset.fadeToken = String((Number(element.dataset.fadeToken) || 0) + 1);
     element.pause();
@@ -650,7 +782,7 @@ function bindPomodoroStageEvents() {
   qs("#pomo-fullscreen").addEventListener("click", togglePomodoroFullscreen);
   qs("#pomo-exit").addEventListener("click", requestExitPomodoro);
   qs("#pomo-exit-cancel").addEventListener("click", function () {
-    qs("#pomo-confirm").hidden = true;
+    hidePomodoroLayer("#pomo-confirm");
   });
   qs("#pomo-exit-confirm").addEventListener("click", confirmExitPomodoro);
   qs("#pomo-done-close").addEventListener("click", closePomodoroDone);

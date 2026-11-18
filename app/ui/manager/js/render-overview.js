@@ -162,7 +162,11 @@ function emptyList(kind, title, hint, action) {
 /* ---------- 总渲染 ---------- */
 
 function apply(data) {
-  if (!data) return;
+  // 只有完整快照才整页重绘：接口出错时可能只回一个 {ok:false}，
+  // 拿它覆盖 state.data 会把当前分区一起抹掉。
+  if (!data || !data.section) return;
+  const view = captureView();
+  const previousItem = state.active;
   const previousLanguage = state.data ? state.data.language : null;
   state.data = data;
 
@@ -201,6 +205,9 @@ function apply(data) {
   else if (data.section === "settings") renderSettings();
 
   if (state.drawer) refreshDrawer();
+
+  // 换了一个条目时不要把焦点搬回原处：那个选择器多半在新条目里也成立。
+  restoreView(view, previousItem === state.active);
 
   if (data.message) toast(data.message, data.ok !== false);
 }

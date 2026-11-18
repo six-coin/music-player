@@ -3311,3 +3311,35 @@ input[type="checkbox"]:disabled {
 #pomo-trim-options > .detail-hint {
   margin-bottom: 10px;
 }
+
+/* 卡片标题下的第一块内容如果是自定义区块（不是自带 padding-top 的 .field-row），
+   要自己补上与别处一致的间距，否则会紧贴着标题下面那条线。 */
+.card
+  > :is(.card-title, .card-tools, .card-heading)
+  + :is(.pomo-audition-host, .pomo-seg-list, .pomo-stat-grid, .pomo-count-grid) {
+  padding-top: 10px;
+}
+
+/* 计时器比例的滑杆行：与音量行同款，但在详情里要能伸缩。 */
+.pomo-scale-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 280px;
+}
+
+.pomo-scale-line .range {
+  flex: 1;
+}
+
+/* 计时器比例的滑杆要有填充，才能一眼看出当前值在区间里的位置。 */
+.pomo-scale-line .range {
+  background: linear-gradient(
+    to right,
+    var(--blue) 0,
+    var(--blue) var(--fill, 0%),
+    var(--surface-muted) var(--fill, 0%),
+    var(--surface-muted) 100%
+  );
+}

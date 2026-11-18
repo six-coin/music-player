@@ -526,23 +526,45 @@ input:focus-visible {
   color: var(--muted);
 }
 
+.icon-btn.play {
+  position: relative;
+}
+
+/* 播放 / 暂停两个图标叠在一起做淡入淡出：display 切换没法过渡，会「啪」地跳一下。 */
 .icon-btn.play .icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 22px;
   height: 22px;
-  transition: transform 0.12s var(--ease);
+  margin: -11px 0 0 -11px;
+  transition:
+    opacity 0.18s var(--ease),
+    transform 0.18s var(--ease);
 }
 
-.icon-btn.play:active:not(:disabled) .icon {
-  transform: scale(0.88);
+.icon-btn.play .icon-play {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
 }
 
-.icon-btn.play .icon-pause,
+.icon-btn.play .icon-pause {
+  opacity: 0;
+  transform: scale(0.55) rotate(-30deg);
+}
+
 .icon-btn.play[data-playing="true"] .icon-play {
-  display: none;
+  opacity: 0;
+  transform: scale(0.55) rotate(30deg);
 }
 
 .icon-btn.play[data-playing="true"] .icon-pause {
-  display: block;
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+}
+
+.icon-btn.play:active:not(:disabled) .icon {
+  transform: scale(0.86);
 }
 
 .modes {
@@ -1361,6 +1383,34 @@ body.pomo-mode {
   background: #0b0d10;
   color: #ffffff;
   font-family: var(--pomo-font, "Microsoft YaHei", "Segoe UI", sans-serif);
+  animation: pomo-stage-in 0.32s var(--ease);
+}
+
+.pomo-stage.is-leaving {
+  animation: pomo-stage-out 0.22s var(--ease) forwards;
+  pointer-events: none;
+}
+
+@keyframes pomo-stage-in {
+  from {
+    opacity: 0;
+    transform: scale(1.015);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pomo-stage-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.01);
+  }
 }
 
 .pomo-bg {
@@ -1382,6 +1432,7 @@ body.pomo-mode {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  animation: fade-in 0.55s var(--ease);
 }
 
 .pomo-bg[data-mode="cover"] .pomo-bg-media {
@@ -1434,8 +1485,13 @@ body.pomo-mode {
   gap: 2px;
   text-shadow: 0 2px 22px rgba(0, 0, 0, 0.5);
   pointer-events: none;
-  transform: scale(var(--pomo-hud-scale, 1.5));
+  /* --pomo-hud-scale 是用户设的百分比（1 = 100%）；乘 1.5 是设计基准：
+     100% 对应最初那版「放大 50%」的观感，所以默认值改成 1 时不用动字号。 */
+  transform: scale(calc(var(--pomo-hud-scale, 1) * 1.5));
   transform-origin: bottom left;
+  transition: transform 0.2s var(--ease);
+  /* 预备结束、HUD 第一次出现时淡进来；只动 opacity，不碰上面那个 scale。 */
+  animation: fade-in 0.45s var(--ease);
 }
 
 .pomo-hud-phase {
@@ -1610,6 +1666,11 @@ body.pomo-mode {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.28);
+  animation: pomo-layer-in 0.2s var(--ease);
+}
+
+.pomo-done.is-closing {
+  animation: pomo-layer-out 0.17s var(--ease) forwards;
 }
 
 .pomo-done-card {
@@ -1621,6 +1682,11 @@ body.pomo-mode {
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
   text-align: center;
   backdrop-filter: blur(16px);
+  animation: pomo-card-in 0.26s var(--ease);
+}
+
+.pomo-done.is-closing .pomo-done-card {
+  animation: pomo-card-out 0.17s var(--ease) forwards;
 }
 
 .pomo-done-card h2 {
@@ -1663,6 +1729,11 @@ body.pomo-mode {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.46);
+  animation: pomo-layer-in 0.18s var(--ease);
+}
+
+.pomo-confirm.is-closing {
+  animation: pomo-layer-out 0.17s var(--ease) forwards;
 }
 
 .pomo-confirm-card {
@@ -1672,6 +1743,51 @@ body.pomo-mode {
   background: var(--panel);
   color: var(--text);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+  animation: pomo-card-in 0.24s var(--ease);
+}
+
+.pomo-confirm.is-closing .pomo-confirm-card {
+  animation: pomo-card-out 0.17s var(--ease) forwards;
+}
+
+@keyframes pomo-layer-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pomo-layer-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes pomo-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pomo-card-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
 }
 
 .pomo-confirm-card h2 {
@@ -1752,4 +1868,91 @@ body.pomo-mode {
 
 .pomo-view-in {
   animation: pomo-view-in 0.24s var(--ease);
+}
+
+/* ---------- 控件反馈 ----------
+   统一的「按下去有回应」：列表行、模式按钮、面板按钮都轻微缩一下，
+   避免点完没有任何反馈、只能靠结果变化去猜。 */
+
+.playlist-item,
+.queue-item,
+.picker-item {
+  transition:
+    background 0.14s var(--ease),
+    color 0.14s var(--ease),
+    transform 0.12s var(--ease);
+}
+
+.playlist-item:active:not(.is-locked),
+.queue-item:active,
+.picker-item:active {
+  transform: scale(0.985);
+}
+
+.mode-btn {
+  transition:
+    background 0.14s var(--ease),
+    color 0.14s var(--ease),
+    transform 0.12s var(--ease);
+}
+
+.mode-btn:active {
+  transform: scale(0.88);
+}
+
+.pomo-action {
+  transition:
+    background 0.14s var(--ease),
+    border-color 0.14s var(--ease),
+    transform 0.12s var(--ease);
+}
+
+.pomo-action:active {
+  transform: scale(0.96);
+}
+
+.pomo-select {
+  transition:
+    border-color 0.14s var(--ease),
+    background 0.14s var(--ease),
+    box-shadow 0.14s var(--ease);
+}
+
+.pomo-option {
+  transition: background 0.12s var(--ease);
+}
+
+.btn.primary:hover:not(:disabled) {
+  box-shadow: 0 8px 18px -12px var(--blue-dark);
+}
+
+/* 番茄详情里的行：鼠标扫过时给一点点底色，说明这一行是可以操作的。 */
+.pomo-detail-row {
+  border-radius: var(--radius);
+  transition: background 0.14s var(--ease);
+}
+
+.pomo-detail-row:hover {
+  background: var(--surface-hover);
+}
+
+.pomo-detail-row {
+  padding-left: 6px;
+  padding-right: 6px;
+  margin-left: -6px;
+  margin-right: -6px;
+}
+
+/* 模式按钮切换时弹一下，让人知道点中了哪个。 */
+.mode-btn.is-active {
+  animation: mode-pop 0.22s var(--ease);
+}
+
+@keyframes mode-pop {
+  from {
+    transform: scale(0.82);
+  }
+  to {
+    transform: none;
+  }
 }

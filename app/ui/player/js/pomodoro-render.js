@@ -210,34 +210,17 @@ function pomoDetailRow(label, control) {
   );
 }
 
-function pomoSwitch(attr, on, label) {
-  return (
-    '<button class="pomo-switch" type="button" role="switch" ' + attr +
-    ' aria-checked="' + (on ? "true" : "false") + '" aria-label="' + esc(label) +
-    '"><span class="pomo-switch-knob"></span></button>'
-  );
-}
-
+/* 一个时段只有「用哪张歌单」和「按什么顺序」：歌单选「无」就是这个时段不放。 */
 function pomoPhaseBlock(selected, phase, title) {
   const config = selected[phase] || {};
-  const play = pomoPhaseValue(phase, "play", !!config.play);
   return (
     '<div class="pomo-detail-section"><h3>' + esc(title) + "</h3>" +
-    pomoDetailRow(
-      T("pomodoro.item.play"),
-      pomoSwitch(
-        'data-pomo-phase="' + phase + '" data-pomo-override="play"',
-        play,
-        T("pomodoro.item.play")
-      )
-    ) +
     pomoDetailRow(
       T("pomodoro.item.playlist"),
       pomoSelect(
         'data-pomo-phase="' + phase + '" data-pomo-override="playlist"',
         pomoPlaylistOptions(),
-        pomoPhaseValue(phase, "playlist", config.playlist || ""),
-        !play
+        pomoPhaseValue(phase, "playlist", config.playlist || "")
       )
     ) +
     pomoDetailRow(
@@ -245,25 +228,32 @@ function pomoPhaseBlock(selected, phase, title) {
       pomoSelect(
         'data-pomo-phase="' + phase + '" data-pomo-override="order"',
         pomoValueOptions("pomodoro.order", pomodoroOptions().orders || []),
-        pomoPhaseValue(phase, "order", config.order || "shuffle"),
-        !play
+        pomoPhaseValue(phase, "order", config.order || "shuffle")
       )
     ) +
     "</div>"
   );
 }
 
-/* 左下角计时器的整体比例。语言文件这一轮不写，标签先固定中文。 */
+/* 左下角计时器的整体比例：100% 就是默认大小，范围 20%–500%。 */
 function pomoScaleRow() {
-  const scale = Number(pomodoroPreferences().hud_scale) || 1.5;
+  const scale = Number(pomodoroPreferences().hud_scale) || 1;
   const percent = Math.round(scale * 100);
   return (
-    '<div class="pomo-detail-row"><span class="pomo-detail-label">计时器大小</span>' +
+    '<div class="pomo-detail-row"><span class="pomo-detail-label">' +
+    esc(T("pomodoro.item.hud_scale")) + '</span>' +
     '<div class="pomo-scale"><input class="slider" id="pomo-hud-scale" type="range" ' +
-    'min="80" max="250" step="5" value="' + percent + '">' +
+    'min="20" max="500" step="5" value="' + percent + '" style="--fill: ' +
+    pomoScaleFill(percent) + '%">' +
     '<span class="pomo-scale-value" id="pomo-hud-scale-value">' + percent +
     "%</span></div></div>"
   );
+}
+
+/* 滑杆的填充按 (值 - 最小值) / 区间 算：min 不是 0 时不能直接用百分比。 */
+function pomoScaleFill(percent) {
+  const ratio = (Number(percent) - 20) / 480;
+  return Math.round(Math.min(1, Math.max(0, ratio)) * 1000) / 10;
 }
 
 function pomodoroDetailMarkup(selected) {
@@ -318,14 +308,6 @@ function pomodoroDetailMarkup(selected) {
         'data-pomo-override="environment"',
         pomoAssetOptions(pomodoroOptions().environments),
         pomoOverrideValue("environment", selected.environment || "")
-      )
-    ) +
-    pomoDetailRow(
-      T("pomodoro.item.environment_enabled"),
-      pomoSwitch(
-        'data-pomo-override="environment_enabled"',
-        pomoOverrideValue("environment_enabled", !!selected.environment_enabled),
-        T("pomodoro.item.environment_enabled")
       )
     ) +
     "</div>" +
@@ -396,19 +378,13 @@ function pomoOverridesPayload() {
     background_mode: pomoOverrideValue("background_mode", selected.background_mode),
     ring: pomoOverrideValue("ring", selected.ring || ""),
     environment: pomoOverrideValue("environment", selected.environment || ""),
-    environment_enabled: pomoOverrideValue(
-      "environment_enabled",
-      !!selected.environment_enabled
-    ),
     font: pomoOverrideValue("font", selected.font),
     focus: {
       playlist: pomoPhaseValue("focus", "playlist", selected.focus.playlist || ""),
-      play: pomoPhaseValue("focus", "play", !!selected.focus.play),
       order: pomoPhaseValue("focus", "order", selected.focus.order),
     },
     rest: {
       playlist: pomoPhaseValue("rest", "playlist", selected.rest.playlist || ""),
-      play: pomoPhaseValue("rest", "play", !!selected.rest.play),
       order: pomoPhaseValue("rest", "order", selected.rest.order),
     },
   };

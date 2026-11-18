@@ -210,7 +210,9 @@
 
   <audio id="audio" preload="metadata"></audio>
   <audio id="pomo-audio" preload="metadata"></audio>
-  <audio id="pomo-ambient" loop preload="metadata"></audio>
+  <!-- 环境音用两个元素接力播放：loop 属性在接缝处会空一拍，双元素交叉淡化才连得上。 -->
+  <audio id="pomo-ambient" preload="metadata"></audio>
+  <audio id="pomo-ambient-b" preload="metadata"></audio>
   <audio id="pomo-ring" preload="auto"></audio>
   <!-- 没有构建步骤：按职责拆成多个普通脚本，共享全局作用域，顺序见 docs/architecture.md -->
   <script src="js/core.js"></script>

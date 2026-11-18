@@ -35,10 +35,17 @@ AUDIO_EXTS = ("mp3", "ogg")
 
 VOLUME_DEFAULT = {"music": 0.5, "environment": 0.35}
 
-#: 左下角计时器的整体缩放。默认 1.5，比最初那版大 50%。
-HUD_SCALE_DEFAULT = 1.5
-HUD_SCALE_MIN = 0.5
-HUD_SCALE_MAX = 3.0
+#: 左下角计时器的整体缩放。1.0 就是「基准大小」，界面上的百分比直接对应用户
+#: 看到的字号比例；样式表里再乘一个基准系数，所以改这里的默认值会同时影响
+#: 老配置的迁移（见 ``PREFERENCES_VERSION``）。
+HUD_SCALE_DEFAULT = 1.0
+HUD_SCALE_MIN = 0.2
+HUD_SCALE_MAX = 5.0
+
+#: 偏好设置的版本。第 2 版把 ``hud_scale`` 的基准从 1.5 改成 1.0：
+#: 没有版本号的旧文件里存的是「相对旧基准的倍数」，读进来要除以 1.5。
+PREFERENCES_VERSION = 2
+LEGACY_HUD_SCALE_BASE = 1.5
 
 
 def _now() -> int:
@@ -286,15 +293,17 @@ class AudioAsset:
 
 @dataclass(slots=True)
 class PhaseAudio:
-    """一个时段的音乐设置：用哪张歌单、放不放、按什么顺序。"""
+    """一个时段的音乐设置：用哪张歌单、按什么顺序。
+
+    「放不放」不再单独存：选了歌单就放，选「无」就是不放。少一个开关，
+    也就少一种「开着播放但没选歌单」的空转状态。
+    """
 
     playlist: str | None = None
-    play: bool = True
     order: str = "shuffle"
 
     def normalize(self) -> None:
         self.playlist = (self.playlist or "").strip() or None
-        self.play = bool(self.play)
         self.order = (self.order or "shuffle").strip().lower()
 
     def validate(self) -> None:
@@ -304,7 +313,7 @@ class PhaseAudio:
             raise DataError(f"播放顺序不合法：{self.order}")
 
     def to_dict(self) -> dict[str, Any]:
-        return {"playlist": self.playlist, "play": self.play, "order": self.order}
+        return {"playlist": self.playlist, "order": self.order}
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any] | None) -> PhaseAudio:
@@ -312,7 +321,6 @@ class PhaseAudio:
             return cls()
         return cls(
             playlist=_uid_or_none(raw.get("playlist"), "歌单标识"),
-            play=bool(raw.get("play", True)),
             order=_text(raw.get("order"), "播放顺序") or "shuffle",
         )
 
@@ -325,14 +333,18 @@ class Pomodoro:
     duration_mode: str = ""
     background: str | None = None
     background_mode: str = "cover"
-    focus: PhaseAudio = field(default_factory=lambda: PhaseAudio(play=True))
-    rest: PhaseAudio = field(default_factory=lambda: PhaseAudio(play=False))
+    focus: PhaseAudio = field(default_factory=PhaseAudio)
+    rest: PhaseAudio = field(default_factory=PhaseAudio)
     ring: str | None = None
     environment: str | None = None
-    environment_enabled: bool = False
     font: str = "system"
     created_at: int = 0
     updated_at: int = 0
+
+    @property
+    def environment_enabled(self) -> bool:
+        """环境音没有单独的开关：选了文件就一直在，选「无」就是不启用。"""
+        return self.environment is not None
 
     def normalize(self) -> None:
         self.name = self.name.strip()
@@ -375,7 +387,6 @@ class Pomodoro:
             "rest": self.rest.to_dict(),
             "ring": self.ring,
             "environment": self.environment,
-            "environment_enabled": self.environment_enabled,
             "font": self.font,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -394,7 +405,6 @@ class Pomodoro:
             rest=PhaseAudio.from_dict(raw.get("rest")),
             ring=_uid_or_none(raw.get("ring"), "提示音标识"),
             environment=_uid_or_none(raw.get("environment"), "环境音标识"),
-            environment_enabled=bool(raw.get("environment_enabled", False)),
             font=_text(raw.get("font"), "字体") or "system",
             created_at=_integer(raw.get("created_at"), "创建时间"),
             updated_at=_integer(raw.get("updated_at"), "修改时间"),
@@ -492,6 +502,5 @@ def _repair_references(
             changed = True
         if item.environment is not None and item.environment not in environments:
             item.environment = None
-            item.environment_enabled = False
             changed = True
     return changed

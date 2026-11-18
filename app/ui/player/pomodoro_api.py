@@ -156,7 +156,6 @@ class PomodoroApiMixin:
             "ring_url": self._pomodoro_asset_url(ring.file) if ring else "",
             "environment": item.environment,
             "environment_url": (self._pomodoro_asset_url(environment.file) if environment else ""),
-            "environment_enabled": item.environment_enabled,
             "font": item.font,
             "stats": self._pomo_stats(item.uid),
         }
@@ -241,7 +240,7 @@ class PomodoroApiMixin:
             phase = "focus" if phase_index % 2 == 0 else "rest"
             config = self._phase_config(phase, overrides if isinstance(overrides, dict) else {})
             self._pomo_phase = phase_index
-            if not config["play"] or not config["playlist"]:
+            if not config["playlist"]:
                 return {"ok": True, "phase": phase, "play": False}
             playlist_uid = config["playlist"]
             if self._pomo_session.mode != config["order"]:
@@ -260,7 +259,7 @@ class PomodoroApiMixin:
 
     def _phase_config(self, phase: str, overrides: dict[str, Any]) -> dict[str, Any]:
         plan = self._pomo_plan or {}
-        base = plan.get(phase) or {"play": False, "playlist": None, "order": "shuffle"}
+        base = plan.get(phase) or {"playlist": None, "order": "shuffle"}
         raw = overrides.get(phase)
         if not isinstance(raw, dict):
             return base
@@ -271,11 +270,10 @@ class PomodoroApiMixin:
                 playlist = None
             elif isinstance(value, str) and value in self.playlists.items:
                 playlist = value
-        play = bool(raw.get("play", base.get("play", False)))
         order = raw.get("order")
         if order not in PLAY_ORDERS:
             order = base.get("order", "shuffle")
-        return {"play": play, "playlist": playlist, "order": order}
+        return {"playlist": playlist, "order": order}
 
     # ---------- 音乐 ----------
 
@@ -355,9 +353,9 @@ class PomodoroApiMixin:
             return {"ok": False}
         return {"ok": True}
 
-    def pomodoro_set_hud_scale(self, value: object = 1.5) -> dict[str, Any]:
+    def pomodoro_set_hud_scale(self, value: object = 1.0) -> dict[str, Any]:
         try:
-            self.pomodoro.set_hud_scale(float(value) if isinstance(value, (int, float)) else 1.5)
+            self.pomodoro.set_hud_scale(float(value) if isinstance(value, (int, float)) else 1.0)
         except Exception:
             logger.exception("保存番茄钟计时器比例失败")
             return {"ok": False}
@@ -408,11 +406,6 @@ class PomodoroApiMixin:
         font = overrides.get("font")
         if font not in FONTS:
             font = item.font
-        environment_enabled = overrides.get("environment_enabled")
-        if not isinstance(environment_enabled, bool):
-            environment_enabled = item.environment_enabled
-        if environment_uid is None:
-            environment_enabled = False
         focus = self._phase_plan(item.focus, overrides.get("focus"))
         rest = self._phase_plan(item.rest, overrides.get("rest"))
         background = self.pomodoro.find_background(background_uid or "")
@@ -434,7 +427,6 @@ class PomodoroApiMixin:
             "background_mode": background_mode,
             "ring": {"url": ring_url} if ring and ring_url else None,
             "environment": ({"url": environment_url} if environment and environment_url else None),
-            "environment_enabled": environment_enabled,
             "focus": focus,
             "rest": rest,
             "font": font,
@@ -462,7 +454,6 @@ class PomodoroApiMixin:
 
     def _phase_plan(self, base: PhaseAudio, raw: object) -> dict[str, Any]:
         playlist = base.playlist
-        play = base.play
         order = base.order
         if isinstance(raw, dict):
             if "playlist" in raw:
@@ -471,10 +462,8 @@ class PomodoroApiMixin:
                     playlist = None
                 elif isinstance(value, str) and value in self.playlists.items:
                     playlist = value
-            if "play" in raw:
-                play = bool(raw.get("play"))
             if raw.get("order") in PLAY_ORDERS:
                 order = str(raw.get("order"))
         if playlist is not None and playlist not in self.playlists.items:
             playlist = None
-        return {"playlist": playlist, "play": play, "order": order}
+        return {"playlist": playlist, "order": order}

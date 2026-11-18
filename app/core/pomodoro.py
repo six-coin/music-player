@@ -28,11 +28,15 @@ from app.core.pomodoro_models import (
     BACKGROUND_MODES,
     FONTS,
     HUD_SCALE_DEFAULT,
+    HUD_SCALE_MAX,
+    HUD_SCALE_MIN,
+    LEGACY_HUD_SCALE_BASE,
     MODE_MAX_SEGMENTS,
     MODE_MIN_SEGMENTS,
     PHASES,
     PLAY_ORDERS,
     POMODORO_VERSION,
+    PREFERENCES_VERSION,
     SEGMENT_MAX_MINUTES,
     SEGMENT_MIN_MINUTES,
     VOLUME_DEFAULT,
@@ -64,6 +68,9 @@ __all__ = [
     "BACKGROUND_KINDS",
     "BACKGROUND_MODES",
     "FONTS",
+    "HUD_SCALE_DEFAULT",
+    "HUD_SCALE_MAX",
+    "HUD_SCALE_MIN",
     "MODE_MAX_SEGMENTS",
     "MODE_MIN_SEGMENTS",
     "PHASES",
@@ -196,7 +203,18 @@ class PomodoroStore:
             environment_volume = _ratio(
                 preferences.get("environment_volume"), VOLUME_DEFAULT["environment"]
             )
-            hud_scale = _scale(preferences.get("hud_scale"), HUD_SCALE_DEFAULT)
+            raw_scale = preferences.get("hud_scale")
+            hud_scale = _scale(raw_scale, HUD_SCALE_DEFAULT)
+            # 第 1 版的 hud_scale 是「相对 1.5 倍基准的倍数」，直接读会把
+            # 原来的 150% 显示成 225%。没有版本号就按旧口径换算一次；
+            # 连这个键都没有（更早的文件）就保持默认值，不能拿默认值再除一次。
+            version = preferences.get("version")
+            if isinstance(version, bool) or not isinstance(version, int):
+                version = 0
+            if version < PREFERENCES_VERSION:
+                if raw_scale is not None:
+                    hud_scale = _scale(hud_scale / LEGACY_HUD_SCALE_BASE, HUD_SCALE_DEFAULT)
+                changed = True
 
         commit()
         if changed:
@@ -279,6 +297,7 @@ class PomodoroStore:
                 "items": {uid: stats.to_dict() for uid, stats in self.item_stats.items()},
             },
             "preferences": {
+                "version": PREFERENCES_VERSION,
                 "music_volume": self.music_volume,
                 "environment_volume": self.environment_volume,
                 "hud_scale": self.hud_scale,
@@ -422,8 +441,8 @@ class PomodoroStore:
             uid=new_uid(),
             name=name,
             duration_mode=mode.uid,
-            focus=PhaseAudio(play=True, order="shuffle"),
-            rest=PhaseAudio(play=False, order="shuffle"),
+            focus=PhaseAudio(order="shuffle"),
+            rest=PhaseAudio(order="shuffle"),
             created_at=now,
             updated_at=now,
         )
@@ -471,14 +490,8 @@ class PomodoroStore:
             if value is not None and value not in self.environments:
                 raise DataError("环境音不存在")
             item.environment = value
-            if value is None:
-                item.environment_enabled = False
-        if "environment_enabled" in patch:
-            item.environment_enabled = bool(patch.get("environment_enabled"))
         if "font" in patch:
             item.font = _choice(patch.get("font"), FONTS, "字体", "system")
-        if item.environment is None:
-            item.environment_enabled = False
         item.normalize()
         item.validate()
         item.updated_at = _now()
@@ -488,15 +501,12 @@ class PomodoroStore:
         if not isinstance(raw, dict):
             return current
         playlist = current.playlist
-        play = current.play
         order = current.order
         if "playlist" in raw:
             playlist = _uid_or_none(raw.get("playlist"), "歌单标识")
-        if "play" in raw:
-            play = bool(raw.get("play"))
         if "order" in raw:
             order = _choice(raw.get("order"), PLAY_ORDERS, "播放顺序", "shuffle")
-        return PhaseAudio(playlist=playlist, play=play, order=order)
+        return PhaseAudio(playlist=playlist, order=order)
 
     def delete_item(self, uid: str) -> bool:
         return self._transact(lambda store: store._delete_item(uid))
@@ -631,7 +641,6 @@ class PomodoroStore:
                 item.updated_at = _now()
             elif kind == "environment" and item.environment == uid:
                 item.environment = None
-                item.environment_enabled = False
                 item.updated_at = _now()
         return record
 

@@ -561,14 +561,10 @@
     "pomodoro.item.focus_section": "专注时段",
     "pomodoro.item.rest_section": "休息时段",
     "pomodoro.item.playlist": "歌单",
-    "pomodoro.item.play": "播放音乐",
-    "pomodoro.item.focus_hint": "专注时是否播放背景音乐。",
-    "pomodoro.item.rest_hint": "休息时是否播放背景音乐。",
     "pomodoro.item.order": "播放顺序",
     "pomodoro.item.sound": "声音",
     "pomodoro.item.ring": "提示音",
     "pomodoro.item.environment": "环境音",
-    "pomodoro.item.environment_enabled": "启用环境音",
     "pomodoro.item.environment_hint": "环境音会贯穿整个番茄钟，不受时段影响。",
     "pomodoro.item.appearance": "外观",
     "pomodoro.item.font": "字体",
@@ -683,5 +679,7 @@
     "pomodoro.last_phase": "最后一段",
     "pomodoro.done_title": "这一轮完成了",
     "pomodoro.done_back": "返回",
-    "pomodoro.delete.referenced_mode": "下面这些番茄钟正在使用它，删除后会自动改为第一个可用模式："
+    "pomodoro.delete.referenced_mode": "下面这些番茄钟正在使用它，删除后会自动改为第一个可用模式：",
+    "pomodoro.item.hud_scale": "计时器大小",
+    "pomodoro.item.hud_scale_hint": "调整左下角倒计时的整体大小，对所有番茄钟生效；100% 为默认。"
 }

@@ -93,6 +93,13 @@ function bindPomodoroEvents() {
   });
 
   detail.addEventListener("change", function (event) {
+    if (event.target.id === "pomo-hud-scale") {
+      const value = Number(event.target.value) / 100;
+      call("set_pomodoro_hud_scale", value).then(function (data) {
+        if (data) apply(data);
+      });
+      return;
+    }
     const segment = event.target.closest("[data-pomo-segment-minutes]");
     if (segment) {
       pomodoroUpdateSegment(
@@ -111,6 +118,13 @@ function bindPomodoroEvents() {
   });
 
   detail.addEventListener("input", function (event) {
+    if (event.target.id === "pomo-hud-scale") {
+      const percent = Number(event.target.value);
+      event.target.style.setProperty("--fill", pomoScaleFill(percent) + "%");
+      const label = qs("#pomo-hud-scale-value");
+      if (label) label.textContent = percent + "%";
+      return;
+    }
     if (
       event.target.id === "pomodoro-name" ||
       event.target.id === "pomodoro-mode-name" ||
@@ -181,7 +195,8 @@ async function selectPomodoroItem(kind, uid) {
   if (!same) animateDetail("pomodoro-detail");
 }
 
-function pomodoroPatchField(phase, field, value) {  if (!state.active || state.activeKind !== "pomodoro") return;
+function pomodoroPatchField(phase, field, value) {
+  if (!state.active || state.activeKind !== "pomodoro") return;
   const patch = {};
   if (phase) {
     patch[phase] = {};

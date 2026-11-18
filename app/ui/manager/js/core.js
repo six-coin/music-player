@@ -172,6 +172,73 @@ function tagMap() {
 }
 /* ---------- 渲染 ---------- */
 
+/* 详情区整块重绘会顺手丢掉滚动位置和焦点：调一下设置页就跳回顶部、
+   输入框失焦，看起来像整页蹦了一下。重绘前后把这些状态接回去。 */
+function setPaneHTML(pane, html) {
+  if (!pane) return;
+  if (pane.__html === html) return; // 快照变了但这一屏没变：连重绘都省了
+  pane.__html = html;
+  const scroll = pane.scrollTop;
+  pane.innerHTML = html;
+  if (scroll && pane.scrollTop !== scroll) pane.scrollTop = scroll;
+}
+
+function focusSelector(node) {
+  if (!node || node === document.body || !node.getAttribute) return null;
+  if (node.id) return "#" + node.id;
+  const attrs = Array.prototype.slice.call(node.attributes || []);
+  for (let index = 0; index < attrs.length; index += 1) {
+    const attr = attrs[index];
+    if (attr.name.indexOf("data-") !== 0 || !attr.value) continue;
+    const selector = "[" + attr.name + '="' + attr.value.replace(/["\\]/g, "\\$&") + '"]';
+    let found;
+    try {
+      found = document.querySelectorAll(selector);
+    } catch (error) {
+      continue;
+    }
+    if (found.length === 1) return selector;
+  }
+  return null;
+}
+
+function captureView() {
+  const active = document.activeElement;
+  const focus =
+    active && active !== document.body
+      ? {
+          selector: focusSelector(active),
+          start: typeof active.selectionStart === "number" ? active.selectionStart : null,
+          end: typeof active.selectionEnd === "number" ? active.selectionEnd : null,
+        }
+      : null;
+  const scrolls = qsa(
+    ".detail-pane, .list-pane, .song-list, .view, .settings-body, .pomodoro-nav"
+  ).map(function (node) {
+    return [node, node.scrollTop];
+  });
+  return { focus: focus, scrolls: scrolls };
+}
+
+function restoreView(snapshot, keepFocus) {
+  if (!snapshot) return;
+  snapshot.scrolls.forEach(function (entry) {
+    if (entry[0].isConnected && entry[0].scrollTop !== entry[1]) entry[0].scrollTop = entry[1];
+  });
+  const focus = keepFocus ? snapshot.focus : null;
+  if (!focus || !focus.selector) return;
+  const node = qs(focus.selector);
+  if (!node || node === document.activeElement) return;
+  node.focus({ preventScroll: true });
+  if (focus.start !== null && node.setSelectionRange) {
+    try {
+      node.setSelectionRange(focus.start, focus.end);
+    } catch (error) {
+      /* number 输入不支持选区，忽略 */
+    }
+  }
+}
+
 function applyTheme(theme) {
   if (!theme) return;
   document.documentElement.dataset.theme = theme;

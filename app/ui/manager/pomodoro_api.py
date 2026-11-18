@@ -20,6 +20,9 @@ from app.core.pomodoro import (
     ASSET_KINDS,
     BACKGROUND_MODES,
     FONTS,
+    HUD_SCALE_DEFAULT,
+    HUD_SCALE_MAX,
+    HUD_SCALE_MIN,
     PLAY_ORDERS,
     PomodoroStore,
 )
@@ -27,6 +30,13 @@ from app.errors import ActionError, DataError
 from app.ui.media import MediaHub
 
 POMODORO_KINDS = ("pomodoro", "duration_mode", "background", "ring", "environment")
+#: 番茄分区里可以被「选中」的全部类型，含总览。
+POMODORO_SELECTION_KINDS = ("pomodoro_overview",) + POMODORO_KINDS
+
+
+def is_pomodoro_selection(kind: object) -> bool:
+    return kind in POMODORO_SELECTION_KINDS
+
 
 ASSET_FILTERS = {
     "background": (
@@ -114,8 +124,23 @@ class PomodoroApiMixin:
             "preferences": {
                 "music_volume": self.pomodoro.music_volume,
                 "environment_volume": self.pomodoro.environment_volume,
+                "hud_scale": self.pomodoro.hud_scale,
+                "hud_scale_min": HUD_SCALE_MIN,
+                "hud_scale_max": HUD_SCALE_MAX,
             },
         }
+
+    def set_pomodoro_hud_scale(self, value: object = 1.0) -> dict[str, Any]:
+        """计时器比例是全局偏好，manager 与 player 改的是同一个值。"""
+        with self._lock:
+            try:
+                self.pomodoro.set_hud_scale(
+                    float(value) if isinstance(value, (int, float)) else HUD_SCALE_DEFAULT
+                )
+            except Exception:
+                logger.exception("保存番茄钟计时器比例失败")
+                return self._pomodoro_error(i18n.t("pomodoro.invalid"))
+            return self._snapshot()
 
     def _pomodoro_item_payload(self, item) -> dict[str, Any]:
         mode = self.pomodoro.find_mode(item.duration_mode)
@@ -133,7 +158,6 @@ class PomodoroApiMixin:
             "rest": item.rest.to_dict(),
             "ring": item.ring,
             "environment": item.environment,
-            "environment_enabled": item.environment_enabled,
             "font": item.font,
             "created_at": item.created_at,
             "updated_at": item.updated_at,

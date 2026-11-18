@@ -53,8 +53,10 @@ function bindEvents() {
 
   qs("#pomodoro-detail").addEventListener("input", function (event) {
     if (event.target.id !== "pomo-hud-scale") return;
+    const value = Number(event.target.value);
+    setFill(event.target, (value - 20) / 480);
     const label = qs("#pomo-hud-scale-value");
-    if (label) label.textContent = event.target.value + "%";
+    if (label) label.textContent = value + "%";
   });
 
   qs("#pomodoro-detail").addEventListener("change", function (event) {

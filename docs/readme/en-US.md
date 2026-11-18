@@ -46,7 +46,7 @@ The manager has three columns: navigation on the left, a list in the middle, det
 
 | Area        | Contents                                                                        |
 |-------------|---------------------------------------------------------------------------------|
-| Navigation  | Overview, Songs, Playlists, Tags, Artists, with Settings at the bottom          |
+| Navigation  | Overview, Songs, Playlists, Tags, Artists, Pomodoro, with Settings at the bottom |
 | List        | Items of the current section, with title, count and the New button above        |
 | Detail      | Editor for the selected item; changes save as you type, there is no Save button |
 | Preview bar | Rises from the bottom after Preview; pause, seek and change volume there        |
@@ -212,7 +212,37 @@ The queue always shows the **whole playlist**: played rows dimmed, the current o
 
 Closing the window quits. Reopening returns to the last playlist and position, paused. Volume, mode, window size and queue visibility are remembered.
 
-## 10. Simple Player
+## 10. Pomodoro
+
+Pomodoros are configured in the manager and run in the player: not as a separate window, but as a full-screen layer inside the player window that returns you to the previous view when you exit.
+
+The "Pomodoro" section of the manager has an overview plus five groups (pomodoros, duration modes, backgrounds, chimes, ambience). Groups collapse, reorder by dragging within a group, and the context menu is the same one as "More" in the detail header. On the right:
+
+| Item                | Detail                                                                             |
+|---------------------|------------------------------------------------------------------------------------|
+| Duration mode       | A run of minutes: odd phases focus, even phases break; 1–99 phases, 1–180 min each |
+| Background          | Image or video; scaling can stretch, fit width, fit height, contain or cover       |
+| Focus / Break       | One playlist each. "None" means no music for that phase — there is no extra switch |
+| Chime               | Plays at the end of prep, at every phase change and at the end of the round        |
+| Ambience            | "None" means off; otherwise it runs for the whole round, independent of phases     |
+| Font                | Font used by the timer layer                                                       |
+| Timer size          | Overall scale of the corner countdown, 20%–500%, 100% by default; shared with the player |
+
+The player lists pomodoros under the playlists; click one to see its details. Changes made there apply to this run only and never touch the saved configuration; "Reset to defaults" clears them.
+
+After pressing Start:
+
+1. A 120-second prep screen (large centred countdown, skippable).
+2. Prep ends and the window goes full screen: background, ambience and the focus playlist start together, with the phase and countdown in the bottom-left corner.
+3. A chime marks every phase change; during the last 10 seconds the music ducks to 12% and track changes are blocked, then it fades back up for the next phase.
+4. Hovering the top-right corner reveals a translucent panel: two volumes, pause, full screen, exit. `Ctrl+C` skips a track; `Esc` does nothing.
+5. After the last phase comes the completion card: the background stays, ambience keeps playing, music follows the break settings.
+
+"Keep going" in the exit dialog returns to the timer; "Exit" records the time already counted and leaves. A forced kill loses at most the last 10 seconds.
+
+**Importing assets**: backgrounds accept common image and video formats, chimes accept mp3/ogg, ambience accepts mp3/ogg/mp4/m4a. Everything is transcoded on import — images to PNG, videos to H.264 MP4 without an audio track; audio can be trimmed, given a "seamless crossfade" (cut at the midpoint, reordered as B+A and crossfaded, which shortens the result by one fade), or simply stripped of metadata. The import dialog cannot be dismissed by clicking outside or pressing Esc; only Cancel closes it.
+
+## 11. Simple Player
 
 Double-click and the default playlist starts. No menu, no picker. Everything is configured in the manager; this program only reads.
 
@@ -231,7 +261,7 @@ The console can only read a limited set of keys: `Ctrl+` one letter, Space, Ente
 
 Exit codes: `0` normal, `1` startup failure (no VLC, empty default playlist…), `2` fatal error while running.
 
-## 11. Integrity check
+## 12. Integrity check
 
 Reachable from "To review" on the overview and from Settings · Library manager · Maintenance. The quick check does not read audio; the deep check recomputes every file's MD5, then verifies the bitrate with ffprobe, reports progress by bytes, and can be cancelled.
 
@@ -247,7 +277,7 @@ Reachable from "To review" on the overview and from Settings · Library manager 
 
 Fixes run per category, or all fixable ones at once. They only delete data that no longer has an owner, so there is no second confirmation; orphan files go to the Recycle Bin and can be restored.
 
-## 12. Keyboard shortcuts
+## 13. Keyboard shortcuts
 
 They only apply while the window (or console) is in the foreground; no system-wide hooks.
 
@@ -277,7 +307,7 @@ Simple Player:
 
 Manager: `Ctrl+F` focuses the search box, `Ctrl+I` imports music, `Ctrl+,` opens settings. `Esc` closes a dialog, drawer or context menu and `Tab` cycles inside dialogs — those belong to the widgets and stay fixed. There is no `Ctrl+S` — every change is saved immediately.
 
-## 13. Settings
+## 14. Settings
 
 Five pages; changes apply immediately and there is no Save button.
 
@@ -297,7 +327,7 @@ Switching the language takes effect immediately: labels, the window title and th
 
 "Reset all settings" also restores language and appearance; the library, playlists and statistics are untouched. A data folder change appends `music-player` automatically and applies after a restart, moving the old contents (audio included); existing files in the target are never overwritten.
 
-## 14. Files and folders
+## 15. Files and folders
 
 The program folder holds code and the sample audio shipped with it; runtime files live in system folders.
 
@@ -321,6 +351,10 @@ Music Player\
 ├─ library.json                              artists, tag groups, songs
 ├─ playlists.json                            playlists and the default one
 ├─ player.json                               window size, queue visibility
+├─ pomodoro.json                             pomodoros, duration modes, asset registry, stats, preferences
+├─ pomodoro\background\<uid>.png / .mp4        pomodoro backgrounds (transcoded on import)
+├─ pomodoro\ring\<uid>.mp3 / .ogg              chimes
+├─ pomodoro\environment\<uid>.mp3 / .ogg       ambience
 ├─ stats\<playlist id>.json                   adaptive statistics per playlist
 ├─ totals.json                               total play counts per song (one file for the library)
 └─ music\<md5>.<ext>                          imported audio, file name is the MD5
@@ -337,7 +371,7 @@ Deleting `settings.json` restores every setting; deleting `library.json` wipes t
 
 Log files are named by start time and rotate at 5 MB. Only the last 30 days are kept by default: older files are deleted at startup, and the General page lets you turn the cleanup off or change the number of days. All three programs share one set of log settings. When troubleshooting, read the newest one first. The data folder always ends with the project code: picking `D://Data` gives `D://Data//music-player`.
 
-## 15. Troubleshooting
+## 16. Troubleshooting
 
 **A bat file flashes a console and closes.** The runtime is not installed. Run `setup.bat`; if it says uv is missing, install uv first.
 
@@ -357,7 +391,7 @@ Log files are named by start time and rotate at 5 MB. Only the last 30 days are 
 
 **The interface switched to English.** The language setting under General is English; switch back to 简体中文 (中国).
 
-## 16. Known limitations
+## 17. Known limitations
 
 - Windows only. The Recycle Bin, single-instance guard and console input all call Windows APIs directly.
 - No cover art, lyrics or spectrum visualization.
@@ -369,7 +403,7 @@ Log files are named by start time and rotate at 5 MB. Only the last 30 days are 
 - No multi-user, sync or cloud backup.
 - Only Chinese and English are shipped; abnormal paths (crash dialogs, logs, integrity reports) stay Chinese.
 
-## 17. Development
+## 18. Development
 
 See [architecture.md](../architecture.md) for layering and the rules that must not break, and [configuration.md](../configuration.md) for data formats.
 
