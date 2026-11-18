@@ -160,7 +160,10 @@ class ManagerApi(PomodoroApiMixin):
                 self.section = section
                 # 从歌曲 / 歌单切进番茄分区时，选中项还指着别的类型；不换成总览的话
                 # 前端会先画一帧空详情，再被随后那次 select_pomodoro_overview 覆盖。
-                if section == "pomodoro" and not is_pomodoro_selection(self.selection.get("kind")):
+                # selection 在「什么都没选」时是 None，不能直接 .get。
+                if section == "pomodoro" and not is_pomodoro_selection(
+                    (self.selection or {}).get("kind")
+                ):
                     self.selection = {"kind": "pomodoro_overview", "uid": ""}
             return self._snapshot()
 

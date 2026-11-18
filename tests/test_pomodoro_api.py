@@ -133,6 +133,16 @@ def test_manager_delete_background_clears_item_reference(manager):
     assert result["pomodoro"]["items"][0]["background"] is None
 
 
+def test_manager_switching_to_pomodoro_works_with_no_selection(manager):
+    """刚启动、什么都没选时 selection 是 None，进番茄分区不能炸。"""
+    assert manager.selection is None
+
+    data = manager.select_section("pomodoro")
+
+    assert data["section"] == "pomodoro"
+    assert data["selection"] == {"kind": "pomodoro_overview", "uid": ""}
+
+
 def test_manager_switching_to_pomodoro_selects_the_overview(manager):
     manager.select_item("music", MD5)
     assert manager.get_state()["selection"]["kind"] == "music"
