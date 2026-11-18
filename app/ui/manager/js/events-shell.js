@@ -67,7 +67,14 @@ function bindShellEvents() {
       return;
     }
 
-    if (state.drawer && !event.target.closest("#drawer") && !event.target.closest("[data-stats]")) {
+    // 抽屉上叠着确认弹窗时，点弹窗里的按钮不算「点到抽屉外面」：这里只管抽屉，
+    // 弹窗由 closeModal 自己关。否则「取消」会把底下的统计表一起带走。
+    if (
+      state.drawer &&
+      !event.target.closest("#drawer") &&
+      !event.target.closest("[data-stats]") &&
+      !event.target.closest("#modal")
+    ) {
       closeDrawer();
     }
 
