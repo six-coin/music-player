@@ -189,8 +189,10 @@ function pomodoroEmptyDetail() {
   return (
     '<div class="detail-empty">' +
     '<svg class="empty-art" viewBox="0 0 24 24" aria-hidden="true">' +
-    '<path d="M12 7.5c3.6 0 6.5 2.9 6.5 6.5S15.6 20.5 12 20.5 5.5 17.6 5.5 14 8.4 7.5 12 7.5Z"/>' +
-    '<path d="M12 7.5c0-2 1.1-3.6 3-4.5M12 7.5c0-2-1.1-3.6-3-4.5"/></svg>' +
+    '<path d="M12 10.4c-1.5-1.8-3.6-2.9-5.9-2.9C3.9 7.5 3 10.6 3 14c0 4.2 4 7.4 9 7.4s9-3.2 9-7.4c0-3.4-.9-6.5-3.1-6.5-2.3 0-4.4 1.1-5.9 2.9Z"/>' +
+    '<path d="M12 10.2C10.9 8.1 9.1 7 6.9 6.8c.4 2.1 1.7 3.7 3.8 4.4"/>' +
+    '<path d="M12 10.2c1.1-2.1 2.9-3.2 5.1-3.4-.4 2.1-1.7 3.7-3.8 4.4"/>' +
+    '<path d="M12 10.2V4.9"/></svg>' +
     "<h2>" + esc(T("pomodoro.no_selection_title")) + "</h2>" +
     "<p>" + esc(T("pomodoro.no_selection_hint")) + "</p></div>"
   );
