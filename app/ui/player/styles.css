@@ -261,16 +261,15 @@ input:focus-visible {
   overflow: hidden;
 }
 
-/* 歌曲卡片：窗口拉大以后，一块安静的白底比飘在空处的几行字更像「正在播放」。 */
+/* 歌曲卡片：窗口拉大以后，一块安静的白底比飘在空处的几行字更像「正在播放」。
+   高度跟着内容走，不设最小高度——窗口再大也不该在卡片里留出半屏空白。 */
 .playing {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   width: 100%;
   max-width: 560px;
   min-width: 0;
-  min-height: min(440px, 100%);
-  padding: 24px 32px 26px;
+  padding: 28px 34px 30px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--panel);
@@ -979,8 +978,7 @@ input:focus-visible {
   }
 
   .playing {
-    min-height: min(360px, 100%);
-    padding: 20px 22px 22px;
+    padding: 22px 22px 24px;
   }
 
   .progress-row {
