@@ -4,6 +4,7 @@ function bindEvents() {
   bindPlaylistEvents();
   bindLibraryEvents();
   bindPanelEvents();
+  bindPomodoroEvents();
 }
 
 /* 首次运行的语言选择器：和设置页「通用 · 语言」用的是同一个分段控件，

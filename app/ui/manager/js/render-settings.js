@@ -322,16 +322,7 @@ function settingsImport() {
           esc(T("action.browse")) + "</button>" +
           '<button class="btn ghost small" data-action="clear_import_dir">' +
           esc(T("action.clear_field")) + "</button>"
-      ) +
-        settingsRow(
-          T("settings.clean_audio"),
-          T("settings.clean_audio_hint"),
-          switchMarkup(
-            'data-setting-switch="import.clean_audio"',
-            section.clean_audio !== false,
-            T("settings.clean_audio")
-          )
-        )
+      )
     ) +
     settingsCard(
       T("settings.ffmpeg"),

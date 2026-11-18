@@ -8,12 +8,14 @@ function apply(data) {
 
   qs("#app").classList.toggle("no-queue", !data.queue.visible);
   renderPlaylists();
+  renderPomodoros();
   renderTrack();
   renderTransport();
   renderQueue();
   renderEmpty();
   renderVolume();
   renderNotice();
+  renderPomodoroDetail();
   if (data.command) runCommand(data.command);
 }
 

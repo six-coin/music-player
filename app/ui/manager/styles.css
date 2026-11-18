@@ -2912,3 +2912,382 @@ input[type="checkbox"]:disabled {
   border: none;
   border-top: 1px solid var(--border);
 }
+
+/* ---------- 番茄钟 ---------- */
+
+.pomodoro-nav {
+  flex: 1;
+  min-height: 0;
+  padding: 2px 8px 18px;
+  overflow-y: auto;
+}
+
+.pomo-overview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+}
+
+.pomo-overview:hover {
+  background: var(--surface-hover);
+}
+
+.pomo-overview.is-active {
+  background: var(--blue-soft);
+  color: var(--blue-text);
+}
+
+.pomo-overview-icon {
+  display: inline-flex;
+  color: var(--muted);
+}
+
+.pomo-overview-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+}
+
+.pomo-overview.is-active .pomo-overview-icon {
+  color: var(--blue-text);
+}
+
+.pomo-group {
+  margin-top: 6px;
+}
+
+.pomo-group-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.pomo-group-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 7px 6px 7px 8px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 12px;
+  text-align: left;
+}
+
+.pomo-group-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.pomo-chevron {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  transition: transform 0.15s var(--ease);
+}
+
+.pomo-chevron.is-collapsed {
+  transform: rotate(-90deg);
+}
+
+.pomo-group-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pomo-group-count {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pomo-group-add {
+  flex: none;
+  color: var(--muted);
+}
+
+.pomo-list {
+  margin: 2px 0 0;
+  padding: 0 0 0 8px;
+  list-style: none;
+}
+
+.pomo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.pomo-row:hover {
+  background: var(--surface-hover);
+}
+
+.pomo-row.is-active {
+  border-color: var(--blue-border);
+  background: var(--blue-soft);
+}
+
+.pomo-row.is-dragging {
+  opacity: 0.45;
+}
+
+.pomo-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--blue);
+}
+
+.pomo-row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--blue);
+}
+
+.pomo-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.pomo-row-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pomo-row.is-active .pomo-row-name {
+  color: var(--blue-text);
+}
+
+.pomo-row-sub {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pomo-empty {
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+/* 总览 */
+
+.pomo-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pomo-stat-grid--small {
+  margin-bottom: 8px;
+}
+
+.pomo-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.pomo-stat-value {
+  color: var(--text-strong);
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pomo-stat-label {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.pomo-count-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 2px 0 4px;
+  color: var(--text-soft);
+  font-size: 12.5px;
+}
+
+/* 详情 */
+
+.pomo-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-height: 380px;
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #0b0d10;
+  overflow: hidden;
+}
+
+.pomo-preview img,
+.pomo-preview video {
+  display: block;
+  max-width: 100%;
+  max-height: 380px;
+  object-fit: contain;
+}
+
+.pomo-seg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pomo-seg-row {
+  display: grid;
+  grid-template-columns: 22px 52px minmax(0, 1fr) 36px 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.pomo-seg-type {
+  color: var(--text-soft);
+  font-size: 11.5px;
+}
+
+.pomo-seg-type.is-focus {
+  color: var(--blue-text);
+}
+
+.pomo-seg-input {
+  width: 100%;
+  max-width: 120px;
+}
+
+.pomo-seg-unit {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.pomo-audition {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.pomo-audition-toggle {
+  flex: none;
+  color: var(--blue);
+}
+
+.pomo-audition-toggle svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.pomo-audition-toggle .icon-pause {
+  display: none;
+}
+
+.pomo-audition-toggle[data-playing="true"] .icon-play {
+  display: none;
+}
+
+.pomo-audition-toggle[data-playing="true"] .icon-pause {
+  display: block;
+}
+
+.pomo-audition-time {
+  min-width: 36px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pomo-audition-seek {
+  flex: 1;
+}
+
+/* 导入 */
+
+.pomo-import-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 10px 0;
+}
+
+.pomo-import-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.pomo-import-field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.pomo-import-field--inline .input {
+  width: 90px;
+}
+
+.pomo-import-grid.is-disabled,
+#pomo-trim-options.is-disabled {
+  opacity: 0.45;
+}
+
+@media (max-width: 1100px) {
+  .pomo-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.pomodoro-nav::-webkit-scrollbar {
+  width: 8px;
+}
+
+.pomodoro-nav::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: var(--scrollbar);
+}
+
+.pomodoro-nav::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+}

@@ -20,6 +20,10 @@ const state = {
   taskId: null,
   nameTimer: null,
   playlistNameTimer: null,
+  //: 番茄分区：分组折叠状态、正在试听的资源、名称防抖。
+  pomoCollapsed: {},
+  pomoAuditionUid: null,
+  pomoNameTimer: null,
   //: 正在录制快捷键的那一行；非空时全局按键只服务录制。
   recording: null,
 };

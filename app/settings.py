@@ -44,7 +44,6 @@ DEFAULTS: dict[str, Any] = {
     },
     "import": {
         "dir": "",
-        "clean_audio": True,
     },
     "audition": {
         "volume": 0.2,
@@ -155,7 +154,7 @@ def clamp(raw: dict[str, Any]) -> dict[str, Any]:
 
     import_section = _section(data, "import")
     import_section["dir"] = _text(import_section.get("dir"))
-    import_section["clean_audio"] = _bool(import_section.get("clean_audio"), True)
+    # 音乐导入一律清元数据：旧配置里残留的 clean_audio 原样留着，但不再读取。
 
     audition = _section(data, "audition")
     audition_volume = audition.get("volume")

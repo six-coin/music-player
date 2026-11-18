@@ -245,19 +245,11 @@ function wizardConfirm() {
       return "<li>" + esc(title) + (authors ? " · " + esc(authors) : "") + "</li>";
     })
     .join("");
-  const cleanDefault = Boolean(
-    state.data.settings && state.data.settings.import && state.data.settings.import.clean_audio
-  );
   return (
     '<p class="modal-note">' +
     esc(T("import.confirm_note", { count: wizard.rows.length })) +
     "</p>" +
-    '<ul class="report-list">' + rows + "</ul>" +
-    '<label class="check" style="margin-top:14px"><input type="checkbox" id="wizard-clean"' +
-    (cleanDefault ? " checked" : "") +
-    "><span>" +
-    esc(T("import.clean")) +
-    "</span></label>"
+    '<ul class="report-list">' + rows + "</ul>"
   );
 }
 
@@ -293,8 +285,6 @@ function mountWizard(step) {
 }
 
 async function runWizardImport() {
-  const cleanBox = qs("#wizard-clean");
-  const clean = cleanBox ? cleanBox.checked : null;
   const items = wizard.rows.map(function (row) {
     return {
       path: row.path,
@@ -308,7 +298,7 @@ async function runWizardImport() {
     };
   });
 
-  const started = await call("start_import", items, clean);
+  const started = await call("start_import", items);
   if (!started || !started.task_id) return;
 
   openModal({

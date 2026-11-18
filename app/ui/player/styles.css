@@ -161,14 +161,41 @@ input:focus-visible {
   pointer-events: none;
 }
 
+/* 番茄钟详情占满主区域时，队列栏让位：详情里的选择比待播列表重要。 */
+.app.pomodoro-view {
+  grid-template-columns: 200px minmax(0, 1fr) 0px;
+}
+
+.app.pomodoro-view .queue {
+  opacity: 0;
+  border-left-color: transparent;
+  pointer-events: none;
+}
+
 /* ---------- 左栏 ---------- */
 
 .sidebar {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
   background: var(--panel);
   border-right: 1px solid var(--border);
+}
+
+.sidebar-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.sidebar-scroll .playlist-list {
+  overflow: visible;
+}
+
+.sidebar-head--pomodoro {
+  margin-top: 10px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 12px;
 }
 
 .sidebar-head {
@@ -1059,5 +1086,534 @@ input:focus-visible {
   * {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------- 番茄钟 ---------- */
+
+.pomo-item .count {
+  max-width: 86px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pomo-item.is-locked {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.pomodoro-detail {
+  position: absolute;
+  inset: 44px 0 0 0;
+  z-index: 2;
+  padding: 8px 32px 40px;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.pomo-detail-wrap {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.pomo-detail-head {
+  margin-bottom: 18px;
+}
+
+.pomo-detail-title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.pomo-detail-sub {
+  margin: 6px 0 0;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.pomo-detail-card {
+  padding: 4px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: 0 18px 40px -34px var(--shadow-strong);
+}
+
+.pomo-detail-row {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.pomo-detail-row:last-child {
+  border-bottom: 0;
+}
+
+.pomo-detail-label {
+  color: var(--text-soft);
+  font-size: 12.5px;
+}
+
+.pomo-detail-section {
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.pomo-detail-section h3 {
+  margin: 14px 0 2px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.pomo-select {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.pomo-select:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
+.pomo-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  transition: background 0.16s var(--ease);
+}
+
+.pomo-switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--panel);
+  box-shadow: 0 1px 2px var(--shadow);
+  transition: transform 0.16s var(--ease);
+}
+
+.pomo-switch[aria-checked="true"] {
+  background: var(--blue);
+}
+
+.pomo-switch[aria-checked="true"] .pomo-switch-knob {
+  transform: translateX(18px);
+}
+
+.pomo-detail-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 14px;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.pomo-detail-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.pomo-detail-actions .btn.primary {
+  margin-top: 0;
+}
+
+.pomo-detail-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+/* ---------- 全屏计时层 ---------- */
+
+body.pomo-mode {
+  overflow: hidden;
+}
+
+.pomo-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  overflow: hidden;
+  background: #0b0d10;
+  color: #ffffff;
+  font-family: var(--pomo-font, "Microsoft YaHei", "Segoe UI", sans-serif);
+}
+
+.pomo-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #0b0d10;
+}
+
+.pomo-bg.is-empty {
+  background:
+    radial-gradient(circle at 22% 18%, rgba(59, 130, 246, 0.22), transparent 42%),
+    radial-gradient(circle at 78% 76%, rgba(245, 158, 11, 0.16), transparent 46%),
+    linear-gradient(150deg, #11151c, #090b0f 70%);
+}
+
+.pomo-bg-media {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.pomo-bg[data-mode="cover"] .pomo-bg-media {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pomo-bg[data-mode="contain"] .pomo-bg-media {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.pomo-bg[data-mode="stretch"] .pomo-bg-media {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+.pomo-bg[data-mode="fit_width"] .pomo-bg-media {
+  width: 100%;
+  height: auto;
+}
+
+.pomo-bg[data-mode="fit_height"] .pomo-bg-media {
+  width: auto;
+  height: 100%;
+}
+
+.pomo-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.28),
+    transparent 26%,
+    transparent 64%,
+    rgba(0, 0, 0, 0.58)
+  );
+  pointer-events: none;
+}
+
+.pomo-hud {
+  position: absolute;
+  bottom: 30px;
+  left: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-shadow: 0 2px 22px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.pomo-hud-phase {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+}
+
+.pomo-hud-time {
+  font-size: 56px;
+  font-weight: 600;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.pomo-hud-next {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12.5px;
+}
+
+/* 右上角热区：鼠标靠近才让面板渐显 */
+.pomo-hotzone {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 3;
+  width: 280px;
+  height: 150px;
+}
+
+.pomo-panel {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 4;
+  width: 252px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(18, 20, 24, 0.58);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+  transition:
+    opacity 0.2s var(--ease),
+    transform 0.2s var(--ease);
+  backdrop-filter: blur(14px);
+}
+
+.pomo-panel.is-visible {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.pomo-panel-title {
+  margin-bottom: 6px;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pomo-volume {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11.5px;
+}
+
+.pomo-volume .slider::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    #ffffff 0,
+    #ffffff var(--fill, 0%),
+    rgba(255, 255, 255, 0.22) var(--fill, 0%),
+    rgba(255, 255, 255, 0.22) 100%
+  );
+}
+
+.pomo-volume .slider::-webkit-slider-thumb {
+  background: #ffffff;
+}
+
+.pomo-volume-value {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pomo-panel-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.pomo-action {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  font-size: 12px;
+}
+
+.pomo-action:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.pomo-action.is-danger {
+  color: #ffb4b4;
+}
+
+.pomo-action .icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* 预备 */
+
+.pomo-prep {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: radial-gradient(circle at 50% 42%, rgba(38, 42, 50, 0.96), rgba(8, 9, 12, 0.99));
+}
+
+.pomo-prep-name {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 15px;
+}
+
+.pomo-prep-label {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11.5px;
+  letter-spacing: 0.3em;
+}
+
+.pomo-prep-time {
+  font-size: 72px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pomo-prep .btn.primary {
+  margin-top: 18px;
+}
+
+/* 完成页 */
+
+.pomo-done {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.pomo-done-card {
+  width: 320px;
+  padding: 26px 28px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  background: rgba(18, 20, 24, 0.66);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+  text-align: center;
+  backdrop-filter: blur(16px);
+}
+
+.pomo-done-card h2 {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.pomo-done-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+}
+
+.pomo-done-row:last-child {
+  border-bottom: 0;
+}
+
+.pomo-done-row b {
+  color: #ffffff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pomo-done-card .btn.primary {
+  width: 100%;
+  margin-top: 18px;
+}
+
+/* 退出确认 */
+
+.pomo-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.46);
+}
+
+.pomo-confirm-card {
+  width: 340px;
+  padding: 24px;
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+}
+
+.pomo-confirm-card h2 {
+  margin: 0 0 8px;
+  color: var(--text-strong);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.pomo-confirm-card p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.pomo-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.pomo-confirm-actions .btn.primary {
+  margin-top: 0;
+}
+
+@media (max-width: 840px) {
+  .pomodoro-detail {
+    padding: 6px 20px 28px;
+  }
+
+  .pomo-detail-row {
+    grid-template-columns: 108px minmax(0, 1fr);
+  }
+
+  .pomo-hud {
+    bottom: 22px;
+    left: 22px;
+  }
+
+  .pomo-hud-time {
+    font-size: 44px;
   }
 }

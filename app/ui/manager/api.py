@@ -48,8 +48,9 @@ from app.system import ffmpeg, launcher
 from app.system import theme as theme_tool
 from app.system.media_server import MediaServer
 from app.system.single_instance import is_running
+from app.ui.manager.pomodoro_api import PomodoroApiMixin, make_media_hub, make_store
 
-SECTIONS = ("overview", "songs", "playlists", "tags", "authors", "settings")
+SECTIONS = ("overview", "songs", "playlists", "tags", "authors", "pomodoro", "settings")
 RECENT_LIMIT = 5
 MAX_TASKS = 20
 AUDIO_FILTER = ("音频文件 (*.mp3;*.m4a)",)
@@ -71,7 +72,7 @@ def _join_names(items: list[str]) -> str:
     return i18n.t("list.separator").join(items)
 
 
-class ManagerApi:
+class ManagerApi(PomodoroApiMixin):
     def __init__(
         self,
         config_dir: Path | None = None,
@@ -88,6 +89,8 @@ class ManagerApi:
         self.settings = SettingsStore(base / "settings.json")
         self.stats = StatsStore(base / "stats")
         self.totals = TotalStore(base / "totals.json")
+        self.pomodoro = make_store(base)
+        self._pomo_media = make_media_hub()
         self.warnings: list[str] = []
         self.section = "overview"
         self.selection: dict[str, str] | None = None
@@ -108,6 +111,10 @@ class ManagerApi:
         i18n.set_language(str(language))
         self.warnings.extend(self.library.load())
         self.warnings.extend(self.playlists.load())
+        self.warnings.extend(self.pomodoro.load_locked())
+        # 歌单可能在 manager 关着的时候被删掉：启动时把失效引用清掉。
+        if self.pomodoro.sanitize_playlists(set(self.playlists.items)):
+            self.pomodoro.save()
 
     def attach(self, window) -> None:
         self._window = window
@@ -122,6 +129,7 @@ class ManagerApi:
         if self._media is not None:
             self._media.stop()
             self._media = None
+        self._pomo_media.stop()
 
     def _retitle(self) -> None:
         """窗口标题跟着界面语言走；老版本 pywebview 没有 set_title。"""
@@ -161,6 +169,21 @@ class ManagerApi:
             elif kind == "author" and uid in self.library.authors:
                 self.selection = {"kind": "author", "uid": uid}
                 self.section = "authors"
+            elif kind == "pomodoro" and uid in self.pomodoro.items:
+                self.selection = {"kind": "pomodoro", "uid": uid}
+                self.section = "pomodoro"
+            elif kind == "duration_mode" and uid in self.pomodoro.duration_modes:
+                self.selection = {"kind": "duration_mode", "uid": uid}
+                self.section = "pomodoro"
+            elif kind == "background" and uid in self.pomodoro.backgrounds:
+                self.selection = {"kind": "background", "uid": uid}
+                self.section = "pomodoro"
+            elif kind == "ring" and uid in self.pomodoro.rings:
+                self.selection = {"kind": "ring", "uid": uid}
+                self.section = "pomodoro"
+            elif kind == "environment" and uid in self.pomodoro.environments:
+                self.selection = {"kind": "environment", "uid": uid}
+                self.section = "pomodoro"
             return self._snapshot()
 
     def clear_selection(self) -> dict[str, Any]:
@@ -206,6 +229,7 @@ class ManagerApi:
             "status": self.status,
             "counts": self._counts(),
             "overview": self._overview(missing, tag_issues, orphans, broken),
+            "pomodoro": self._pomodoro_payload(),
             "warnings": list(self.warnings),
             "errors": [],
         }
@@ -792,6 +816,7 @@ class ManagerApi:
             self.playlists.remove(uid)
             self.playlists.save()
             self.stats.remove(uid)
+            self.pomodoro.drop_playlist(uid)
             if self.selection and self.selection.get("uid") == uid:
                 self.selection = None
             return self._snapshot()
@@ -1142,6 +1167,7 @@ class ManagerApi:
             return task
 
     def start_import(self, items: list[Any], clean: bool | None = None) -> dict[str, Any]:
+        # ``clean`` 保留在签名里只为兼容旧调用；音乐导入现在一律清元数据。
         normalized: list[dict[str, Any]] = []
         for item in items or []:
             if isinstance(item, str):
@@ -1168,7 +1194,6 @@ class ManagerApi:
                 "current": "",
                 "imported": [],
                 "errors": [],
-                "clean": clean,
             }
         )
         thread = threading.Thread(
@@ -1183,20 +1208,17 @@ class ManagerApi:
         清洗、算 MD5、读时长都在锁外做——这些是秒级的；只有「落盘 + 写进内存库」
         这一小段在锁内。否则导入期间界面的每一次快照都会被锁住，而导入线程
         直接改 ``library.musics`` 又会让别的线程撞上「字典在迭代时被改变」。
-        """
-        default_clean = bool(self.settings.get("import", "clean_audio", default=True))
-        task = self._task_patch(task_id)
-        if task is None:
-            return
-        clean = default_clean if task.get("clean") is None else bool(task["clean"])
 
+        音乐导入一律清元数据：清洗后的字节决定 MD5，跳过清洗会让同一个文件在
+        不同机器上算出不同的身份。
+        """
         for index, entry in enumerate(items, start=1):
             path = Path(entry["path"])
             if self._task_patch(task_id, current=path.name) is None:
                 return
 
             try:
-                prepared = prepare_import(path, clean)
+                prepared = prepare_import(path, True)
             except Exception as error:  # 单个文件失败不打断整批
                 logger.warning("导入准备失败：{}（{}）", path, error)
                 self._record_import_error(task_id, f"{path.name}：{error}", index)
@@ -1293,9 +1315,8 @@ class ManagerApi:
         return {"task_id": task_id}
 
     def _run_replace(self, task_id: str, md5: str, path: str) -> None:
-        clean = bool(self.settings.get("import", "clean_audio", default=True))
         try:
-            prepared = source.prepare_replacement(Path(path), clean)
+            prepared = source.prepare_replacement(Path(path), True)
         except ActionError as error:
             self._finish_task(task_id, error=str(error))
             return

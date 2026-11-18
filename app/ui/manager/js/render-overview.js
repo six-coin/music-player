@@ -15,10 +15,13 @@ function applyNav(section) {
   else if (section === "playlists") showView("playlists");
   else if (section === "tags") showView("tags");
   else if (section === "authors") showView("authors");
+  else if (section === "pomodoro") showView("pomodoro");
   else if (section === "settings") showView("settings");
   else showView("pending");
   if (section === "settings") renderSettings();
   if (section !== "playlists") closeDrawer();
+  // 离开番茄分区时把内嵌试听停掉：它不属于底部试听条，没人会替它收尾。
+  if (section !== "pomodoro") stopPomodoroAudition();
 }
 function renderSummary(data) {
   const counts = data.counts || {};
@@ -194,6 +197,7 @@ function apply(data) {
   else if (data.section === "playlists") renderPlaylists();
   else if (data.section === "tags") renderTags();
   else if (data.section === "authors") renderAuthors();
+  else if (data.section === "pomodoro") renderPomodoros();
   else if (data.section === "settings") renderSettings();
 
   if (state.drawer) refreshDrawer();
@@ -207,5 +211,10 @@ function itemByKind(kind, uid) {
   if (kind === "playlist") return playlistByUid(uid);
   if (kind === "tag_group") return tagGroupByUid(uid);
   if (kind === "author") return authorByUid(uid);
+  if (kind === "pomodoro") return pomodoroItemByUid(uid);
+  if (kind === "duration_mode") return pomodoroModeByUid(uid);
+  if (kind === "background") return pomodoroBackgroundByUid(uid);
+  if (kind === "ring") return pomodoroRingByUid(uid);
+  if (kind === "environment") return pomodoroEnvironmentByUid(uid);
   return null;
 }

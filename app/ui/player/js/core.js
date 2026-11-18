@@ -20,6 +20,9 @@ const state = {
   pickerTimer: null,
   pickerCloseTimer: null,
   lastCurrent: null,
+  //: 番茄钟详情里「只对本次生效」的改动；换一个番茄钟就清空。
+  pomoOverrides: {},
+  pomoDetailUid: null,
 };
 
 const audio = document.getElementById("audio");

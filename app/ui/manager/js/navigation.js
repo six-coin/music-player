@@ -14,7 +14,22 @@ async function goSection(section) {
   } else if (section === "authors" && state.activeKind !== "author") {
     const first = ((state.data && state.data.library.authors) || [])[0];
     if (first) selectAuthor(first.uid);
+  } else if (section === "pomodoro" && !isPomodoroKind(state.activeKind)) {
+    const overview = await call("select_pomodoro_overview");
+    if (overview) apply(overview);
   }
+}
+
+/* 进入番茄分区时，如果上一个选中项还是歌曲 / 歌单，就落到总览。 */
+function isPomodoroKind(kind) {
+  return (
+    kind === "pomodoro" ||
+    kind === "duration_mode" ||
+    kind === "background" ||
+    kind === "ring" ||
+    kind === "environment" ||
+    kind === "pomodoro_overview"
+  );
 }
 
 function animateDetail(id) {

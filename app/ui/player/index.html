@@ -40,8 +40,12 @@
 
   <div class="app" id="app">
     <aside class="sidebar">
-      <div class="sidebar-head" data-i18n="player.playlist_header">歌单</div>
-      <div class="playlist-list" id="playlists" role="list"></div>
+      <div class="sidebar-scroll">
+        <div class="sidebar-head" data-i18n="player.playlist_header">歌单</div>
+        <div class="playlist-list" id="playlists" role="list"></div>
+        <div class="sidebar-head sidebar-head--pomodoro" id="pomodoro-head" data-i18n="pomodoro.header">番茄钟</div>
+        <div class="playlist-list" id="pomodoros" role="list"></div>
+      </div>
       <div class="sidebar-foot" id="mode-label"></div>
     </aside>
 
@@ -54,7 +58,7 @@
 
       <div class="notice" id="notice" role="status" aria-live="polite"></div>
 
-      <div class="now-body">
+      <div class="now-body" id="now-body">
         <section class="playing" id="playing">
           <div class="playing-head" id="track-head" hidden>
             <span class="playing-playlist" id="track-playlist"></span>
@@ -112,6 +116,8 @@
           <button class="btn primary" id="empty-action" type="button" data-i18n="player.action.open_manager" hidden>打开管理器</button>
         </section>
       </div>
+
+      <section class="pomodoro-detail" id="pomodoro-detail" hidden></section>
     </main>
 
     <aside class="queue" id="queue">
@@ -123,6 +129,66 @@
       </div>
       <div class="queue-list" id="queue-list"></div>
     </aside>
+  </div>
+
+  <div class="pomo-stage" id="pomo-stage" hidden>
+    <div class="pomo-bg" id="pomo-bg"></div>
+    <div class="pomo-scrim"></div>
+
+    <div class="pomo-hud">
+      <div class="pomo-hud-phase" id="pomo-phase"></div>
+      <div class="pomo-hud-time" id="pomo-time">0:00</div>
+      <div class="pomo-hud-next" id="pomo-next"></div>
+    </div>
+
+    <div class="pomo-hotzone" id="pomo-hotzone"></div>
+    <div class="pomo-panel" id="pomo-panel">
+      <div class="pomo-panel-title" id="pomo-panel-title"></div>
+      <label class="pomo-volume">
+        <span data-i18n="pomodoro.music_volume">背景音乐</span>
+        <input class="slider" id="pomo-music-volume" type="range" min="0" max="100" step="1" value="50">
+        <span class="pomo-volume-value" id="pomo-music-volume-value">50%</span>
+      </label>
+      <label class="pomo-volume">
+        <span data-i18n="pomodoro.environment_volume">环境音</span>
+        <input class="slider" id="pomo-environment-volume" type="range" min="0" max="100" step="1" value="35">
+        <span class="pomo-volume-value" id="pomo-environment-volume-value">35%</span>
+      </label>
+      <div class="pomo-panel-actions">
+        <button class="pomo-action" id="pomo-pause" type="button" data-paused="false">
+          <svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg>
+          <span id="pomo-pause-label" data-i18n="pomodoro.pause">暂停</span>
+        </button>
+        <button class="pomo-action" id="pomo-fullscreen" type="button" data-i18n="pomodoro.fullscreen">全屏</button>
+        <button class="pomo-action is-danger" id="pomo-exit" type="button" data-i18n="pomodoro.exit">退出</button>
+      </div>
+    </div>
+
+    <div class="pomo-prep" id="pomo-prep">
+      <div class="pomo-prep-name" id="pomo-prep-name"></div>
+      <div class="pomo-prep-label" data-i18n="pomodoro.prep">预备</div>
+      <div class="pomo-prep-time" id="pomo-prep-time">2:00</div>
+      <button class="btn primary" id="pomo-prep-skip" type="button" data-i18n="pomodoro.prep_skip">跳过预备</button>
+    </div>
+
+    <div class="pomo-done" id="pomo-done" hidden>
+      <div class="pomo-done-card">
+        <h2 data-i18n="pomodoro.done_title">完成</h2>
+        <div class="pomo-done-stats" id="pomo-done-stats"></div>
+        <button class="btn primary" id="pomo-done-close" type="button" data-i18n="pomodoro.done_back">返回</button>
+      </div>
+    </div>
+
+    <div class="pomo-confirm" id="pomo-confirm" hidden>
+      <div class="pomo-confirm-card">
+        <h2 data-i18n="pomodoro.exit_title">退出番茄钟</h2>
+        <p data-i18n="pomodoro.exit_body">已经计时的时间会保留，确定要退出吗？</p>
+        <div class="pomo-confirm-actions">
+          <button class="btn ghost" id="pomo-exit-cancel" type="button" data-i18n="pomodoro.exit_cancel">继续计时</button>
+          <button class="btn primary" id="pomo-exit-confirm" type="button" data-i18n="pomodoro.exit_confirm">退出</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="modal" id="picker" hidden>
@@ -143,11 +209,16 @@
   </div>
 
   <audio id="audio" preload="metadata"></audio>
+  <audio id="pomo-audio" preload="metadata"></audio>
+  <audio id="pomo-ambient" loop preload="metadata"></audio>
+  <audio id="pomo-ring" preload="auto"></audio>
   <!-- 没有构建步骤：按职责拆成多个普通脚本，共享全局作用域，顺序见 docs/architecture.md -->
   <script src="js/core.js"></script>
   <script src="js/render.js"></script>
   <script src="js/playback.js"></script>
   <script src="js/picker.js"></script>
+  <script src="js/pomodoro-render.js"></script>
+  <script src="js/pomodoro.js"></script>
   <script src="js/events.js"></script>
   <script src="js/main.js"></script>
 </body>

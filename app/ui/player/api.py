@@ -36,6 +36,7 @@ from app.settings import SettingsStore
 from app.system import atomic, launcher
 from app.system import theme as theme_tool
 from app.system.media_server import MediaServer
+from app.ui.player.pomodoro_api import PomodoroApiMixin
 
 STATE_VERSION = 1
 PICK_LIMIT = 200
@@ -56,7 +57,7 @@ def _clamp_size(value: object, low: int, fallback: int) -> int:
     return max(low, value)
 
 
-class PlayerApi:
+class PlayerApi(PomodoroApiMixin):
     def __init__(self, config_dir: Path | None = None) -> None:
         base = config_dir or paths.CONFIG_DIR
         self.base = base
@@ -88,6 +89,7 @@ class PlayerApi:
             rng=self._rng,
             hooks=Hooks(self._available, self._should_skip, self._on_auto_skip),
         )
+        self._init_pomodoro(base)
         self._restore()
 
     # ---------- 启动 ----------
@@ -162,6 +164,7 @@ class PlayerApi:
                 media.stop()
             except Exception:
                 logger.exception("停止媒体服务失败")
+        self._pomo_media.stop()
 
     # ---------- 读取 ----------
 
@@ -201,6 +204,9 @@ class PlayerApi:
         with self._lock:
             if not isinstance(uid, str) or not uid:
                 return self._snapshot()
+            if self._pomo_active is None:
+                # 点歌单就是回音乐视图：番茄钟详情不该继续占着主区域。
+                self._pomo_selected = None
             if uid == self.session.playlist_uid and self.session.current_md5 is not None:
                 return self._snapshot()  # 点已选中的歌单不重置；没歌可播时允许重点重试
             self._records = {}
@@ -355,6 +361,7 @@ class PlayerApi:
                 "pinned": self._title(pinned) if isinstance(pinned, str) else None,
             },
             "volume": float(self.settings.get("player", "volume", default=0.2)),
+            "pomodoros": self._pomodoro_snapshot(),
             "empty": self._empty_value(state["empty"]),
             "notice": self._notice_payload(state["notice"]),
             "warnings": list(self.warnings),
@@ -459,8 +466,7 @@ class PlayerApi:
         playlist = self.playlists.get(playlist_uid)
         if playlist is None or not playlist.adaptation.enabled or self.settings.debug_enabled():
             return False
-        if playlist_uid != self._records_uid:
-            self._reload_records()
+        self._reload_records_for(playlist_uid)
         entry = self._records.get(md5)
         return adaptation.should_skip(
             entry.records if entry else "", self._params(playlist), self._rng
@@ -484,20 +490,40 @@ class PlayerApi:
             self._record(md5, _milliseconds(played_ms), natural=False)
 
     def _record(self, md5: str, played_ms: int, *, natural: bool) -> None:
-        uid = self.session.playlist_uid
-        playlist = self.playlists.get(uid) if uid else None
+        self._record_song(
+            self.session.playlist_uid,
+            self.session.mode,
+            md5,
+            played_ms,
+            natural=natural,
+        )
+
+    def _record_song(
+        self,
+        playlist_uid: str | None,
+        mode: str,
+        md5: str,
+        played_ms: int,
+        *,
+        natural: bool,
+    ) -> None:
+        """普通播放器与番茄钟共用：记自适应、记总播放次数。
+
+        番茄钟有自己的一条 ``PlayerSession``，所以歌单与模式必须显式传进来，
+        不能读 ``self.session``。
+        """
+        playlist = self.playlists.get(playlist_uid) if playlist_uid else None
         if playlist is None:
             return
         params = self._params(playlist)
         # 总播放次数先记：它不受歌单的自适应开关与调试状态影响。
-        self._count_total(md5, played_ms, params, natural=natural)
+        self._count_total(md5, played_ms, params, natural=natural, mode=mode)
         if not playlist.adaptation.enabled or self.settings.debug_enabled():
             return
-        if uid != self._records_uid:
-            self._reload_records()
+        self._reload_records_for(playlist_uid or "")
         skipped = False if natural else played_ms < params.skip_seconds * 1000
         try:
-            self.stats.record(uid, md5, skipped, params.window)
+            self.stats.record(playlist_uid or "", md5, skipped, params.window)
         except Exception:  # 统计是附加物，不能拦住播放
             logger.exception("统计写入失败：{}", md5)
             return
@@ -506,20 +532,22 @@ class PlayerApi:
         entry.last_played_at = int(time.time())
 
     def _count_total(
-        self, md5: str, played_ms: int, params: adaptation.Params, *, natural: bool
+        self,
+        md5: str,
+        played_ms: int,
+        params: adaptation.Params,
+        *,
+        natural: bool,
+        mode: str,
     ) -> None:
         """总播放次数：只受设置里那个总开关控制，判定标准看当时的环境。
 
         单曲循环用全局阈值——这时放的可能是一首不在任何歌单里的歌，套用当前
-        歌单的阈值没有依据。
+        歌单的阈值没有依据。番茄钟没有单曲循环，永远走歌单阈值。
         """
         if not self.settings.record_total_plays_enabled():
             return
-        seconds = (
-            self._defaults().skip_seconds
-            if self.session.mode == "repeat_one"
-            else params.skip_seconds
-        )
+        seconds = self._defaults().skip_seconds if mode == "repeat_one" else params.skip_seconds
         if not adaptation.is_full_play(played_ms, seconds, natural=natural):
             return
         try:
@@ -528,7 +556,9 @@ class PlayerApi:
             logger.exception("记录总播放次数失败：{}", md5)
 
     def _reload_records(self) -> None:
-        uid = self.session.playlist_uid
+        self._reload_records_for(self.session.playlist_uid or "")
+
+    def _reload_records_for(self, uid: str) -> None:
         if not uid:
             self._records = {}
             self._records_uid = ""

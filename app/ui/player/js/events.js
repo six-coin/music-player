@@ -2,6 +2,7 @@
 /* ---------- 事件 ---------- */
 
 function bindEvents() {
+  bindPomodoroStageEvents();
   qs("#play").addEventListener("click", togglePlay);
   qs("#prev").addEventListener("click", function () {
     callTrack("prev_track");
@@ -19,6 +20,34 @@ function bindEvents() {
   qs("#playlists").addEventListener("click", function (event) {
     const item = event.target.closest(".playlist-item");
     if (item) call("select_playlist", item.dataset.uid).then(apply);
+  });
+
+  qs("#pomodoros").addEventListener("click", function (event) {
+    if (pomo.active) return;
+    const item = event.target.closest("[data-pomodoro-uid]");
+    if (item) call("select_pomodoro", item.dataset.pomodoroUid).then(apply);
+  });
+
+  qs("#pomodoro-detail").addEventListener("click", function (event) {
+    if (event.target.closest("#pomo-start")) {
+      startPomodoro();
+      return;
+    }
+    if (event.target.closest("#pomo-reset")) {
+      state.pomoOverrides = {};
+      renderPomodoroDetail();
+      return;
+    }
+    const toggle = event.target.closest("button[role='switch'][data-pomo-override]");
+    if (toggle) {
+      const next = toggle.getAttribute("aria-checked") !== "true";
+      setPomodoroOverride(toggle, next);
+    }
+  });
+
+  qs("#pomodoro-detail").addEventListener("change", function (event) {
+    const select = event.target.closest("select[data-pomo-override]");
+    if (select) setPomodoroOverride(select, select.value);
   });
 
   qs("#queue-list").addEventListener("click", function (event) {
@@ -149,10 +178,32 @@ function bindEvents() {
       }
       return;
     }
+    // 番茄钟里只认 Ctrl+C（与普通播放器的「下一首」同一绑定）：
+    // Esc 不退全屏、也不退出番茄钟，退出只能走右上角面板。
+    if (pomo.active) {
+      if (matchKey(event, playerKeys().next)) {
+        pomodoroMusicNext();
+        event.preventDefault();
+      }
+      return;
+    }
     const tag = (event.target && event.target.tagName ? event.target.tagName : "").toLowerCase();
     if (tag === "input" || tag === "textarea") return;
     if (runShortcut(event)) event.preventDefault();
   });
+}
+
+function setPomodoroOverride(element, value) {
+  const phase = element.dataset.pomoPhase;
+  const key = element.dataset.pomoOverride;
+  if (!key) return;
+  if (phase) {
+    const current = state.pomoOverrides[phase] || {};
+    state.pomoOverrides[phase] = Object.assign({}, current, { [key]: value });
+  } else {
+    state.pomoOverrides[key] = value;
+  }
+  renderPomodoroDetail();
 }
 
 /* 快捷键全部来自设置：快照里的 keys 就是当前绑定，认不出来就不响应。

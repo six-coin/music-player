@@ -241,6 +241,14 @@ CONFIG_DIR = DATA_DIR
 ASSETS_DIR = PROGRAM_DIR / "assets"
 MUSIC_DIR = DATA_DIR / "music"
 
+#: 番茄钟的全部数据都在数据目录里：一份注册表 + 三个资源文件夹。
+#: 资源文件名用 uid，显示名只存在 ``pomodoro.json`` 里，改名不动文件。
+POMODORO_PATH = DATA_DIR / "pomodoro.json"
+POMODORO_DIR = DATA_DIR / "pomodoro"
+BACKGROUND_DIR = POMODORO_DIR / "background"
+ENVIRONMENT_DIR = POMODORO_DIR / "environment"
+RING_DIR = POMODORO_DIR / "ring"
+
 SETTINGS_PATH = DATA_DIR / "settings.json"
 LIBRARY_PATH = DATA_DIR / "library.json"
 PLAYLISTS_PATH = DATA_DIR / "playlists.json"
@@ -269,6 +277,15 @@ def music_path(md5: str, ext: str) -> Path:
 def stats_path(playlist_uid: str) -> Path:
     """一个歌单一份统计文件。"""
     return STATS_DIR / f"{playlist_uid}.json"
+
+
+def data_path(relative: str) -> Path:
+    """把 ``pomodoro.json`` 里登记的相对路径解析成绝对路径。
+
+    记录里只写 ``pomodoro/background/<uid>.png`` 这种以数据目录为基准的相对
+    路径：数据目录整体搬走时，登记表不用改。
+    """
+    return DATA_DIR / relative
 
 
 def lock_for(path: Path) -> Path:
