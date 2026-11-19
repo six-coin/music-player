@@ -533,8 +533,8 @@ select {
   box-shadow: 0 1px 3px var(--shadow);
 }
 
-/* 卡片里的行列表：行自己带内边距，列表不再左右缩进，文字才能与卡片标题对齐，
-   悬停底色也铺满整行。 */
+/* 卡片里的行列表：列表不再左右缩进，悬停底色与卡片标题左对齐；行自己保留
+   一点内边距，文字才不会贴着底色的左边。 */
 .rows {
   display: flex;
   flex-direction: column;
@@ -544,7 +544,7 @@ select {
 }
 
 .rows .row {
-  padding: 7px 0;
+  padding: 7px 10px;
 }
 
 .row {
