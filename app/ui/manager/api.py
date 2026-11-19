@@ -52,6 +52,7 @@ from app.ui.manager.pomodoro_api import (
     PomodoroApiMixin,
     is_pomodoro_selection,
     make_media_hub,
+    make_session_log,
     make_store,
 )
 
@@ -95,6 +96,7 @@ class ManagerApi(PomodoroApiMixin):
         self.stats = StatsStore(base / "stats")
         self.totals = TotalStore(base / "totals.json")
         self.pomodoro = make_store(base)
+        self.pomo_sessions = make_session_log(base)
         self._pomo_media = make_media_hub()
         self.warnings: list[str] = []
         self.section = "overview"
@@ -117,6 +119,7 @@ class ManagerApi(PomodoroApiMixin):
         self.warnings.extend(self.library.load())
         self.warnings.extend(self.playlists.load())
         self.warnings.extend(self.pomodoro.load_locked())
+        self.warnings.extend(self.pomo_sessions.load())
         # 歌单可能在 manager 关着的时候被删掉：启动时把失效引用清掉。
         if self.pomodoro.sanitize_playlists(set(self.playlists.items)):
             self.pomodoro.save()
@@ -1178,8 +1181,7 @@ class ManagerApi(PomodoroApiMixin):
                 task.update(fields)
             return task
 
-    def start_import(self, items: list[Any], clean: bool | None = None) -> dict[str, Any]:
-        # ``clean`` 保留在签名里只为兼容旧调用；音乐导入现在一律清元数据。
+    def start_import(self, items: list[Any]) -> dict[str, Any]:
         normalized: list[dict[str, Any]] = []
         for item in items or []:
             if isinstance(item, str):

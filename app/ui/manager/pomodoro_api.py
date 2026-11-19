@@ -19,13 +19,17 @@ from app.core import pomodoro_media
 from app.core.pomodoro import (
     ASSET_KINDS,
     BACKGROUND_MODES,
+    DUCK_MS_MAX,
+    DUCK_RATIO_MAX,
+    FADE_IN_MS_MAX,
     FONTS,
-    HUD_SCALE_DEFAULT,
     HUD_SCALE_MAX,
     HUD_SCALE_MIN,
     PLAY_ORDERS,
+    PREP_MAX,
     PomodoroStore,
 )
+from app.core.pomodoro_sessions import SessionLog
 from app.errors import ActionError, DataError
 from app.ui.media import MediaHub
 
@@ -62,6 +66,7 @@ class PomodoroApiMixin:
 
     def _pomodoro_payload(self) -> dict[str, Any]:
         self.pomodoro.reload_if_changed()
+        self.pomo_sessions.reload_if_changed()
         items = [self._pomodoro_item_payload(item) for item in self.pomodoro.item_list()]
         modes = [self._pomodoro_mode_payload(mode) for mode in self.pomodoro.mode_list()]
         backgrounds = [
@@ -83,6 +88,7 @@ class PomodoroApiMixin:
             "backgrounds": backgrounds,
             "rings": rings,
             "environments": environments,
+            "sessions": [record.to_dict() for record in reversed(self.pomo_sessions.entries())],
             "overview": {
                 "total": _stats(self.pomodoro.total),
                 "counts": {
@@ -127,18 +133,27 @@ class PomodoroApiMixin:
                 "hud_scale": self.pomodoro.hud_scale,
                 "hud_scale_min": HUD_SCALE_MIN,
                 "hud_scale_max": HUD_SCALE_MAX,
+                "prep_seconds": self.pomodoro.prep_seconds,
+                "prep_seconds_max": PREP_MAX,
+                "duck_ms": self.pomodoro.duck_ms,
+                "duck_ms_max": DUCK_MS_MAX,
+                "duck_ratio": self.pomodoro.duck_ratio,
+                "duck_ratio_max": DUCK_RATIO_MAX,
+                "fade_in_ms": self.pomodoro.fade_in_ms,
+                "fade_in_ms_max": FADE_IN_MS_MAX,
             },
         }
 
-    def set_pomodoro_hud_scale(self, value: object = 1.0) -> dict[str, Any]:
-        """计时器比例是全局偏好，manager 与 player 改的是同一个值。"""
+    def set_pomodoro_preferences(self, patch: object = None) -> dict[str, Any]:
+        """番茄钟的全局偏好：两个音量、计时器比例与一轮的四个节奏参数。
+
+        manager 与 player 改的是同一份值；player 只动音量与比例。
+        """
         with self._lock:
             try:
-                self.pomodoro.set_hud_scale(
-                    float(value) if isinstance(value, (int, float)) else HUD_SCALE_DEFAULT
-                )
+                self.pomodoro.set_preferences(patch if isinstance(patch, dict) else {})
             except Exception:
-                logger.exception("保存番茄钟计时器比例失败")
+                logger.exception("保存番茄钟偏好失败")
                 return self._pomodoro_error(i18n.t("pomodoro.invalid"))
             return self._snapshot()
 
@@ -169,6 +184,7 @@ class PomodoroApiMixin:
         return {
             "uid": mode.uid,
             "name": mode.name,
+            "description": mode.description,
             "segments": list(mode.segments),
             "summary": mode.summary,
             "total_minutes": mode.total_minutes,
@@ -294,24 +310,18 @@ class PomodoroApiMixin:
 
     # ---------- 资源 ----------
 
-    def rename_background(self, uid: str, name: str) -> dict[str, Any]:
-        return self._rename_asset("background", uid, name)
-
-    def rename_ring(self, uid: str, name: str) -> dict[str, Any]:
-        return self._rename_asset("ring", uid, name)
-
-    def rename_environment(self, uid: str, name: str) -> dict[str, Any]:
-        return self._rename_asset("environment", uid, name)
-
-    def _rename_asset(self, kind: str, uid: str, name: str) -> dict[str, Any]:
+    def update_pomodoro_asset(self, kind: str, uid: str, patch: dict[str, Any]) -> dict[str, Any]:
+        """改资源的名称与描述。只返回 ``{"ok"}``：输入框逐字符触发，不重绘整页。"""
         with self._lock:
             try:
                 if kind == "background":
-                    self.pomodoro.update_background(uid, str(name or ""))
+                    self.pomodoro.update_background(uid, patch)
                 elif kind == "ring":
-                    self.pomodoro.update_ring(uid, str(name or ""))
+                    self.pomodoro.update_ring(uid, patch)
+                elif kind == "environment":
+                    self.pomodoro.update_environment(uid, patch)
                 else:
-                    self.pomodoro.update_environment(uid, str(name or ""))
+                    return {"ok": False}
             except DataError:
                 return {"ok": False}
             return {"ok": True}
@@ -463,6 +473,10 @@ class PomodoroApiMixin:
 
 def make_store(base: Path) -> PomodoroStore:
     return PomodoroStore(base / "pomodoro.json")
+
+
+def make_session_log(base: Path) -> SessionLog:
+    return SessionLog(base / "pomodoro-sessions.json")
 
 
 def make_media_hub() -> MediaHub:

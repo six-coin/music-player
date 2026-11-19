@@ -127,6 +127,13 @@ function formatDate(seconds) {
   return date.getFullYear() + "/" + pad(date.getMonth() + 1) + "/" + pad(date.getDate());
 }
 
+/* 播放记录要看到几点几分：只给日期分不清上午与下午的两轮。 */
+function formatDateTime(seconds) {
+  if (!seconds) return "";
+  const date = new Date(seconds * 1000);
+  return formatDate(seconds) + " " + pad(date.getHours()) + ":" + pad(date.getMinutes());
+}
+
 function formatTime(at, now) {
   if (!at) return "";
   const diff = Math.max(0, (now || Math.floor(Date.now() / 1000)) - at);

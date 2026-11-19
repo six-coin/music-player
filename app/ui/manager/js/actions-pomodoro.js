@@ -19,14 +19,12 @@ async function savePomodoroName(input) {
   } else if (input.dataset.pomoModeName) {
     result = await call("rename_duration_mode", input.dataset.pomoModeName, value);
   } else if (input.dataset.pomoAssetName) {
-    const kind = input.dataset.pomoAssetKind;
-    const uid = input.dataset.pomoAssetName;
-    const method = {
-      background: "rename_background",
-      ring: "rename_ring",
-      environment: "rename_environment",
-    }[kind];
-    if (method) result = await call(method, uid, value);
+    result = await call(
+      "update_pomodoro_asset",
+      input.dataset.pomoAssetKind,
+      input.dataset.pomoAssetName,
+      { name: value }
+    );
   }
   if (!result || !result.ok) {
     input.classList.add("invalid");
@@ -50,6 +48,23 @@ async function flushPomodoroNameSave() {
     "#pomodoro-name, #pomodoro-mode-name, #pomodoro-asset-name"
   );
   if (input) await savePomodoroName(input);
+}
+
+/* ---------- 全局偏好 ---------- */
+
+/* 秒与百分比在界面上填，存的是毫秒与比例。 */
+function pomodoroSavePref(input) {
+  if (!input) return;
+  const key = input.dataset.pomoPref;
+  let value = Number(input.value);
+  if (!isFinite(value)) return;
+  if (input.dataset.pomoPercent) value = value / 100;
+  if (input.dataset.pomoSeconds) value = Math.round(value * 1000);
+  const patch = {};
+  patch[key] = value;
+  call("set_pomodoro_preferences", patch).then(function (data) {
+    if (data) apply(data);
+  });
 }
 
 /* ---------- 新建 ---------- */

@@ -241,9 +241,11 @@ CONFIG_DIR = DATA_DIR
 ASSETS_DIR = PROGRAM_DIR / "assets"
 MUSIC_DIR = DATA_DIR / "music"
 
-#: 番茄钟的全部数据都在数据目录里：一份注册表 + 三个资源文件夹。
+#: 番茄钟的全部数据都在数据目录里：一份注册表 + 一份播放记录 + 三个资源文件夹。
 #: 资源文件名用 uid，显示名只存在 ``pomodoro.json`` 里，改名不动文件。
 POMODORO_PATH = DATA_DIR / "pomodoro.json"
+#: 每完整走完一轮追加一条，只追加不改写，与配置分开存。
+POMODORO_SESSIONS_PATH = DATA_DIR / "pomodoro-sessions.json"
 POMODORO_DIR = DATA_DIR / "pomodoro"
 BACKGROUND_DIR = POMODORO_DIR / "background"
 ENVIRONMENT_DIR = POMODORO_DIR / "environment"

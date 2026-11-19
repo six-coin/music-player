@@ -3349,3 +3349,19 @@ input[type="checkbox"]:disabled {
     var(--surface-muted) 100%
   );
 }
+
+/* 全局偏好里的秒数：一行放得下输入框与单位。 */
+.pomo-pref-number {
+  width: 92px;
+  flex: none;
+}
+
+.pomo-pref-unit {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 偏好的标签更长（「提示音期间音乐音量」），给它比一般字段更宽的一列。 */
+.pomo-pref-row {
+  grid-template-columns: 118px minmax(0, 1fr);
+}

@@ -220,25 +220,32 @@ The "Pomodoro" section of the manager has an overview plus five groups (pomodoro
 
 | Item                | Detail                                                                             |
 |---------------------|------------------------------------------------------------------------------------|
+| Description         | A note for yourself. Pomodoros, duration modes, backgrounds, chimes and ambience all have one |
 | Duration mode       | A run of minutes: odd phases focus, even phases break; 1–99 phases, 1–180 min each |
 | Background          | Image or video; scaling can stretch, fit width, fit height, contain or cover       |
 | Focus / Break       | One playlist each. "None" means no music for that phase — there is no extra switch |
 | Chime               | Plays at the end of prep, at every phase change and at the end of the round        |
 | Ambience            | "None" means off; otherwise it runs for the whole round, independent of phases     |
 | Font                | Font used by the timer layer                                                       |
-| Timer size          | Overall scale of the corner countdown, 20%–500%, 100% by default; shared with the player |
+
+The overview page also carries two cards:
+
+| Item            | Detail                                                                                                              |
+|-----------------|---------------------------------------------------------------------------------------------------------------------|
+| Session history | One row per completed round: which pomodoro, when it started and ended, focus time, break time. Rows survive the pomodoro being deleted — the id itself is shown then |
+| Preferences     | Prep time (0–300 s, 0 skips prep), fade down before the chime (0–30 s, 0 disables it), music level during the chime (0–50%), fade back after the chime (0–10 s), timer size (20%–500%). All of them apply to every pomodoro and are shared with the player |
 
 The player lists pomodoros under the playlists; click one to see its details. Changes made there apply to this run only and never touch the saved configuration; "Reset to defaults" clears them.
 
 After pressing Start:
 
-1. A 120-second prep screen (large centred countdown, skippable).
+1. A prep screen (120 seconds by default, skippable, centred countdown; 0 starts right away).
 2. Prep ends and the window goes full screen: background, ambience and the focus playlist start together, with the phase and countdown in the bottom-left corner.
-3. A chime marks every phase change; during the last 10 seconds the music ducks to 12% and track changes are blocked, then it fades back up for the next phase.
+3. A chime marks every phase change; shortly before it the music fades down to the configured level and track changes are blocked, then it fades back up once the chime ends.
 4. Hovering the top-right corner reveals a translucent panel: two volumes, pause, full screen, exit. `Ctrl+C` skips a track; `Esc` does nothing.
-5. After the last phase comes the completion card: the background stays, ambience keeps playing, music follows the break settings.
+5. After the last phase comes the completion card: the background stays, ambience keeps playing, music follows the break settings, and the round is written to the session history.
 
-"Keep going" in the exit dialog returns to the timer; "Exit" records the time already counted and leaves. A forced kill loses at most the last 10 seconds.
+"Keep going" in the exit dialog returns to the timer; "Exit" records the time already counted and leaves. A forced kill loses at most the last 10 seconds. Leaving early is not a completed round and is not recorded.
 
 **Importing assets**: backgrounds accept common image and video formats, chimes accept mp3/ogg, ambience accepts mp3/ogg/mp4/m4a. Everything is transcoded on import — images to PNG, videos to H.264 MP4 without an audio track; audio can be trimmed, given a "seamless crossfade" (cut at the midpoint, reordered as B+A and crossfaded, which shortens the result by one fade), or simply stripped of metadata. The import dialog cannot be dismissed by clicking outside or pressing Esc; only Cancel closes it.
 
@@ -352,6 +359,7 @@ Music Player\
 ├─ playlists.json                            playlists and the default one
 ├─ player.json                               window size, queue visibility
 ├─ pomodoro.json                             pomodoros, duration modes, asset registry, stats, preferences
+├─ pomodoro-sessions.json                    one record per completed pomodoro round
 ├─ pomodoro\background\<uid>.png / .mp4        pomodoro backgrounds (transcoded on import)
 ├─ pomodoro\ring\<uid>.mp3 / .ogg              chimes
 ├─ pomodoro\environment\<uid>.mp3 / .ogg       ambience

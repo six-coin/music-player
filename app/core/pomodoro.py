@@ -26,17 +26,27 @@ from app.core.pomodoro_models import (
     AUDIO_EXTS,
     BACKGROUND_KINDS,
     BACKGROUND_MODES,
+    DUCK_MS_DEFAULT,
+    DUCK_MS_MAX,
+    DUCK_MS_MIN,
+    DUCK_RATIO_DEFAULT,
+    DUCK_RATIO_MAX,
+    DUCK_RATIO_MIN,
+    FADE_IN_MS_DEFAULT,
+    FADE_IN_MS_MAX,
+    FADE_IN_MS_MIN,
     FONTS,
     HUD_SCALE_DEFAULT,
     HUD_SCALE_MAX,
     HUD_SCALE_MIN,
-    LEGACY_HUD_SCALE_BASE,
     MODE_MAX_SEGMENTS,
     MODE_MIN_SEGMENTS,
     PHASES,
     PLAY_ORDERS,
     POMODORO_VERSION,
-    PREFERENCES_VERSION,
+    PREP_DEFAULT,
+    PREP_MAX,
+    PREP_MIN,
     SEGMENT_MAX_MINUTES,
     SEGMENT_MIN_MINUTES,
     VOLUME_DEFAULT,
@@ -46,6 +56,7 @@ from app.core.pomodoro_models import (
     PhaseAudio,
     Pomodoro,
     TimeStats,
+    _bounded_int,
     _choice,
     _fill_default_modes,
     _in_folder,
@@ -67,6 +78,12 @@ __all__ = [
     "AUDIO_EXTS",
     "BACKGROUND_KINDS",
     "BACKGROUND_MODES",
+    "DUCK_MS_DEFAULT",
+    "DUCK_MS_MAX",
+    "DUCK_RATIO_DEFAULT",
+    "DUCK_RATIO_MAX",
+    "FADE_IN_MS_DEFAULT",
+    "FADE_IN_MS_MAX",
     "FONTS",
     "HUD_SCALE_DEFAULT",
     "HUD_SCALE_MAX",
@@ -76,6 +93,8 @@ __all__ = [
     "PHASES",
     "PLAY_ORDERS",
     "POMODORO_VERSION",
+    "PREP_DEFAULT",
+    "PREP_MAX",
     "SEGMENT_MAX_MINUTES",
     "SEGMENT_MIN_MINUTES",
     "VOLUME_DEFAULT",
@@ -109,6 +128,10 @@ class PomodoroStore:
         self.music_volume = VOLUME_DEFAULT["music"]
         self.environment_volume = VOLUME_DEFAULT["environment"]
         self.hud_scale = HUD_SCALE_DEFAULT
+        self.prep_seconds = PREP_DEFAULT
+        self.duck_ms = DUCK_MS_DEFAULT
+        self.duck_ratio = DUCK_RATIO_DEFAULT
+        self.fade_in_ms = FADE_IN_MS_DEFAULT
         self.warnings: list[str] = []
         self._signature: tuple[int, int] | None = None
 
@@ -139,6 +162,10 @@ class PomodoroStore:
         music_volume = VOLUME_DEFAULT["music"]
         environment_volume = VOLUME_DEFAULT["environment"]
         hud_scale = HUD_SCALE_DEFAULT
+        prep_seconds = PREP_DEFAULT
+        duck_ms = DUCK_MS_DEFAULT
+        duck_ratio = DUCK_RATIO_DEFAULT
+        fade_in_ms = FADE_IN_MS_DEFAULT
         changed = False
 
         def commit() -> list[str]:
@@ -152,6 +179,10 @@ class PomodoroStore:
             self.music_volume = music_volume
             self.environment_volume = environment_volume
             self.hud_scale = hud_scale
+            self.prep_seconds = prep_seconds
+            self.duck_ms = duck_ms
+            self.duck_ratio = duck_ratio
+            self.fade_in_ms = fade_in_ms
             return list(warnings)
 
         if not self.path.exists():
@@ -203,18 +234,20 @@ class PomodoroStore:
             environment_volume = _ratio(
                 preferences.get("environment_volume"), VOLUME_DEFAULT["environment"]
             )
-            raw_scale = preferences.get("hud_scale")
-            hud_scale = _scale(raw_scale, HUD_SCALE_DEFAULT)
-            # 第 1 版的 hud_scale 是「相对 1.5 倍基准的倍数」，直接读会把
-            # 原来的 150% 显示成 225%。没有版本号就按旧口径换算一次；
-            # 连这个键都没有（更早的文件）就保持默认值，不能拿默认值再除一次。
-            version = preferences.get("version")
-            if isinstance(version, bool) or not isinstance(version, int):
-                version = 0
-            if version < PREFERENCES_VERSION:
-                if raw_scale is not None:
-                    hud_scale = _scale(hud_scale / LEGACY_HUD_SCALE_BASE, HUD_SCALE_DEFAULT)
-                changed = True
+            hud_scale = _scale(preferences.get("hud_scale"), HUD_SCALE_DEFAULT)
+            prep_seconds = _bounded_int(
+                preferences.get("prep_seconds"), PREP_MIN, PREP_MAX, PREP_DEFAULT
+            )
+            duck_ms = _bounded_int(
+                preferences.get("duck_ms"), DUCK_MS_MIN, DUCK_MS_MAX, DUCK_MS_DEFAULT
+            )
+            duck_ratio = min(
+                DUCK_RATIO_MAX,
+                max(DUCK_RATIO_MIN, _ratio(preferences.get("duck_ratio"), DUCK_RATIO_DEFAULT)),
+            )
+            fade_in_ms = _bounded_int(
+                preferences.get("fade_in_ms"), FADE_IN_MS_MIN, FADE_IN_MS_MAX, FADE_IN_MS_DEFAULT
+            )
 
         commit()
         if changed:
@@ -297,10 +330,13 @@ class PomodoroStore:
                 "items": {uid: stats.to_dict() for uid, stats in self.item_stats.items()},
             },
             "preferences": {
-                "version": PREFERENCES_VERSION,
                 "music_volume": self.music_volume,
                 "environment_volume": self.environment_volume,
                 "hud_scale": self.hud_scale,
+                "prep_seconds": self.prep_seconds,
+                "duck_ms": self.duck_ms,
+                "duck_ratio": self.duck_ratio,
+                "fade_in_ms": self.fade_in_ms,
             },
         }
 
@@ -315,6 +351,10 @@ class PomodoroStore:
         self.music_volume = other.music_volume
         self.environment_volume = other.environment_volume
         self.hud_scale = other.hud_scale
+        self.prep_seconds = other.prep_seconds
+        self.duck_ms = other.duck_ms
+        self.duck_ratio = other.duck_ratio
+        self.fade_in_ms = other.fade_in_ms
         self.warnings = other.warnings
         self._signature = other._signature
 
@@ -397,6 +437,8 @@ class PomodoroStore:
             raise DataError("时长模式不存在")
         if "name" in patch:
             mode.name = _text(patch.get("name"), "时长模式名称")
+        if "description" in patch:
+            mode.description = _text(patch.get("description"), "时长模式描述")
         if "segments" in patch:
             raw = patch.get("segments")
             if not isinstance(raw, list):
@@ -565,8 +607,8 @@ class PomodoroStore:
         self.backgrounds[record.uid] = record
         return record
 
-    def update_background(self, uid: str, name: str) -> Background:
-        return self._transact(lambda store: store._rename_asset(store.backgrounds, uid, name))
+    def update_background(self, uid: str, patch: dict[str, Any]) -> Background:
+        return self._transact(lambda store: store._update_asset(store.backgrounds, uid, patch))
 
     def delete_background(self, uid: str) -> Background | None:
         return self._transact(lambda store: store._delete_asset("background", uid))
@@ -577,8 +619,8 @@ class PomodoroStore:
     def add_ring(self, record: AudioAsset) -> AudioAsset:
         return self._transact(lambda store: store._add_audio(store.rings, record, "pomodoro/ring"))
 
-    def update_ring(self, uid: str, name: str) -> AudioAsset:
-        return self._transact(lambda store: store._rename_asset(store.rings, uid, name))
+    def update_ring(self, uid: str, patch: dict[str, Any]) -> AudioAsset:
+        return self._transact(lambda store: store._update_asset(store.rings, uid, patch))
 
     def delete_ring(self, uid: str) -> AudioAsset | None:
         return self._transact(lambda store: store._delete_asset("ring", uid))
@@ -591,8 +633,8 @@ class PomodoroStore:
             lambda store: store._add_audio(store.environments, record, "pomodoro/environment")
         )
 
-    def update_environment(self, uid: str, name: str) -> AudioAsset:
-        return self._transact(lambda store: store._rename_asset(store.environments, uid, name))
+    def update_environment(self, uid: str, patch: dict[str, Any]) -> AudioAsset:
+        return self._transact(lambda store: store._update_asset(store.environments, uid, patch))
 
     def delete_environment(self, uid: str) -> AudioAsset | None:
         return self._transact(lambda store: store._delete_asset("environment", uid))
@@ -613,13 +655,16 @@ class PomodoroStore:
         target[record.uid] = record
         return record
 
-    def _rename_asset(self, target: dict, uid: str, name: str) -> Any:
+    def _update_asset(self, target: dict, uid: str, patch: dict[str, Any]) -> Any:
         record = target.get(uid)
         if record is None:
             raise DataError("资源不存在")
-        record.name = _text(name, "名称")
-        if not record.name:
-            raise DataError("名称不能为空")
+        if "name" in patch:
+            record.name = _text(patch.get("name"), "名称")
+            if not record.name:
+                raise DataError("名称不能为空")
+        if "description" in patch:
+            record.description = _text(patch.get("description"), "描述")
         record.updated_at = _now()
         return record
 
@@ -694,17 +739,41 @@ class PomodoroStore:
         stats.last_used_at = max(stats.last_used_at, _now())
 
     def set_volumes(self, music: float, environment: float) -> None:
-        self._transact(lambda store: store._set_volumes(music, environment))
-
-    def _set_volumes(self, music: float, environment: float) -> None:
-        self.music_volume = _ratio(music, VOLUME_DEFAULT["music"])
-        self.environment_volume = _ratio(environment, VOLUME_DEFAULT["environment"])
+        self.set_preferences({"music_volume": music, "environment_volume": environment})
 
     def set_hud_scale(self, value: float) -> None:
-        self._transact(lambda store: store._set_hud_scale(value))
+        self.set_preferences({"hud_scale": value})
 
-    def _set_hud_scale(self, value: float) -> None:
-        self.hud_scale = _scale(value, HUD_SCALE_DEFAULT)
+    def set_preferences(self, patch: dict[str, Any]) -> None:
+        """改全局偏好。只处理认识的键，值一律夹取，非法值回退默认。"""
+        self._transact(lambda store: store._set_preferences(patch))
+
+    def _set_preferences(self, patch: dict[str, Any]) -> None:
+        if "music_volume" in patch:
+            self.music_volume = _ratio(patch.get("music_volume"), VOLUME_DEFAULT["music"])
+        if "environment_volume" in patch:
+            self.environment_volume = _ratio(
+                patch.get("environment_volume"), VOLUME_DEFAULT["environment"]
+            )
+        if "hud_scale" in patch:
+            self.hud_scale = _scale(patch.get("hud_scale"), HUD_SCALE_DEFAULT)
+        if "prep_seconds" in patch:
+            self.prep_seconds = _bounded_int(
+                patch.get("prep_seconds"), PREP_MIN, PREP_MAX, PREP_DEFAULT
+            )
+        if "duck_ms" in patch:
+            self.duck_ms = _bounded_int(
+                patch.get("duck_ms"), DUCK_MS_MIN, DUCK_MS_MAX, DUCK_MS_DEFAULT
+            )
+        if "duck_ratio" in patch:
+            self.duck_ratio = min(
+                DUCK_RATIO_MAX,
+                max(DUCK_RATIO_MIN, _ratio(patch.get("duck_ratio"), DUCK_RATIO_DEFAULT)),
+            )
+        if "fade_in_ms" in patch:
+            self.fade_in_ms = _bounded_int(
+                patch.get("fade_in_ms"), FADE_IN_MS_MIN, FADE_IN_MS_MAX, FADE_IN_MS_DEFAULT
+            )
 
 
 def default_store() -> PomodoroStore:

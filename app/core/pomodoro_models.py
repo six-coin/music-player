@@ -36,16 +36,25 @@ AUDIO_EXTS = ("mp3", "ogg")
 VOLUME_DEFAULT = {"music": 0.5, "environment": 0.35}
 
 #: 左下角计时器的整体缩放。1.0 就是「基准大小」，界面上的百分比直接对应用户
-#: 看到的字号比例；样式表里再乘一个基准系数，所以改这里的默认值会同时影响
-#: 老配置的迁移（见 ``PREFERENCES_VERSION``）。
+#: 看到的字号比例；样式表里再乘一个基准系数。
 HUD_SCALE_DEFAULT = 1.0
 HUD_SCALE_MIN = 0.2
 HUD_SCALE_MAX = 5.0
 
-#: 偏好设置的版本。第 2 版把 ``hud_scale`` 的基准从 1.5 改成 1.0：
-#: 没有版本号的旧文件里存的是「相对旧基准的倍数」，读进来要除以 1.5。
-PREFERENCES_VERSION = 2
-LEGACY_HUD_SCALE_BASE = 1.5
+#: 一轮番茄钟的四个节奏参数，都是全局偏好：改一次，所有番茄钟都跟着变。
+#: ``prep_seconds`` 为 0 就是跳过预备；``duck_ms`` 为 0 表示提示音前不压低音乐。
+PREP_DEFAULT = 120
+PREP_MIN = 0
+PREP_MAX = 300
+DUCK_MS_DEFAULT = 10_000
+DUCK_MS_MIN = 0
+DUCK_MS_MAX = 30_000
+DUCK_RATIO_DEFAULT = 0.12
+DUCK_RATIO_MIN = 0.0
+DUCK_RATIO_MAX = 0.5
+FADE_IN_MS_DEFAULT = 2_000
+FADE_IN_MS_MIN = 0
+FADE_IN_MS_MAX = 10_000
 
 
 def _now() -> int:
@@ -68,6 +77,16 @@ def _scale(value: object, fallback: float) -> float:
     if number != number:  # NaN
         return fallback
     return min(HUD_SCALE_MAX, max(HUD_SCALE_MIN, number))
+
+
+def _bounded_int(value: object, low: int, high: int, fallback: int) -> int:
+    """整数偏好：非数字回退默认值，越界夹取。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return fallback
+    number = float(value)
+    if number != number:  # NaN
+        return fallback
+    return min(high, max(low, int(number)))
 
 
 def _uid_or_none(value: object, label: str) -> str | None:
@@ -106,6 +125,7 @@ class DurationMode:
 
     uid: str
     name: str
+    description: str = ""
     segments: list[int] = field(default_factory=list)
     created_at: int = 0
     updated_at: int = 0
@@ -120,6 +140,7 @@ class DurationMode:
 
     def normalize(self) -> None:
         self.name = self.name.strip()
+        self.description = self.description.strip()
         cleaned: list[int] = []
         for value in self.segments:
             if isinstance(value, bool) or not isinstance(value, int):
@@ -144,6 +165,7 @@ class DurationMode:
         return {
             "uid": self.uid,
             "name": self.name,
+            "description": self.description,
             "segments": list(self.segments),
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -160,6 +182,7 @@ class DurationMode:
         return cls(
             uid=_text(raw.get("uid"), "时长模式标识"),
             name=_text(raw.get("name"), "时长模式名称"),
+            description=_text(raw.get("description"), "时长模式描述"),
             segments=segments,
             created_at=_integer(raw.get("created_at"), "创建时间"),
             updated_at=_integer(raw.get("updated_at"), "修改时间"),
@@ -171,6 +194,7 @@ class Background:
     uid: str
     name: str
     file: str
+    description: str = ""
     kind: str = "image"
     duration_ms: int = 0
     width: int = 0
@@ -181,6 +205,7 @@ class Background:
 
     def normalize(self) -> None:
         self.name = self.name.strip()
+        self.description = self.description.strip()
         self.file = self.file.strip().replace("\\", "/")
         self.kind = self.kind.strip().lower()
         self.duration_ms = max(0, self.duration_ms)
@@ -206,6 +231,7 @@ class Background:
         return {
             "uid": self.uid,
             "name": self.name,
+            "description": self.description,
             "file": self.file,
             "kind": self.kind,
             "duration_ms": self.duration_ms,
@@ -222,6 +248,7 @@ class Background:
             uid=_text(raw.get("uid"), "背景标识"),
             name=_text(raw.get("name"), "背景名称"),
             file=_text(raw.get("file"), "背景文件"),
+            description=_text(raw.get("description"), "背景描述"),
             kind=_text(raw.get("kind"), "背景类型") or "image",
             duration_ms=_integer(raw.get("duration_ms"), "背景时长"),
             width=_integer(raw.get("width"), "背景宽度"),
@@ -239,6 +266,7 @@ class AudioAsset:
     uid: str
     name: str
     file: str
+    description: str = ""
     ext: str = "mp3"
     duration_ms: int = 0
     size: int = 0
@@ -247,6 +275,7 @@ class AudioAsset:
 
     def normalize(self) -> None:
         self.name = self.name.strip()
+        self.description = self.description.strip()
         self.file = self.file.strip().replace("\\", "/")
         self.ext = self.ext.strip().lower().lstrip(".")
         self.duration_ms = max(0, self.duration_ms)
@@ -269,6 +298,7 @@ class AudioAsset:
         return {
             "uid": self.uid,
             "name": self.name,
+            "description": self.description,
             "file": self.file,
             "ext": self.ext,
             "duration_ms": self.duration_ms,
@@ -283,6 +313,7 @@ class AudioAsset:
             uid=_text(raw.get("uid"), "音频标识"),
             name=_text(raw.get("name"), "音频名称"),
             file=_text(raw.get("file"), "音频文件"),
+            description=_text(raw.get("description"), "音频描述"),
             ext=_text(raw.get("ext"), "音频格式") or "mp3",
             duration_ms=_integer(raw.get("duration_ms"), "音频时长"),
             size=_integer(raw.get("size"), "音频大小"),

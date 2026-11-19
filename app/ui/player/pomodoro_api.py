@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -24,12 +25,17 @@ from app.core.pomodoro import (
     Pomodoro,
     PomodoroStore,
 )
+from app.core.pomodoro_sessions import SessionLog, SessionRecord
 from app.ui.media import MediaHub
-
-PREP_SECONDS = 120
 
 
 def _milliseconds(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0
+    return max(0, int(value))
+
+
+def _seconds(value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return 0
     return max(0, int(value))
@@ -40,8 +46,10 @@ class PomodoroApiMixin:
 
     def _init_pomodoro(self, base: Path) -> None:
         self.pomodoro = PomodoroStore(base / "pomodoro.json")
+        self.pomo_sessions = SessionLog(base / "pomodoro-sessions.json")
         self._pomo_media = MediaHub()
         self.warnings.extend(self.pomodoro.load_locked())
+        self.warnings.extend(self.pomo_sessions.load())
         if self.pomodoro.sanitize_playlists(set(self.playlists.items)):
             self.pomodoro.save()
         self._pomo_session = self._new_pomo_session()
@@ -350,9 +358,13 @@ class PomodoroApiMixin:
         self, music: object = 0.5, environment: object = 0.35
     ) -> dict[str, Any]:
         try:
-            self.pomodoro.set_volumes(
-                float(music) if isinstance(music, (int, float)) else 0.5,
-                float(environment) if isinstance(environment, (int, float)) else 0.35,
+            self.pomodoro.set_preferences(
+                {
+                    "music_volume": float(music) if isinstance(music, (int, float)) else 0.5,
+                    "environment_volume": (
+                        float(environment) if isinstance(environment, (int, float)) else 0.35
+                    ),
+                }
             )
         except Exception:
             logger.exception("保存番茄钟音量失败")
@@ -361,9 +373,39 @@ class PomodoroApiMixin:
 
     def pomodoro_set_hud_scale(self, value: object = 1.0) -> dict[str, Any]:
         try:
-            self.pomodoro.set_hud_scale(float(value) if isinstance(value, (int, float)) else 1.0)
+            self.pomodoro.set_preferences(
+                {"hud_scale": float(value) if isinstance(value, (int, float)) else 1.0}
+            )
         except Exception:
             logger.exception("保存番茄钟计时器比例失败")
+            return {"ok": False}
+        return {"ok": True}
+
+    def pomodoro_record_session(
+        self,
+        uid: object,
+        started_at: object = 0,
+        focus_ms: object = 0,
+        rest_ms: object = 0,
+    ) -> dict[str, Any]:
+        """完整走完一轮时追加一条播放记录。网页给开始时间与两个累计时长。"""
+        if not isinstance(uid, str) or not uid:
+            return {"ok": False}
+        focus = _milliseconds(focus_ms)
+        rest = _milliseconds(rest_ms)
+        ended_at = int(time.time())
+        started = _seconds(started_at) or max(0, ended_at - (focus + rest) // 1000)
+        record = SessionRecord(
+            uid=uid,
+            started_at=started,
+            ended_at=ended_at,
+            focus_ms=focus,
+            rest_ms=rest,
+        )
+        try:
+            self.pomo_sessions.append(record)
+        except Exception:  # 记录是附加物，写不进去不该把完成页卡住
+            logger.exception("记录番茄钟播放失败：{}", uid)
             return {"ok": False}
         return {"ok": True}
 
@@ -439,7 +481,10 @@ class PomodoroApiMixin:
             "music_volume": self.pomodoro.music_volume,
             "environment_volume": self.pomodoro.environment_volume,
             "hud_scale": self.pomodoro.hud_scale,
-            "prep_seconds": PREP_SECONDS,
+            "prep_seconds": self.pomodoro.prep_seconds,
+            "duck_ms": self.pomodoro.duck_ms,
+            "duck_ratio": self.pomodoro.duck_ratio,
+            "fade_in_ms": self.pomodoro.fade_in_ms,
         }
 
     def _override_uid(

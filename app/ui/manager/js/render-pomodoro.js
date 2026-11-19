@@ -29,6 +29,15 @@ function pomodoroOptions() {
   return pomodoroData().options || {};
 }
 
+function pomodoroPreferences() {
+  return pomodoroData().preferences || {};
+}
+
+/* 播放记录按「新的在前」下发，这里不再排序。 */
+function pomodoroSessions() {
+  return pomodoroData().sessions || [];
+}
+
 function pomodoroItemByUid(uid) {
   return pomodoroItems().find(function (item) {
     return item.uid === uid;
@@ -291,6 +300,130 @@ function pomodoroRecentRows(rows, edited) {
     .join("");
 }
 
+/* 播放记录：一条一行。番茄钟被删掉以后记录还在，这时直接显示记录里的 uid。 */
+function pomodoroSessionRows(rows) {
+  if (!rows.length) {
+    return '<li class="row-empty">' + esc(T("pomodoro.overview.empty_sessions")) + "</li>";
+  }
+  return rows
+    .map(function (row) {
+      const item = pomodoroItemByUid(row.uid);
+      const range = T("pomodoro.overview.session_range", {
+        start: formatDateTime(row.started_at),
+        end: formatDateTime(row.ended_at),
+      });
+      const times = T("pomodoro.overview.session_times", {
+        focus: formatDuration(row.focus_ms),
+        rest: formatDuration(row.rest_ms),
+      });
+      return (
+        '<li class="row"><div class="row-body"><span class="row-title">' +
+        esc(item ? item.name : row.uid) +
+        '</span><span class="row-sub">' + esc(range) + " · " + esc(times) +
+        "</span></div></li>"
+      );
+    })
+    .join("");
+}
+
+/* 全局偏好：一轮番茄钟的节奏参数。秒在界面上填，存的是毫秒。 */
+function pomoPrefNumber(key, value, max, unit, seconds) {
+  return (
+    '<div class="pomo-scale-line"><input class="input pomo-pref-number" type="number" min="0" ' +
+    'max="' + max + '" step="1" value="' + value + '" data-pomo-pref="' + key + '"' +
+    (seconds ? ' data-pomo-seconds="1"' : "") + ">" +
+    '<span class="pomo-pref-unit">' + esc(unit) + "</span></div>"
+  );
+}
+
+/* 比例类的偏好用滑杆：值按百分比显示，存的是 0–1 的小数。 */
+function pomoPrefRange(key, value, min, max, step) {
+  const percent = Math.round(Number(value) * 100);
+  return (
+    '<div class="pomo-scale-line"><input class="range" type="range" min="' + min + '" max="' +
+    max + '" step="' + step + '" value="' + percent + '" style="--fill: ' +
+    pomoFill(percent, min, max) + '%" data-pomo-pref="' + key + '" data-pomo-percent="1">' +
+    '<span class="volume-value" data-pomo-pref-value="' + key + '">' + percent +
+    "%</span></div>"
+  );
+}
+
+function pomodoroPrefsCard() {
+  const prefs = pomodoroPreferences();
+  const seconds = T("pomodoro.seconds");
+  /* 偏好的标签比一般字段长（「提示音期间音乐音量」），单独给一列更宽的行。 */
+  const field = function (label, control, hint) {
+    return (
+      '<div class="field-row pomo-pref-row"><span class="field-label">' + esc(label) +
+      '</span><div class="field-body">' + control +
+      (hint ? '<p class="detail-hint">' + esc(hint) + "</p>" : "") + "</div></div>"
+    );
+  };
+  return (
+    '<section class="card"><h3 class="card-title">' + esc(T("pomodoro.pref.title")) +
+    '</h3><p class="detail-hint">' + esc(T("pomodoro.pref.hint")) + "</p>" +
+    field(
+      T("pomodoro.pref.prep"),
+      pomoPrefNumber(
+        "prep_seconds",
+        prefs.prep_seconds || 0,
+        prefs.prep_seconds_max || 300,
+        seconds
+      ),
+      T("pomodoro.pref.prep_hint")
+    ) +
+    field(
+      T("pomodoro.pref.duck"),
+      pomoPrefNumber(
+        "duck_ms",
+        Math.round((prefs.duck_ms || 0) / 1000),
+        Math.round((prefs.duck_ms_max || 30000) / 1000),
+        seconds,
+        true
+      ),
+      T("pomodoro.pref.duck_hint")
+    ) +
+    field(
+      T("pomodoro.pref.duck_ratio"),
+      pomoPrefRange(
+        "duck_ratio",
+        prefs.duck_ratio || 0,
+        0,
+        Math.round((prefs.duck_ratio_max || 0.5) * 100),
+        1
+      ),
+      T("pomodoro.pref.duck_ratio_hint")
+    ) +
+    field(
+      T("pomodoro.pref.fade_in"),
+      pomoPrefNumber(
+        "fade_in_ms",
+        Math.round((prefs.fade_in_ms || 0) / 1000),
+        Math.round((prefs.fade_in_ms_max || 10000) / 1000),
+        seconds,
+        true
+      ),
+      T("pomodoro.pref.fade_in_hint")
+    ) +
+    field(
+      T("pomodoro.item.hud_scale"),
+      pomoPrefRange("hud_scale", prefs.hud_scale || 1, 20, 500, 5),
+      T("pomodoro.item.hud_scale_hint")
+    ) +
+    "</section>"
+  );
+}
+
+function pomodoroSessionsCard() {
+  const rows = pomodoroSessions();
+  return (
+    '<section class="card"><div class="card-tools"><h3 class="card-title">' +
+    esc(T("pomodoro.overview.sessions")) + '</h3><span class="row-time">' +
+    esc(T("pomodoro.overview.sessions_count", { count: rows.length })) + "</span></div>" +
+    '<ul class="rows">' + pomodoroSessionRows(rows) + "</ul></section>"
+  );
+}
+
 function pomodoroOverviewMarkup() {
   const data = pomodoroData();
   const overview = data.overview || {};
@@ -316,12 +449,15 @@ function pomodoroOverviewMarkup() {
     '<span>' + esc(T("pomodoro.group.rings")) + " · " + (counts.rings || 0) + "</span>" +
     '<span>' + esc(T("pomodoro.group.environments")) + " · " + (counts.environments || 0) + "</span>" +
     "</div></section>" +
+    pomodoroPrefsCard() +
     '<section class="card"><div class="card-heading"><h3 class="card-title">' +
     esc(T("pomodoro.overview.recent_used")) + "</h3></div>" +
     '<ul class="rows">' + pomodoroRecentRows(recentUsed, false) + "</ul></section>" +
     '<section class="card"><div class="card-heading"><h3 class="card-title">' +
     esc(T("pomodoro.overview.recent_edited")) + "</h3></div>" +
-    '<ul class="rows">' + pomodoroRecentRows(recentEdited, true) + "</ul></section>"
+    '<ul class="rows">' + pomodoroRecentRows(recentEdited, true) + "</ul></section>" +
+    // 记录会一直变长，放在最后：上面的统计与偏好不用滚很久才看得到。
+    pomodoroSessionsCard()
   );
 }
 
@@ -379,6 +515,17 @@ function pomoValueOptions(prefix, values) {
   });
 }
 
+/* 描述：番茄钟、时长模式、背景、提示音、环境音共用同一个文本域，
+   逐字符触发、420 ms 防抖后写盘。 */
+function pomoDescriptionField(id, value, attrs) {
+  return pomoField(
+    T("pomodoro.item.description"),
+    '<textarea class="input textarea" id="' + id + '" maxlength="2000" placeholder="' +
+      esc(T("pomodoro.item.description_placeholder")) + '" ' + attrs + ">" +
+      esc(value || "") + "</textarea>"
+  );
+}
+
 /* 一个时段只有「用哪张歌单」和「按什么顺序」：歌单选「无」就是不放，
    不再单独存一个开关——省掉「开着播放却没选歌单」这种空转状态。 */
 function pomoPhaseCard(item, phase, title) {
@@ -405,23 +552,10 @@ function pomoPhaseCard(item, phase, title) {
   );
 }
 
-/* 计时器比例是全局偏好（与播放器共用），100% 为默认大小。 */
-function pomoScaleField() {
-  const preferences = pomodoroData().preferences || {};
-  const percent = Math.round((Number(preferences.hud_scale) || 1) * 100);
-  return pomoField(
-    T("pomodoro.item.hud_scale"),
-    '<div class="pomo-scale-line"><input class="range" id="pomo-hud-scale" type="range" ' +
-      'min="20" max="500" step="5" value="' + percent + '" style="--fill: ' +
-      pomoScaleFill(percent) + '%" data-pomo-hud-scale="1">' +
-      '<span class="volume-value" id="pomo-hud-scale-value">' + percent + "%</span></div>",
-    T("pomodoro.item.hud_scale_hint")
-  );
-}
-
 /* 滑杆的填充按 (值 - 最小值) / 区间 算：min 不是 0 时不能直接用百分比。 */
-function pomoScaleFill(percent) {
-  const ratio = (Number(percent) - 20) / 480;
+function pomoFill(value, min, max) {
+  const span = Number(max) - Number(min);
+  const ratio = span > 0 ? (Number(value) - Number(min)) / span : 0;
   return Math.round(Math.min(1, Math.max(0, ratio)) * 1000) / 10;
 }
 
@@ -445,12 +579,10 @@ function pomodoroItemMarkup(item) {
       '<input class="input" id="pomodoro-name" value="' + esc(item.name) +
         '" maxlength="120" data-pomo-name="' + esc(item.uid) + '">'
     ) +
-    pomoField(
-      T("pomodoro.item.description"),
-      '<textarea class="input textarea" id="pomodoro-description" maxlength="2000" ' +
-        'placeholder="' + esc(T("pomodoro.item.description_placeholder")) +
-        '" data-pomo-description="' + esc(item.uid) + '">' + esc(item.description || "") +
-        "</textarea>"
+    pomoDescriptionField(
+      "pomodoro-description",
+      item.description,
+      'data-pomo-description="' + esc(item.uid) + '"'
     ) +
     "</section>" +
     '<section class="card"><h3 class="card-title">' + esc(T("pomodoro.item.timing")) + "</h3>" +
@@ -517,7 +649,6 @@ function pomodoroItemMarkup(item) {
         item.font || "system"
       )
     ) +
-    pomoScaleField() +
     "</section>" +
     pomodoroStatsCard(item.stats)
   );
@@ -575,6 +706,11 @@ function pomodoroModeMarkup(mode) {
       '<input class="input" id="pomodoro-mode-name" value="' + esc(mode.name) +
         '" maxlength="120" data-pomo-mode-name="' + esc(mode.uid) + '">'
     ) +
+    pomoDescriptionField(
+      "pomodoro-mode-description",
+      mode.description,
+      'data-pomo-mode-description="' + esc(mode.uid) + '"'
+    ) +
     "</section>" +
     '<section class="card"><div class="card-tools"><h3 class="card-title">' +
     esc(T("pomodoro.mode.segments")) + " · " +
@@ -608,6 +744,12 @@ function pomodoroBackgroundMarkup(background) {
       '<input class="input" id="pomodoro-asset-name" value="' + esc(background.name) +
         '" maxlength="120" data-pomo-asset-name="' + esc(background.uid) +
         '" data-pomo-asset-kind="background">'
+    ) +
+    pomoDescriptionField(
+      "pomodoro-asset-description",
+      background.description,
+      'data-pomo-asset-description="' + esc(background.uid) +
+        '" data-pomo-asset-kind="background"'
     ) +
     "</section>" +
     '<section class="card"><h3 class="card-title">' + esc(T("pomodoro.background.preview")) +
@@ -671,6 +813,12 @@ function pomodoroAudioMarkup(asset, kind) {
       '<input class="input" id="pomodoro-asset-name" value="' + esc(asset.name) +
         '" maxlength="120" data-pomo-asset-name="' + esc(asset.uid) +
         '" data-pomo-asset-kind="' + esc(kind) + '">'
+    ) +
+    pomoDescriptionField(
+      "pomodoro-asset-description",
+      asset.description,
+      'data-pomo-asset-description="' + esc(asset.uid) +
+        '" data-pomo-asset-kind="' + esc(kind) + '"'
     ) +
     "</section>" +
     '<section class="card"><h3 class="card-title">' + esc(T("pomodoro.audition.title")) +

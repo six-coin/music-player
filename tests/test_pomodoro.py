@@ -171,32 +171,84 @@ def test_payload_roundtrip(tmp_path):
     assert second.hud_scale == 2.1
 
 
-def test_missing_hud_scale_keeps_the_default(tmp_path):
-    """更早的文件连 hud_scale 都没有，不能拿默认值再除一次 1.5。"""
-    path = tmp_path / "pomodoro.json"
-    path.write_text(json.dumps({"version": 1, "preferences": {}}), encoding="utf-8")
+def test_rhythm_preferences_roundtrip_and_clamp(store):
+    assert store.prep_seconds == 120
+    assert store.duck_ms == 10_000
+    assert store.duck_ratio == 0.12
+    assert store.fade_in_ms == 2000
 
-    store = PomodoroStore(path)
-    assert store.load() == []
-
-    assert store.hud_scale == 1.0
-
-
-def test_legacy_hud_scale_is_converted(tmp_path):
-    """第 1 版存的是「相对 1.5 倍基准的倍数」，读进来要换算成百分比。"""
-    path = tmp_path / "pomodoro.json"
-    path.write_text(
-        json.dumps({"version": 1, "preferences": {"hud_scale": 1.5}}),
-        encoding="utf-8",
+    store.set_preferences(
+        {
+            "prep_seconds": 0,
+            "duck_ms": 3000,
+            "duck_ratio": 0.4,
+            "fade_in_ms": 500,
+        }
     )
 
-    store = PomodoroStore(path)
-    assert store.load() == []
+    assert (store.prep_seconds, store.duck_ms, store.duck_ratio, store.fade_in_ms) == (
+        0,
+        3000,
+        0.4,
+        500,
+    )
 
-    assert store.hud_scale == 1.0
-    saved = json.loads(path.read_text(encoding="utf-8"))
-    assert saved["preferences"]["version"] == 2
-    assert saved["preferences"]["hud_scale"] == 1.0
+    store.set_preferences(
+        {
+            "prep_seconds": 9999,
+            "duck_ms": -5,
+            "duck_ratio": 9,
+            "fade_in_ms": 999_999,
+        }
+    )
+
+    assert (store.prep_seconds, store.duck_ms, store.duck_ratio, store.fade_in_ms) == (
+        300,
+        0,
+        0.5,
+        10_000,
+    )
+
+
+def test_rhythm_preferences_survive_a_reload(tmp_path):
+    first = PomodoroStore(tmp_path / "pomodoro.json")
+    first.load()
+    first.set_preferences({"prep_seconds": 15, "duck_ms": 2500, "duck_ratio": 0.05})
+    first.set_preferences({"fade_in_ms": 7000})
+
+    second = PomodoroStore(tmp_path / "pomodoro.json")
+    assert second.load() == []
+
+    assert second.prep_seconds == 15
+    assert second.duck_ms == 2500
+    assert second.duck_ratio == 0.05
+    assert second.fade_in_ms == 7000
+
+
+def test_descriptions_roundtrip(tmp_path):
+    first = PomodoroStore(tmp_path / "pomodoro.json")
+    first.load()
+    mode = first.create_mode("慢", [40, 10])
+    first.update_mode(mode.uid, {"description": "上午用"})
+    background = Background(
+        uid=new_uid(),
+        name="海边",
+        file="pomodoro/background/x.png",
+        kind="image",
+    )
+    first.add_background(background)
+    first.update_background(background.uid, {"description": "安静"})
+    ring = AudioAsset(uid=new_uid(), name="木鱼", file="pomodoro/ring/x.mp3", ext="mp3")
+    first.add_ring(ring)
+    first.update_ring(ring.uid, {"description": "轻一点"})
+
+    second = PomodoroStore(tmp_path / "pomodoro.json")
+    assert second.load() == []
+
+    assert second.find_mode(mode.uid).description == "上午用"
+    assert second.find_background(background.uid).description == "安静"
+    assert second.find_ring(ring.uid).description == "轻一点"
+    assert second.find_background(background.uid).name == "海边"
 
 
 def test_hud_scale_default_and_clamp(store):

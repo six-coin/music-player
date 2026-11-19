@@ -13,6 +13,7 @@ const pomo = {
   completed: false,
   deadline: 0,
   prepDeadline: 0,
+  startedAt: 0,
   remaining: 0,
   lastTick: 0,
   lastReport: 0,
@@ -204,13 +205,16 @@ async function startPomodoro() {
   pomo.musicVolume = Number(plan.music_volume) || 0.5;
   pomo.environmentVolume = Number(plan.environment_volume) || 0.35;
   pomo.finishSnapshot = null;
-  pomo.prepDeadline = Date.now() + (Number(plan.prep_seconds) || 120) * 1000;
+  pomo.startedAt = 0;
+  pomo.prepDeadline = Date.now() + Math.max(0, Number(plan.prep_seconds) || 0) * 1000;
 
   audio.pause();
   call("set_playing", false);
   openPomodoroStage();
   startPomodoroTicker();
   renderPomodoros();
+  // 预备时长为 0 就是跳过：直接进第一段，不闪一下预备页。
+  if (pomo.prepDeadline <= Date.now()) beginFormalPomodoro();
 }
 
 function openPomodoroStage() {
@@ -285,11 +289,12 @@ function pomodoroTick() {
     pomo.playedMs += delta;
   }
 
-  if (pomo.plan && pomo.plan.ring && remaining <= 10000 && !pomo.ducking) {
+  const duckMs = pomoDuckMs();
+  if (pomo.plan && pomo.plan.ring && duckMs > 0 && remaining <= duckMs && !pomo.ducking) {
     pomo.ducking = true;
     pomo.holdTrack = true;
   }
-  if (pomo.ducking) updateDuckVolume(remaining);
+  if (pomo.ducking) updateDuckVolume(remaining, duckMs);
 
   if (remaining <= 0) {
     advancePomodoroPhase();
@@ -310,12 +315,13 @@ function beginFormalPomodoro() {
   pomo.phase = "focus";
   pomo.running = true;
   pomo.paused = false;
+  pomo.startedAt = Math.floor(Date.now() / 1000);
   pomo.deadline = Date.now() + pomo.plan.segments[0] * 60000;
   pomo.lastTick = Date.now();
   pomo.lastReport = Date.now();
   updatePomodoroHud(pomo.deadline - Date.now());
   playPomodoroRing(function () {
-    applyPomodoroPhaseMusic();
+    applyPomodoroPhaseMusic(true);
   });
 }
 
@@ -333,7 +339,7 @@ function advancePomodoroPhase() {
   pomo.holdTrack = false;
   updatePomodoroHud(pomo.deadline - Date.now());
   playPomodoroRing(function () {
-    applyPomodoroPhaseMusic();
+    applyPomodoroPhaseMusic(true);
   });
 }
 
@@ -350,34 +356,53 @@ function updatePomodoroHud(remaining) {
     : T("pomodoro.last_phase");
 }
 
-function updateDuckVolume(remaining) {
+/* 提示音期间音乐压低到多少、压多久、响完用多久回来：都是全局偏好。 */
+function pomoDuckMs() {
+  const value = Number(pomo.plan && pomo.plan.duck_ms);
+  return isFinite(value) ? Math.max(0, value) : 10000;
+}
+
+function pomoDuckRatio() {
+  const value = Number(pomo.plan && pomo.plan.duck_ratio);
+  return isFinite(value) ? Math.min(1, Math.max(0, value)) : 0.12;
+}
+
+function pomoFadeInMs() {
+  const value = Number(pomo.plan && pomo.plan.fade_in_ms);
+  return isFinite(value) ? Math.max(0, value) : 2000;
+}
+
+function updateDuckVolume(remaining, duckMs) {
   const music = pomoAudio();
   if (!music || music.paused) return;
-  const ratio = Math.min(1, Math.max(0, remaining / 10000));
+  const duck = pomoDuckRatio();
+  const ratio = Math.min(1, Math.max(0, remaining / Math.max(1, duckMs)));
   music.dataset.fadeToken = String((Number(music.dataset.fadeToken) || 0) + 1);
-  music.volume = Math.min(1, Math.max(0, pomo.musicVolume * (0.12 + 0.88 * ratio)));
+  music.volume = Math.min(1, Math.max(0, pomo.musicVolume * (duck + (1 - duck) * ratio)));
 }
 
 /* ---------- 阶段音乐 ---------- */
 
-async function applyPomodoroPhaseMusic() {
+async function applyPomodoroPhaseMusic(afterRing) {
   if (!pomo.active) return;
   const result = await call("pomodoro_phase", pomo.phaseIndex);
   if (!result || !result.ok) return;
+  const fade = afterRing ? pomoFadeInMs() : 800;
   pomo.musicActive = !!result.play;
   if (!result.play) {
     fadeOutAndPause(pomoAudio());
     return;
   }
   if (result.resume) {
-    playAndFade(pomoAudio(), pomo.musicVolume, 800);
+    playAndFade(pomoAudio(), pomo.musicVolume, fade);
     return;
   }
-  if (result.command) applyPomodoroCommand(result.command);
+  if (result.command) applyPomodoroCommand(result.command, fade);
 }
 
-function applyPomodoroCommand(command) {
+function applyPomodoroCommand(command, fadeMs) {
   const music = pomoAudio();
+  const fade = fadeMs === undefined ? 800 : fadeMs;
   if (!command || command.kind === "stop" || !command.url) {
     fadeOutAndPause(music);
     return;
@@ -396,7 +421,7 @@ function applyPomodoroCommand(command) {
       reportPomodoroAudioFailed("play");
     }
   });
-  fadeAudio(music, pomo.musicVolume, 800);
+  fadeAudio(music, pomo.musicVolume, fade);
 }
 
 function reportPomodoroAudioFailed(reason) {
@@ -606,6 +631,7 @@ function finishPomodoro(completed) {
   pomo.ducking = false;
   pomo.holdTrack = false;
   reportPomodoroStats(completed);
+  if (completed) recordPomodoroSession();
   if (!completed) {
     stopAllPomodoroAudio();
     call("pomodoro_finish", pomo.uid).then(function (data) {
@@ -621,9 +647,11 @@ function finishPomodoro(completed) {
     if (result && result.ok && result.play) {
       if (result.command) applyPomodoroCommand(result.command);
       else if (result.resume) playAndFade(pomoAudio(), pomo.musicVolume, 800);
-      fadeAudio(pomoAudio(), pomo.musicVolume * 0.12, 400);
+      // 渐弱时长为 0 表示「提示音期间不压低音乐」，完成页也一样。
+      const duck = pomoDuckMs() > 0 ? pomoDuckRatio() : 1;
+      fadeAudio(pomoAudio(), pomo.musicVolume * duck, 400);
       playPomodoroRing(function () {
-        fadeAudio(pomoAudio(), pomo.musicVolume, 1200);
+        fadeAudio(pomoAudio(), pomo.musicVolume, pomoFadeInMs());
       });
     } else {
       fadeOutAndPause(pomoAudio());
@@ -654,6 +682,18 @@ function reportPomodoroStats(completed) {
   pomo.restCarry -= rest;
   pomo.lastReport = Date.now();
   call("pomodoro_report", pomo.uid, focus, rest, !!completed);
+}
+
+/* 完整走完一轮才记一条播放记录；中途退出不记。 */
+function recordPomodoroSession() {
+  if (!pomo.uid || !pomo.startedAt) return;
+  call(
+    "pomodoro_record_session",
+    pomo.uid,
+    pomo.startedAt,
+    Math.round(pomo.runFocus),
+    Math.round(pomo.runRest)
+  );
 }
 
 function showPomodoroLayer(selector) {

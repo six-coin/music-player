@@ -1,4 +1,12 @@
 /* 番茄分区的事件绑定：分组列表、详情、拖拽、内嵌试听。 */
+/* 三处描述框（番茄钟 / 时长模式 / 资源）共用一套保存逻辑。 */
+function isPomodoroDescription(node) {
+  if (!node || !node.matches) return false;
+  return node.matches(
+    "[data-pomo-description], [data-pomo-mode-description], [data-pomo-asset-description]"
+  );
+}
+
 function bindPomodoroEvents() {
   const nav = qs("#pomodoro-nav");
   const detail = qs("#pomodoro-detail");
@@ -93,11 +101,9 @@ function bindPomodoroEvents() {
   });
 
   detail.addEventListener("change", function (event) {
-    if (event.target.id === "pomo-hud-scale") {
-      const value = Number(event.target.value) / 100;
-      call("set_pomodoro_hud_scale", value).then(function (data) {
-        if (data) apply(data);
-      });
+    const pref = event.target.closest("[data-pomo-pref]");
+    if (pref) {
+      pomodoroSavePref(pref);
       return;
     }
     const segment = event.target.closest("[data-pomo-segment-minutes]");
@@ -108,7 +114,7 @@ function bindPomodoroEvents() {
       );
       return;
     }
-    if (event.target.id === "pomodoro-description") {
+    if (isPomodoroDescription(event.target)) {
       savePomodoroDescription(event.target);
       return;
     }
@@ -118,11 +124,9 @@ function bindPomodoroEvents() {
   });
 
   detail.addEventListener("input", function (event) {
-    if (event.target.id === "pomo-hud-scale") {
-      const percent = Number(event.target.value);
-      event.target.style.setProperty("--fill", pomoScaleFill(percent) + "%");
-      const label = qs("#pomo-hud-scale-value");
-      if (label) label.textContent = percent + "%";
+    const pref = event.target.closest("[data-pomo-pref][data-pomo-percent]");
+    if (pref) {
+      paintPomodoroPref(pref);
       return;
     }
     if (
@@ -133,7 +137,7 @@ function bindPomodoroEvents() {
       schedulePomodoroNameSave(event.target);
       return;
     }
-    if (event.target.id === "pomodoro-description") {
+    if (isPomodoroDescription(event.target)) {
       schedulePomodoroDescriptionSave(event.target);
       return;
     }
@@ -152,7 +156,7 @@ function bindPomodoroEvents() {
       ) {
         flushPomodoroNameSave();
       }
-      if (event.target.id === "pomodoro-description") {
+      if (isPomodoroDescription(event.target)) {
         savePomodoroDescription(event.target);
       }
     },
@@ -220,12 +224,36 @@ function schedulePomodoroDescriptionSave(input) {
 }
 
 async function savePomodoroDescription(input) {
-  if (!input || !input.dataset.pomoDescription) return;
+  if (!input) return;
   window.clearTimeout(pomodoroDescriptionTimer);
   pomodoroDescriptionTimer = null;
-  await call("update_pomodoro", input.dataset.pomoDescription, {
-    description: input.value,
-  });
+  const value = input.value;
+  if (input.dataset.pomoDescription) {
+    await call("update_pomodoro", input.dataset.pomoDescription, { description: value });
+  } else if (input.dataset.pomoModeDescription) {
+    await call("update_duration_mode", input.dataset.pomoModeDescription, {
+      description: value,
+    });
+  } else if (input.dataset.pomoAssetDescription) {
+    await call(
+      "update_pomodoro_asset",
+      input.dataset.pomoAssetKind,
+      input.dataset.pomoAssetDescription,
+      { description: value }
+    );
+  }
+}
+
+/* 比例滑杆拖动时只换那一行的填充与数字，不重绘整页。 */
+function paintPomodoroPref(input) {
+  const key = input.dataset.pomoPref;
+  const value = Number(input.value) || 0;
+  input.style.setProperty(
+    "--fill",
+    pomoFill(value, Number(input.min) || 0, Number(input.max) || 100) + "%"
+  );
+  const label = qs('[data-pomo-pref-value="' + key + '"]');
+  if (label) label.textContent = value + "%";
 }
 
 /* 分组内拖拽：只允许同组，松手时把这一组的 uid 顺序交给后端。 */

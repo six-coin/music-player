@@ -166,7 +166,7 @@ def test_manager_keeps_a_pomodoro_selection_when_coming_back(manager):
 def test_manager_hud_scale_is_shared_with_the_player(manager):
     assert manager.get_state()["pomodoro"]["preferences"]["hud_scale"] == 1.0
 
-    data = manager.set_pomodoro_hud_scale(1.4)
+    data = manager.set_pomodoro_preferences({"hud_scale": 1.4})
 
     assert data["pomodoro"]["preferences"]["hud_scale"] == 1.4
     assert data["pomodoro"]["preferences"]["hud_scale_min"] == 0.2
@@ -174,8 +174,55 @@ def test_manager_hud_scale_is_shared_with_the_player(manager):
 
 
 def test_manager_hud_scale_is_clamped(manager):
-    assert manager.set_pomodoro_hud_scale(99)["pomodoro"]["preferences"]["hud_scale"] == 5.0
-    assert manager.set_pomodoro_hud_scale(0)["pomodoro"]["preferences"]["hud_scale"] == 0.2
+    data = manager.set_pomodoro_preferences({"hud_scale": 99})
+    assert data["pomodoro"]["preferences"]["hud_scale"] == 5.0
+
+    data = manager.set_pomodoro_preferences({"hud_scale": 0})
+    assert data["pomodoro"]["preferences"]["hud_scale"] == 0.2
+
+
+def test_manager_rhythm_preferences_roundtrip(manager):
+    data = manager.set_pomodoro_preferences(
+        {"prep_seconds": 0, "duck_ms": 5000, "duck_ratio": 0.3, "fade_in_ms": 0}
+    )
+    preferences = data["pomodoro"]["preferences"]
+
+    assert preferences["prep_seconds"] == 0
+    assert preferences["duck_ms"] == 5000
+    assert preferences["duck_ratio"] == 0.3
+    assert preferences["fade_in_ms"] == 0
+    assert preferences["prep_seconds_max"] == 300
+
+
+def test_manager_updates_asset_descriptions(manager):
+    background = Background(
+        uid=new_uid(),
+        name="海边",
+        file="pomodoro/background/x.png",
+        kind="image",
+    )
+    manager.pomodoro.add_background(background)
+
+    assert manager.update_pomodoro_asset("background", background.uid, {"description": "夜里"})[
+        "ok"
+    ]
+
+    payload = manager.get_state()["pomodoro"]
+    assert payload["backgrounds"][0]["description"] == "夜里"
+    assert payload["backgrounds"][0]["name"] == "海边"
+
+
+def test_manager_sees_the_sessions_the_player_wrote(manager, player):
+    item = player.pomodoro.create_item("晨间")
+    assert player.pomodoro_record_session(item.uid, 1_790_000_000, 1500_000, 300_000)["ok"]
+
+    sessions = manager.get_state()["pomodoro"]["sessions"]
+
+    assert len(sessions) == 1
+    assert sessions[0]["uid"] == item.uid
+    assert sessions[0]["focus_ms"] == 1500_000
+    assert sessions[0]["rest_ms"] == 300_000
+    assert sessions[0]["started_at"] == 1_790_000_000
 
 
 def test_player_phase_without_a_playlist_plays_nothing(player):
@@ -309,6 +356,31 @@ def test_player_hud_scale_is_a_global_preference(player):
 
     assert plan["hud_scale"] == 1.8
     assert player.get_state()["pomodoros"]["preferences"]["hud_scale"] == 1.8
+
+
+def test_player_plan_carries_the_rhythm_preferences(player):
+    item = player.pomodoro.create_item("晨间")
+    player.pomodoro.set_preferences(
+        {"prep_seconds": 0, "duck_ms": 3000, "duck_ratio": 0.2, "fade_in_ms": 700}
+    )
+
+    plan = player.pomodoro_start(item.uid, {})["plan"]
+
+    assert plan["prep_seconds"] == 0
+    assert plan["duck_ms"] == 3000
+    assert plan["duck_ratio"] == 0.2
+    assert plan["fade_in_ms"] == 700
+
+
+def test_player_records_a_session_with_a_fallback_start(player):
+    item = player.pomodoro.create_item("晨间")
+
+    assert player.pomodoro_record_session(item.uid, 0, 60_000, 30_000)["ok"] is True
+
+    record = player.pomo_sessions.entries()[0]
+    assert record.uid == item.uid
+    assert record.started_at <= record.ended_at
+    assert (record.focus_ms, record.rest_ms) == (60_000, 30_000)
 
 
 def test_player_cannot_start_twice(player):
