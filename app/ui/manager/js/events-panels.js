@@ -96,6 +96,19 @@ function bindPanelEvents() {
   });
 
   settingsBody.addEventListener("change", async function (event) {
+    const pref = event.target.closest("[data-pomo-pref]");
+    if (pref) {
+      let value = Number(pref.value);
+      if (!Number.isFinite(value)) {
+        renderSettings();
+        return;
+      }
+      // 秒填的是秒、存的是毫秒；比例填的是百分比、存的是 0–1 的小数。
+      if (pref.dataset.pomoPercent) value = value / 100;
+      if (pref.dataset.pomoSeconds) value = Math.round(value * 1000);
+      await patchPomodoroPref(pref.dataset.pomoPref, value);
+      return;
+    }
     if (event.target.id === "import-dir") {
       const dir = event.target.value.trim();
       event.target.value = dir;
@@ -140,6 +153,12 @@ function bindPanelEvents() {
   });
 
   settingsBody.addEventListener("input", function (event) {
+    if (event.target.matches("[data-pomo-pref][data-pomo-percent]")) {
+      const key = event.target.dataset.pomoPref;
+      const label = qs('[data-pomo-pref-value="' + key + '"]');
+      if (label) label.textContent = event.target.value + "%";
+      return;
+    }
     if (event.target.id === "player-volume") {
       const label = qs("#player-volume-value");
       if (label) label.textContent = event.target.value + "%";

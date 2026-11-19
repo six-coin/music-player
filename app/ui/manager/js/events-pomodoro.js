@@ -101,11 +101,6 @@ function bindPomodoroEvents() {
   });
 
   detail.addEventListener("change", function (event) {
-    const pref = event.target.closest("[data-pomo-pref]");
-    if (pref) {
-      pomodoroSavePref(pref);
-      return;
-    }
     const segment = event.target.closest("[data-pomo-segment-minutes]");
     if (segment) {
       pomodoroUpdateSegment(
@@ -124,11 +119,6 @@ function bindPomodoroEvents() {
   });
 
   detail.addEventListener("input", function (event) {
-    const pref = event.target.closest("[data-pomo-pref][data-pomo-percent]");
-    if (pref) {
-      paintPomodoroPref(pref);
-      return;
-    }
     if (
       event.target.id === "pomodoro-name" ||
       event.target.id === "pomodoro-mode-name" ||
@@ -214,19 +204,33 @@ function pomodoroPatchField(phase, field, value) {
 }
 
 let pomodoroDescriptionTimer = null;
+let pomodoroDescriptionInput = null;
 
 function schedulePomodoroDescriptionSave(input) {
   window.clearTimeout(pomodoroDescriptionTimer);
+  pomodoroDescriptionInput = input;
   pomodoroDescriptionTimer = window.setTimeout(function () {
     pomodoroDescriptionTimer = null;
+    pomodoroDescriptionInput = null;
     savePomodoroDescription(input);
   }, 420);
+}
+
+/* 关窗时调用：把还在防抖窗口里的那段描述写下去。 */
+function flushPomodoroDescriptionSave() {
+  if (!pomodoroDescriptionTimer) return;
+  window.clearTimeout(pomodoroDescriptionTimer);
+  pomodoroDescriptionTimer = null;
+  const input = pomodoroDescriptionInput;
+  pomodoroDescriptionInput = null;
+  if (input) savePomodoroDescription(input);
 }
 
 async function savePomodoroDescription(input) {
   if (!input) return;
   window.clearTimeout(pomodoroDescriptionTimer);
   pomodoroDescriptionTimer = null;
+  pomodoroDescriptionInput = null;
   const value = input.value;
   if (input.dataset.pomoDescription) {
     await call("update_pomodoro", input.dataset.pomoDescription, { description: value });
@@ -242,18 +246,6 @@ async function savePomodoroDescription(input) {
       { description: value }
     );
   }
-}
-
-/* 比例滑杆拖动时只换那一行的填充与数字，不重绘整页。 */
-function paintPomodoroPref(input) {
-  const key = input.dataset.pomoPref;
-  const value = Number(input.value) || 0;
-  input.style.setProperty(
-    "--fill",
-    pomoFill(value, Number(input.min) || 0, Number(input.max) || 100) + "%"
-  );
-  const label = qs('[data-pomo-pref-value="' + key + '"]');
-  if (label) label.textContent = value + "%";
 }
 
 /* 分组内拖拽：只允许同组，松手时把这一组的 uid 顺序交给后端。 */

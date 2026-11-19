@@ -196,6 +196,33 @@ function bindShellEvents() {
     if (state.recording) return;
     if (runManagerShortcut(event)) event.preventDefault();
   });
+
+  // 关窗兜底：输入框在窗口被销毁时不一定收到 blur，420 ms 的防抖计时器也就
+  // 不会触发，刚敲的字会跟着窗口一起消失。窗口失焦、页面隐藏与卸载前都补一次。
+  window.addEventListener("blur", flushPendingTimers);
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") flushPendingTimers();
+  });
+  window.addEventListener("pagehide", flushPendingEdits);
+  window.addEventListener("beforeunload", flushPendingEdits);
+}
+
+/* 只把还在防抖窗口里的编辑写下去，不动焦点：切到别的程序时不该把输入框抢走。 */
+function flushPendingTimers() {
+  flushNameSave();
+  flushPlaylistName();
+  flushPomodoroNameSave();
+  flushPomodoroDescriptionSave();
+}
+
+/* 真正要离开页面了：先让当前控件走一遍 blur / change（设置页的输入靠它落盘），
+   再补一次防抖里的编辑。 */
+function flushPendingEdits() {
+  const active = document.activeElement;
+  if (active && active !== document.body && typeof active.blur === "function") {
+    active.blur();
+  }
+  flushPendingTimers();
 }
 
 /* 管理器自己的快捷键。默认交互（Esc 关弹窗、Tab 循环焦点、列表里的方向键）

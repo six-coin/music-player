@@ -228,12 +228,13 @@ The "Pomodoro" section of the manager has an overview plus five groups (pomodoro
 | Ambience            | "None" means off; otherwise it runs for the whole round, independent of phases     |
 | Font                | Font used by the timer layer                                                       |
 
-The overview page also carries two cards:
+The overview page also carries one more card:
 
 | Item            | Detail                                                                                                              |
 |-----------------|---------------------------------------------------------------------------------------------------------------------|
 | Session history | One row per completed round: which pomodoro, when it started and ended, focus time, break time. Rows survive the pomodoro being deleted — the id itself is shown then |
-| Preferences     | Prep time (0–300 s, 0 skips prep), fade down before the chime (0–30 s, 0 disables it), music level during the chime (0–50%), fade back after the chime (0–10 s), timer size (20%–500%). All of them apply to every pomodoro and are shared with the player |
+
+The rhythm of a round (prep time, fade down before the chime, music level during the chime, fade back after it) and the timer size live in Settings · General · Pomodoro. They apply to every pomodoro and are shared with the player.
 
 The player lists pomodoros under the playlists; click one to see its details. Changes made there apply to this run only and never touch the saved configuration; "Reset to defaults" clears them.
 

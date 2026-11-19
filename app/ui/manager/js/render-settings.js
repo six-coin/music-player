@@ -271,6 +271,7 @@ function settingsGeneral() {
         )
       )
     ) +
+    settingsPomodoro() +
     settingsCard(
       T("settings.logs_section"),
       settingsRow(T("settings.log_level"), T("settings.log_level_hint"), logLevelSeg) +
@@ -293,6 +294,77 @@ function settingsGeneral() {
         ),
       T("settings.logs_hint")
     )
+  );
+}
+
+/* ---------- 番茄钟 ---------- */
+
+/* 一轮番茄钟的四个节奏参数与计时器大小。它们存在 pomodoro.json 的
+   preferences 里（只有播放器读），但对用户来说就是「播放时怎么表现」，
+   所以和音量、播放模式一起放在通用页。 */
+function settingsPomodoro() {
+  const prefs = (state.data.pomodoro && state.data.pomodoro.preferences) || {};
+  const seconds = T("pomodoro.seconds");
+  const rangeHint = function (max) {
+    return T("adaptation.range", { min: 0, max: max });
+  };
+  // 秒在界面上填，存的是毫秒；比例按百分比显示，存的是 0–1 的小数。
+  const numberRow = function (key, label, hint, value, max, toMs) {
+    return settingsRow(
+      label,
+      hint + " · " + rangeHint(max),
+      '<input class="input" type="number" min="0" max="' + max + '" step="1" value="' +
+        value + '" data-pomo-pref="' + key + '"' + (toMs ? ' data-pomo-seconds="1"' : "") +
+        ' style="width:110px"><span class="adapt-unit">' + esc(seconds) + "</span>"
+    );
+  };
+  const hudPercent = Math.round((Number(prefs.hud_scale) || 1) * 100);
+  const duckPercent = Math.round((Number(prefs.duck_ratio) || 0) * 100);
+  const duckMax = Math.round((prefs.duck_ratio_max || 0.5) * 100);
+
+  return settingsCard(
+    T("settings.pomodoro_section"),
+    numberRow(
+      "prep_seconds",
+      T("pomodoro.pref.prep"),
+      T("pomodoro.pref.prep_hint"),
+      prefs.prep_seconds || 0,
+      prefs.prep_seconds_max || 300,
+      false
+    ) +
+      numberRow(
+        "duck_ms",
+        T("pomodoro.pref.duck"),
+        T("pomodoro.pref.duck_hint"),
+        Math.round((prefs.duck_ms || 0) / 1000),
+        Math.round((prefs.duck_ms_max || 30000) / 1000),
+        true
+      ) +
+      settingsRow(
+        T("pomodoro.pref.duck_ratio"),
+        T("pomodoro.pref.duck_ratio_hint") + " · " + rangeHint(duckMax + "%"),
+        '<div class="volume-line"><input class="range" type="range" min="0" max="' + duckMax +
+          '" step="1" value="' + duckPercent + '" data-pomo-pref="duck_ratio" ' +
+          'data-pomo-percent="1"><span class="volume-value" data-pomo-pref-value="duck_ratio">' +
+          duckPercent + "%</span></div>"
+      ) +
+      numberRow(
+        "fade_in_ms",
+        T("pomodoro.pref.fade_in"),
+        T("pomodoro.pref.fade_in_hint"),
+        Math.round((prefs.fade_in_ms || 0) / 1000),
+        Math.round((prefs.fade_in_ms_max || 10000) / 1000),
+        true
+      ) +
+      settingsRow(
+        T("pomodoro.item.hud_scale"),
+        T("pomodoro.item.hud_scale_hint"),
+        '<div class="volume-line"><input class="range" type="range" min="20" max="500" ' +
+          'step="5" value="' + hudPercent + '" data-pomo-pref="hud_scale" ' +
+          'data-pomo-percent="1"><span class="volume-value" data-pomo-pref-value="hud_scale">' +
+          hudPercent + "%</span></div>"
+      ),
+    T("pomodoro.pref.hint")
   );
 }
 
@@ -556,6 +628,32 @@ async function patchSetting(path, value) {
     actual = actual && typeof actual === "object" ? actual[key] : undefined;
   });
   if (actual !== value) apply(data);
+}
+
+/* 番茄钟的偏好不在 settings.json 里：写 pomodoro.json 的 preferences，快照里的
+   pomodoro 节整段换掉。界面不重绘——滑块与输入框本身就是最终状态，重绘会把
+   设置页的滚动位置弹回顶部。后端夹取过值时再把控件回正。 */
+async function patchPomodoroPref(key, value) {
+  const patch = {};
+  patch[key] = value;
+  const data = await call("set_pomodoro_preferences", patch);
+  if (!data || !data.pomodoro) return;
+  if (data.ok === false && data.message) {
+    toast(data.message, false);
+    return;
+  }
+  state.data.pomodoro = data.pomodoro;
+  const actual = (data.pomodoro.preferences || {})[key];
+  const input = qs('[data-pomo-pref="' + key + '"]');
+  if (actual === undefined || !input) return;
+  const shown = input.dataset.pomoPercent
+    ? Math.round(actual * 100)
+    : input.dataset.pomoSeconds
+      ? Math.round(actual / 1000)
+      : actual;
+  if (String(input.value) !== String(shown)) input.value = shown;
+  const label = qs('[data-pomo-pref-value="' + key + '"]');
+  if (label) label.textContent = shown + "%";
 }
 
 async function browseImportDir() {

@@ -325,6 +325,7 @@ next / ended / failed
 
 - **越界或非法参数不抛异常**，原样返回当前快照。
 - 逐字符触发的写入（名称、简介）返回 `{"ok": bool}`，前端做 420 ms 防抖；结构性操作前先 `flushNameSave()` / `flushPlaylistName()`。番茄钟的时长模式与三类资源共用 `update_pomodoro_asset(kind, uid, {name, description})`，理由相同：逐字符保存不该重绘整页。
+- 防抖不是「丢了再补」：窗口失焦、页面隐藏与卸载前，前端把还在计时器里的名称与描述一起写下去（`flushPendingEdits()`）；输入框在窗口销毁时不一定收到 `blur`。
 - 耗时操作（导入、深检、换源）必须走任务通道，`js_api` 里不阻塞。
 - 带 `md5` 的播放事件一律校验「这个 md5 是不是当前曲」，不是就当作过期事件忽略，避免 `ended` 与随后的点击重复记账。
 - 快捷键不走 `update_settings`：`set_shortcut` 先认写法、再看控制台读不读得到、再查同页有没有撞车，失败时返回 `{"ok": false, "reason": "invalid|unsupported|conflict"}`，成功时返回快照并附带 `shortcut` 说明改成了什么。管理器快照里的 `keys` 给出动作清单与出厂键，前端不再抄一份表。
@@ -347,6 +348,7 @@ next / ended / failed
 - 跨线程只传数据。任务线程只更新任务表，前端自己轮询。
 - 网页是音频状态的唯一真相；Python 的 `playing` / `position_ms` 是镜像，只用于恢复与落盘。
 - 番茄钟的计时同样以网页为准：Python 只累加网页报上来的时长，不自己数秒。
+- 媒体服务的 `serve_forever` 用 50 ms 轮询（`POLL_INTERVAL`）：`shutdown()` 要等循环醒来，默认的 0.5 秒乘上同时开着的几个服务（音乐 + 番茄钟三个目录），关窗会白白卡两秒。它跑在自己的线程里，关窗时由 `closing` 同步停掉，不参与界面重绘。
 
 ## 9. 错误处理
 

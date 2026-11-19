@@ -18,6 +18,11 @@ from loguru import logger
 
 CHUNK = 64 * 1024
 
+#: ``serve_forever`` 的轮询间隔。``shutdown()`` 要等这个循环醒过来才返回，
+#: 默认的 0.5 秒乘以窗口里同时开着的几个服务（音乐 + 番茄钟三个目录），
+#: 关窗时会白白卡住两秒。50 ms 对 Range 请求的响应速度没有影响。
+POLL_INTERVAL = 0.05
+
 
 class _Handler(BaseHTTPRequestHandler):
     server_version = "MusicPlayerMedia/1.0"
@@ -121,7 +126,12 @@ class MediaServer:
         server.token = self.token  # type: ignore[attr-defined]
         self._server = server
         self.port = server.server_address[1]
-        self._thread = threading.Thread(target=server.serve_forever, name="media", daemon=True)
+        self._thread = threading.Thread(
+            target=server.serve_forever,
+            kwargs={"poll_interval": POLL_INTERVAL},
+            name="media",
+            daemon=True,
+        )
         self._thread.start()
         logger.info("媒体服务已启动：127.0.0.1:{}", self.port)
 

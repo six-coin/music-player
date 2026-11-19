@@ -29,10 +29,6 @@ function pomodoroOptions() {
   return pomodoroData().options || {};
 }
 
-function pomodoroPreferences() {
-  return pomodoroData().preferences || {};
-}
-
 /* 播放记录按「新的在前」下发，这里不再排序。 */
 function pomodoroSessions() {
   return pomodoroData().sessions || [];
@@ -326,94 +322,6 @@ function pomodoroSessionRows(rows) {
     .join("");
 }
 
-/* 全局偏好：一轮番茄钟的节奏参数。秒在界面上填，存的是毫秒。 */
-function pomoPrefNumber(key, value, max, unit, seconds) {
-  return (
-    '<div class="pomo-scale-line"><input class="input pomo-pref-number" type="number" min="0" ' +
-    'max="' + max + '" step="1" value="' + value + '" data-pomo-pref="' + key + '"' +
-    (seconds ? ' data-pomo-seconds="1"' : "") + ">" +
-    '<span class="pomo-pref-unit">' + esc(unit) + "</span></div>"
-  );
-}
-
-/* 比例类的偏好用滑杆：值按百分比显示，存的是 0–1 的小数。 */
-function pomoPrefRange(key, value, min, max, step) {
-  const percent = Math.round(Number(value) * 100);
-  return (
-    '<div class="pomo-scale-line"><input class="range" type="range" min="' + min + '" max="' +
-    max + '" step="' + step + '" value="' + percent + '" style="--fill: ' +
-    pomoFill(percent, min, max) + '%" data-pomo-pref="' + key + '" data-pomo-percent="1">' +
-    '<span class="volume-value" data-pomo-pref-value="' + key + '">' + percent +
-    "%</span></div>"
-  );
-}
-
-function pomodoroPrefsCard() {
-  const prefs = pomodoroPreferences();
-  const seconds = T("pomodoro.seconds");
-  /* 偏好的标签比一般字段长（「提示音期间音乐音量」），单独给一列更宽的行。 */
-  const field = function (label, control, hint) {
-    return (
-      '<div class="field-row pomo-pref-row"><span class="field-label">' + esc(label) +
-      '</span><div class="field-body">' + control +
-      (hint ? '<p class="detail-hint">' + esc(hint) + "</p>" : "") + "</div></div>"
-    );
-  };
-  return (
-    '<section class="card"><h3 class="card-title">' + esc(T("pomodoro.pref.title")) +
-    '</h3><p class="detail-hint">' + esc(T("pomodoro.pref.hint")) + "</p>" +
-    field(
-      T("pomodoro.pref.prep"),
-      pomoPrefNumber(
-        "prep_seconds",
-        prefs.prep_seconds || 0,
-        prefs.prep_seconds_max || 300,
-        seconds
-      ),
-      T("pomodoro.pref.prep_hint")
-    ) +
-    field(
-      T("pomodoro.pref.duck"),
-      pomoPrefNumber(
-        "duck_ms",
-        Math.round((prefs.duck_ms || 0) / 1000),
-        Math.round((prefs.duck_ms_max || 30000) / 1000),
-        seconds,
-        true
-      ),
-      T("pomodoro.pref.duck_hint")
-    ) +
-    field(
-      T("pomodoro.pref.duck_ratio"),
-      pomoPrefRange(
-        "duck_ratio",
-        prefs.duck_ratio || 0,
-        0,
-        Math.round((prefs.duck_ratio_max || 0.5) * 100),
-        1
-      ),
-      T("pomodoro.pref.duck_ratio_hint")
-    ) +
-    field(
-      T("pomodoro.pref.fade_in"),
-      pomoPrefNumber(
-        "fade_in_ms",
-        Math.round((prefs.fade_in_ms || 0) / 1000),
-        Math.round((prefs.fade_in_ms_max || 10000) / 1000),
-        seconds,
-        true
-      ),
-      T("pomodoro.pref.fade_in_hint")
-    ) +
-    field(
-      T("pomodoro.item.hud_scale"),
-      pomoPrefRange("hud_scale", prefs.hud_scale || 1, 20, 500, 5),
-      T("pomodoro.item.hud_scale_hint")
-    ) +
-    "</section>"
-  );
-}
-
 function pomodoroSessionsCard() {
   const rows = pomodoroSessions();
   return (
@@ -449,14 +357,13 @@ function pomodoroOverviewMarkup() {
     '<span>' + esc(T("pomodoro.group.rings")) + " · " + (counts.rings || 0) + "</span>" +
     '<span>' + esc(T("pomodoro.group.environments")) + " · " + (counts.environments || 0) + "</span>" +
     "</div></section>" +
-    pomodoroPrefsCard() +
     '<section class="card"><div class="card-heading"><h3 class="card-title">' +
     esc(T("pomodoro.overview.recent_used")) + "</h3></div>" +
     '<ul class="rows">' + pomodoroRecentRows(recentUsed, false) + "</ul></section>" +
     '<section class="card"><div class="card-heading"><h3 class="card-title">' +
     esc(T("pomodoro.overview.recent_edited")) + "</h3></div>" +
     '<ul class="rows">' + pomodoroRecentRows(recentEdited, true) + "</ul></section>" +
-    // 记录会一直变长，放在最后：上面的统计与偏好不用滚很久才看得到。
+    // 记录会一直变长，放在最后：上面的统计不用滚很久才看得到。
     pomodoroSessionsCard()
   );
 }
@@ -552,17 +459,9 @@ function pomoPhaseCard(item, phase, title) {
   );
 }
 
-/* 滑杆的填充按 (值 - 最小值) / 区间 算：min 不是 0 时不能直接用百分比。 */
-function pomoFill(value, min, max) {
-  const span = Number(max) - Number(min);
-  const ratio = span > 0 ? (Number(value) - Number(min)) / span : 0;
-  return Math.round(Math.min(1, Math.max(0, ratio)) * 1000) / 10;
-}
-
 function pomodoroItemMarkup(item) {
   const modeOptions = pomoModeOptions();
   const backgroundOptions = pomoBackgroundOptions();
-  const background = item.background ? pomodoroBackgroundByUid(item.background) : null;
   return (
     pomodoroHeader(
       item.name,
@@ -614,13 +513,6 @@ function pomodoroItemMarkup(item) {
         item.background_mode || "cover"
       )
     ) +
-    (background
-      ? '<div class="pomo-preview">' +
-        (background.kind === "video"
-          ? '<video src="' + esc(background.url) + '" controls muted preload="metadata"></video>'
-          : '<img src="' + esc(background.url) + '" alt="">') +
-        "</div>"
-      : "") +
     "</section>" +
     pomoPhaseCard(item, "focus", T("pomodoro.item.focus_section")) +
     pomoPhaseCard(item, "rest", T("pomodoro.item.rest_section")) +

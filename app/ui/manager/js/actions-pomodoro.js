@@ -50,23 +50,6 @@ async function flushPomodoroNameSave() {
   if (input) await savePomodoroName(input);
 }
 
-/* ---------- 全局偏好 ---------- */
-
-/* 秒与百分比在界面上填，存的是毫秒与比例。 */
-function pomodoroSavePref(input) {
-  if (!input) return;
-  const key = input.dataset.pomoPref;
-  let value = Number(input.value);
-  if (!isFinite(value)) return;
-  if (input.dataset.pomoPercent) value = value / 100;
-  if (input.dataset.pomoSeconds) value = Math.round(value * 1000);
-  const patch = {};
-  patch[key] = value;
-  call("set_pomodoro_preferences", patch).then(function (data) {
-    if (data) apply(data);
-  });
-}
-
 /* ---------- 新建 ---------- */
 
 function openCreatePomodoro() {
