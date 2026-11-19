@@ -328,7 +328,7 @@ function pomodoroSessionsCard() {
     '<section class="card"><div class="card-tools"><h3 class="card-title">' +
     esc(T("pomodoro.overview.sessions")) + '</h3><span class="row-time">' +
     esc(T("pomodoro.overview.sessions_count", { count: rows.length })) + "</span></div>" +
-    '<ul class="rows">' + pomodoroSessionRows(rows) + "</ul></section>"
+    '<ul class="rows rows--flush">' + pomodoroSessionRows(rows) + "</ul></section>"
   );
 }
 
@@ -359,10 +359,10 @@ function pomodoroOverviewMarkup() {
     "</div></section>" +
     '<section class="card"><div class="card-heading"><h3 class="card-title">' +
     esc(T("pomodoro.overview.recent_used")) + "</h3></div>" +
-    '<ul class="rows">' + pomodoroRecentRows(recentUsed, false) + "</ul></section>" +
+    '<ul class="rows rows--flush">' + pomodoroRecentRows(recentUsed, false) + "</ul></section>" +
     '<section class="card"><div class="card-heading"><h3 class="card-title">' +
     esc(T("pomodoro.overview.recent_edited")) + "</h3></div>" +
-    '<ul class="rows">' + pomodoroRecentRows(recentEdited, true) + "</ul></section>" +
+    '<ul class="rows rows--flush">' + pomodoroRecentRows(recentEdited, true) + "</ul></section>" +
     // 记录会一直变长，放在最后：上面的统计不用滚很久才看得到。
     pomodoroSessionsCard()
   );
