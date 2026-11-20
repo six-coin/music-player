@@ -388,7 +388,10 @@ def transcode_audio(
                 "[0:a]asplit=2[a1][a2];"
                 f"[a1]atrim=start={half:.3f},asetpts=PTS-STARTPTS[b];"
                 f"[a2]atrim=end={half:.3f},asetpts=PTS-STARTPTS[a];"
-                f"[b][a]acrossfade=d={fade:.3f}:c1=tri:c2=tri[a]"
+                # qsin 是等功率曲线：两段互不相关的底噪叠在一起时，功率保持 1，
+                # 接缝处不会像线性淡化（tri）那样掉 3 dB，听起来就是「声音小了
+                # 一下」。
+                f"[b][a]acrossfade=d={fade:.3f}:c1=qsin:c2=qsin[a]"
             ),
             "-map",
             "[a]",

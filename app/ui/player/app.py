@@ -84,7 +84,7 @@ def main() -> None:
         text_select=False,
     )
     api.attach(window)
-    window.events.closing += api.close
+    window.events.closing += api.on_closing
 
     logger.info("窗口已创建：{}×{}", width, height)
     webview.start()

@@ -499,6 +499,27 @@ function openReplaceModal(taskId, music) {
   poll();
 }
 
+/* 导出：后端弹目录选择框，把原文件按「歌名 - 作者.后缀」复制过去。
+   文案本轮不进语言包，先写死中文。 */
+async function exportSongs(md5s) {
+  const list = (md5s || []).filter(function (md5) {
+    return Boolean(musicByMd5(md5));
+  });
+  if (!list.length) return;
+  const result = await call("export_musics", list);
+  if (!result || result.canceled) return;
+  if (result.ok === false) {
+    toast(result.message || "导出失败", false);
+    return;
+  }
+  if (result.errors && result.errors.length) {
+    console.warn("导出时跳过的文件：", result.errors);
+    toast("已导出 " + result.exported + " 首，" + result.errors.length + " 首没成功", false);
+    return;
+  }
+  toast("已导出 " + result.exported + " 首到 " + result.folder, true);
+}
+
 function confirmDeleteSongs(md5s) {
   const list = (md5s || []).filter(function (md5) {
     return Boolean(musicByMd5(md5));

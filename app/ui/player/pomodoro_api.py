@@ -55,6 +55,7 @@ class PomodoroApiMixin:
         self._pomo_session = self._new_pomo_session()
         self._pomo_selected: str | None = None
         self._pomo_active: str | None = None
+        self._pomo_done = False
         self._pomo_plan: dict[str, Any] | None = None
         self._pomo_phase = 0
         self._pomo_playlist_uid: str | None = None
@@ -232,6 +233,7 @@ class PomodoroApiMixin:
             if plan is None:
                 return {"ok": False, "message": "pomodoro"}
             self._pomo_active = uid
+            self._pomo_done = False
             self._pomo_selected = uid
             self._pomo_plan = plan
             self._pomo_phase = 0
@@ -342,6 +344,9 @@ class PomodoroApiMixin:
     ) -> dict[str, Any]:
         if not isinstance(uid, str):
             return {"ok": False}
+        # 完成页已经是「走完了」的状态：这时候关窗不该再拦。
+        if completed:
+            self._pomo_done = True
         try:
             self.pomodoro.add_time(
                 uid,
@@ -412,6 +417,7 @@ class PomodoroApiMixin:
     def pomodoro_finish(self, uid: object = "") -> dict[str, Any]:
         with self._lock:
             self._pomo_active = None
+            self._pomo_done = False
             self._pomo_plan = None
             self._pomo_phase = 0
             self._pomo_playlist_uid = None

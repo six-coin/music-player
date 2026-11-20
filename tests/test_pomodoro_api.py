@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -417,3 +418,57 @@ def test_player_ring_and_environment_urls(player):
 
     assert plan["ring"]["url"].startswith("http://127.0.0.1:")
     assert plan["environment"]["url"].startswith("http://127.0.0.1:")
+
+
+def test_window_close_is_blocked_until_the_run_ends(player):
+    item = player.pomodoro.create_item("晨间")
+
+    assert player.pomodoro_start(item.uid, {})["ok"] is True
+    # 计时中：X / Alt+F4 被拦下，交给页面确认。
+    assert player.on_closing() is False
+    assert player.pomodoro_running() is True
+
+    # 走完一轮进完成页：已经结束了，不该再拦。
+    player.pomodoro_report(item.uid, 1000, 0, True)
+    assert player.pomodoro_running() is False
+    assert player.on_closing() is True
+
+
+def test_force_close_marks_the_close_as_confirmed(player):
+    item = player.pomodoro.create_item("晨间")
+    player.pomodoro_start(item.uid, {})
+
+    player.force_close()
+
+    assert player.on_closing() is True
+
+
+class FakeWindow:
+    """只记录 pywebview 被要求做了什么。"""
+
+    def __init__(self) -> None:
+        self.scripts: list[str] = []
+        self.destroyed = False
+
+    def evaluate_js(self, script: str) -> bool:
+        self.scripts.append(script)
+        return True
+
+    def destroy(self) -> None:
+        self.destroyed = True
+
+
+def test_close_prompt_is_pushed_to_the_page(player):
+    item = player.pomodoro.create_item("晨间")
+    player.pomodoro_start(item.uid, {})
+    window = FakeWindow()
+    player.attach(window)
+
+    assert player.on_closing() is False
+    deadline = time.time() + 2
+    while not window.scripts and time.time() < deadline:
+        time.sleep(0.01)
+    assert window.scripts and "pomoAskClose" in window.scripts[0]
+
+    player.force_close()
+    assert window.destroyed is True

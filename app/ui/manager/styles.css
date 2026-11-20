@@ -1064,6 +1064,13 @@ input[type="checkbox"]:disabled {
   gap: 2px;
 }
 
+/* 左栏只有二百多像素，五个动作按默认尺寸会挤成三行；收紧一点刚好两行。 */
+.selection-actions .btn {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12.5px;
+}
+
 /* ---------- 详情 ---------- */
 
 .detail-pane {

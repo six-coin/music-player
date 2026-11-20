@@ -52,7 +52,7 @@ def _missing_files(library: Library) -> list[str]:
 
 
 def orphan_paths(library: Library) -> list:
-    """assets/music 里存在、但库里没有对应记录的文件。"""
+    """``music`` 里存在、但库里没有对应记录的文件。"""
     if not paths.MUSIC_DIR.exists():
         return []
     return [

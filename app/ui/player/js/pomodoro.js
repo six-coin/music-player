@@ -37,6 +37,8 @@ const pomo = {
   pendingAutoplay: false,
   finishSnapshot: null,
   leaving: false,
+  closePending: false,
+  idleTimer: null,
 };
 
 const POMO_FONTS = {
@@ -119,8 +121,9 @@ function ambientHandoff(fade) {
   next.currentTime = 0;
   next.volume = 0;
   next.play().catch(function () {});
-  fadeAudio(next, ambient.volume, fade * 1000);
-  fadeAudio(current, 0, fade * 1000);
+  // 两个元素放的是同一段底噪的不同位置，互不相关：等功率交叉才不掉音量。
+  fadeAudio(next, ambient.volume, fade * 1000, true);
+  fadeAudio(current, 0, fade * 1000, true);
   window.setTimeout(function () {
     if (ambient.active === current) return;
     current.dataset.fadeToken = String((Number(current.dataset.fadeToken) || 0) + 1);
@@ -243,6 +246,7 @@ function openPomodoroStage() {
   );
   syncPomodoroVolumes();
   pomo.active = true;
+  pomoWake();
 }
 
 function startPomodoroTicker() {
@@ -622,6 +626,38 @@ function scheduleHidePomodoroPanel() {
   }, 1500);
 }
 
+/* ---------- 鼠标闲置 ---------- */
+
+/* 计时的时候鼠标一直停在画面中间很碍眼：5 秒不动就把指针藏起来，
+   一动立刻回来。确认框和完成页要点击，露着光标更稳妥。 */
+const POMO_IDLE_MS = 5000;
+
+function pomoWake() {
+  const stage = qs("#pomo-stage");
+  if (stage) stage.classList.remove("is-idle");
+  window.clearTimeout(pomo.idleTimer);
+  pomo.idleTimer = null;
+  if (!pomo.active) return;
+  pomo.idleTimer = window.setTimeout(function () {
+    pomo.idleTimer = null;
+    if (!pomo.active) return;
+    const node = qs("#pomo-stage");
+    const confirm = qs("#pomo-confirm");
+    const done = qs("#pomo-done");
+    if (!node || node.hidden) return;
+    if ((confirm && !confirm.hidden) || (done && !done.hidden)) return;
+    node.classList.add("is-idle");
+    qs("#pomo-panel").classList.remove("is-visible");
+  }, POMO_IDLE_MS);
+}
+
+function pomoStopIdle() {
+  window.clearTimeout(pomo.idleTimer);
+  pomo.idleTimer = null;
+  const stage = qs("#pomo-stage");
+  if (stage) stage.classList.remove("is-idle");
+}
+
 /* ---------- 结束 ---------- */
 
 function finishPomodoro(completed) {
@@ -722,12 +758,28 @@ function requestExitPomodoro() {
   showPomodoroLayer("#pomo-confirm");
 }
 
+/* 窗口的 X / Alt+F4 被 Python 拦下后会调这里；返回 true 表示页面接管了提示。 */
+window.pomoAskClose = function () {
+  if (!pomo.active) return false;
+  pomo.closePending = true;
+  showPomodoroLayer("#pomo-confirm");
+  pomoWake();
+  return true;
+};
+
 async function confirmExitPomodoro() {
+  const closing = pomo.closePending;
+  pomo.closePending = false;
   hidePomodoroLayer("#pomo-confirm");
   reportPomodoroStats(false);
   stopAllPomodoroAudio();
   const data = await call("pomodoro_finish", pomo.uid);
   await setPomodoroFullscreen(false);
+  if (closing) {
+    // 用户本来就是想关窗：退出番茄钟之后把窗口也关掉。
+    call("force_close");
+    return;
+  }
   leavePomodoroStage(data);
 }
 
@@ -742,6 +794,8 @@ async function closePomodoroDone() {
 function leavePomodoroStage(data) {
   if (pomo.leaving) return; // 连点两下「退出」不该收两次尾
   pomo.leaving = true;
+  pomoStopIdle();
+  pomo.closePending = false;
   stopPomodoroTicker();
   stopAllPomodoroAudio();
   pomo.active = false;
@@ -782,7 +836,7 @@ function stopAllPomodoroAudio() {
 
 /* ---------- 淡入淡出 ---------- */
 
-function fadeAudio(element, target, ms) {
+function fadeAudio(element, target, ms, equalPower) {
   if (!element) return;
   const token = String((Number(element.dataset.fadeToken) || 0) + 1);
   element.dataset.fadeToken = token;
@@ -791,7 +845,14 @@ function fadeAudio(element, target, ms) {
   function step(now) {
     if (element.dataset.fadeToken !== token) return;
     const ratio = Math.min(1, (now - started) / Math.max(1, ms));
-    element.volume = Math.min(1, Math.max(0, start + (target - start) * ratio));
+    // 等功率曲线：淡入用 sin、淡出用 cos，两段不相干的底噪叠在一起时
+    // 功率不变，接缝处不会掉 3 dB。普通淡入淡出仍用线性。
+    const curve = equalPower
+      ? target >= start
+        ? Math.sin((ratio * Math.PI) / 2)
+        : 1 - Math.cos((ratio * Math.PI) / 2)
+      : ratio;
+    element.volume = Math.min(1, Math.max(0, start + (target - start) * curve));
     if (ratio < 1) window.requestAnimationFrame(step);
   }
   window.requestAnimationFrame(step);
@@ -822,10 +883,23 @@ function bindPomodoroStageEvents() {
   qs("#pomo-fullscreen").addEventListener("click", togglePomodoroFullscreen);
   qs("#pomo-exit").addEventListener("click", requestExitPomodoro);
   qs("#pomo-exit-cancel").addEventListener("click", function () {
+    pomo.closePending = false;
     hidePomodoroLayer("#pomo-confirm");
+    pomoWake();
   });
   qs("#pomo-exit-confirm").addEventListener("click", confirmExitPomodoro);
   qs("#pomo-done-close").addEventListener("click", closePomodoroDone);
+
+  // 闲置隐藏光标：动一下就回来。
+  ["pointermove", "pointerdown", "wheel", "keydown"].forEach(function (name) {
+    window.addEventListener(
+      name,
+      function () {
+        if (pomo.active) pomoWake();
+      },
+      { passive: true }
+    );
+  });
 
   qs("#pomo-hotzone").addEventListener("mouseenter", showPomodoroPanel);
   qs("#pomo-panel").addEventListener("mouseenter", showPomodoroPanel);

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -28,7 +29,7 @@ from app.core.adaptation import (
 )
 from app.core.importer import commit_import, prepare_import
 from app.core.library import Library
-from app.core.naming import parse_filename
+from app.core.naming import export_filename, parse_filename
 from app.core.playlists import PlaylistStore
 from app.core.stats import StatsStore
 from app.core.totals import TotalStore
@@ -76,6 +77,25 @@ def _params_dict(params: Params) -> dict[str, Any]:
 def _join_names(items: list[str]) -> str:
     """列举分隔符跟着界面语言走：中文用顿号，英文用逗号。"""
     return i18n.t("list.separator").join(items)
+
+
+def _unique_path(target: Path) -> Path:
+    """同名文件已经在目录里时换成「名字 (2).后缀」，不覆盖别人的文件。"""
+    if not target.exists():
+        return target
+    for index in range(2, 1000):
+        candidate = target.with_name(f"{target.stem} ({index}){target.suffix}")
+        if not candidate.exists():
+            return candidate
+    return target.with_name(f"{target.stem}-{int(time.time())}{target.suffix}")
+
+
+def _export_start_dir() -> Path:
+    """导出对话框的起点：优先「音乐」，其次桌面，都没有就退回程序目录。"""
+    for candidate in (Path.home() / "Music", Path.home() / "Desktop"):
+        if candidate.is_dir():
+            return candidate
+    return paths.PROGRAM_DIR
 
 
 class ManagerApi(PomodoroApiMixin):
@@ -1411,6 +1431,63 @@ class ManagerApi(PomodoroApiMixin):
                 "song.deleted", count=report.removed, playlists=report.playlists
             )
             return snapshot
+
+    # ---------- 导出 ----------
+
+    def export_musics(self, md5s: object) -> dict[str, Any]:
+        """把选中的歌曲复制到用户挑的目录，文件名是「歌名 - 作者.后缀」。
+
+        复制原文件、不转码：导出的是用户手里那份音频，格式与后缀都保持不变。
+        复制在锁外做——几百首歌时不该让界面卡在库锁上。
+        """
+        with self._lock:
+            wanted = (
+                list(dict.fromkeys(md5 for md5 in md5s if isinstance(md5, str)))
+                if isinstance(md5s, list)
+                else []
+            )
+            targets = [
+                (md5, music.title, self.library.music_authors(music), music.ext)
+                for md5 in wanted
+                for music in (self.library.musics.get(md5),)
+                if music is not None
+            ]
+        if not targets:
+            return {"ok": False, "canceled": True}
+
+        folder = self._ask_export_dir()
+        if folder is None:
+            return {"ok": False, "canceled": True}
+
+        exported = 0
+        errors: list[str] = []
+        for md5, title, authors, ext in targets:
+            source = paths.music_path(md5, ext)
+            name = export_filename(title, authors, ext)
+            if not source.exists():
+                errors.append(f"{name}：{i18n.t('song.missing_file')}")
+                continue
+            try:
+                shutil.copyfile(source, _unique_path(folder / name))
+                exported += 1
+            except OSError as error:
+                errors.append(f"{name}：{error}")
+        return {"ok": True, "exported": exported, "folder": str(folder), "errors": errors}
+
+    def _ask_export_dir(self) -> Path | None:
+        if self._window is None:
+            return None
+        try:
+            result = self._window.create_file_dialog(
+                webview.FOLDER_DIALOG, directory=str(_export_start_dir())
+            )
+        except Exception as error:
+            logger.error("打开导出目录对话框失败：{}", error)
+            return None
+        if not result:
+            return None
+        folder = Path(result if isinstance(result, str) else result[0])
+        return folder if folder.is_dir() else None
 
     # ---------- 启动其他程序 ----------
 

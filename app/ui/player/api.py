@@ -71,6 +71,8 @@ class PlayerApi(PomodoroApiMixin):
         self.warnings: list[str] = []
         self._lock = threading.RLock()
         self._window = None
+        self._close_confirmed = False
+        self._close_prompting = False
         self._media: MediaServer | None = None
         self._rng = random.Random()
         self._records: dict[str, SongStats] = {}
@@ -149,6 +151,51 @@ class PlayerApi(PomodoroApiMixin):
 
     def attach(self, window) -> None:
         self._window = window
+
+    # ---------- 关窗 ----------
+
+    def pomodoro_running(self) -> bool:
+        """番茄钟还没走完（完成页不算）：这时候关窗要先问一句。"""
+        return self._pomo_active is not None and not self._pomo_done
+
+    def on_closing(self) -> bool:
+        """X、Alt+F4 都会走到这里；返回 False 取消这次关闭。
+
+        与「文件未保存」的处理方式一致：先拦下来，让页面自己弹确认框，
+        用户确认后由 ``force_close()`` 再关一次。
+        """
+        if self.pomodoro_running() and not self._close_confirmed:
+            self.request_close_prompt()
+            return False
+        self.close()
+        return True
+
+    def request_close_prompt(self) -> None:
+        """请网页弹出自己的确认框。
+
+        必须从工作线程调用：``closing`` 在 UI 线程执行，在那里调
+        ``evaluate_js`` 会等同一个正在执行回调的消息循环，直接死锁。
+        """
+        if self._close_prompting:
+            return
+        self._close_prompting = True
+        threading.Thread(target=self._push_close_prompt, daemon=True).start()
+
+    def force_close(self) -> None:
+        self._close_confirmed = True
+        if self._window is not None:
+            self._window.destroy()
+
+    def _push_close_prompt(self) -> None:
+        try:
+            window = self._window
+            if window is not None:
+                window.evaluate_js("window.pomoAskClose ? window.pomoAskClose() : false")
+        except Exception:  # 页面已经不可用：再拦下去窗口就关不掉了
+            logger.exception("页面内无法显示番茄钟关闭提示，改为直接关闭")
+            self.force_close()
+        finally:
+            self._close_prompting = False
 
     def close(self) -> None:
         try:

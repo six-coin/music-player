@@ -170,6 +170,7 @@ function bindShellEvents() {
     const action = button.dataset.batch;
     if (action === "tags") openBatchTags();
     else if (action === "playlist") openBatchPlaylist();
+    else if (action === "export") exportSongs(Array.from(state.selection));
     else if (action === "delete") confirmDeleteSongs(Array.from(state.selection));
     else if (action === "clear") {
       state.selection.clear();

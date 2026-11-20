@@ -1384,6 +1384,12 @@ body.pomo-mode {
   pointer-events: none;
 }
 
+/* 鼠标 5 秒不动就把指针藏起来；按钮自带的 cursor: pointer 也要一起盖掉。 */
+.pomo-stage.is-idle,
+.pomo-stage.is-idle * {
+  cursor: none !important;
+}
+
 @keyframes pomo-stage-in {
   from {
     opacity: 0;

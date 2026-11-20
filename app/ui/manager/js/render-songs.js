@@ -26,7 +26,16 @@ function visibleMusics() {
 
 function sortMusics(musics) {
   const list = musics.slice();
-  if (state.sort === "created") {
+  if (state.sort === "attention") {
+    // 缺文件最严重（放不了），其次是标签不合规；同类里再按名称。
+    const weight = function (music) {
+      return (music.missing ? 2 : 0) + (music.tag_issue ? 1 : 0);
+    };
+    list.sort(function (a, b) {
+      const diff = weight(b) - weight(a);
+      return diff || a.title.localeCompare(b.title, "zh-CN");
+    });
+  } else if (state.sort === "created") {
     list.sort(function (a, b) {
       return b.created_at - a.created_at;
     });
@@ -244,7 +253,7 @@ function renderDetail() {
     '<button class="btn soft small" data-copy="' + esc(music.md5) + '">' +
     esc(T("action.copy")) + "</button></div></div>" +
     '<div class="field-row"><span class="field-label">' + esc(T("song.path")) + "</span>" +
-    '<div class="field-body file-line"><span class="mono">assets\\music\\' +
+    '<div class="field-body file-line"><span class="mono">music\\' +
     esc(music.md5 + "." + music.ext) + "</span></div></div>" +
     '<div class="field-row"><span class="field-label">' + esc(T("song.size")) + "</span>" +
     '<div class="field-body">' + formatSize(music.size) + "</div></div>" +
