@@ -92,7 +92,7 @@ def test_dynamic_keys_exist():
     for suffix in ("no_playlist", "no_selection", "empty_playlist", "unplayable"):
         keys.append(f"player.empty.{suffix}.title")
         keys.append(f"player.empty.{suffix}.body")
-    for suffix in ("title", "created", "duration", "author"):
+    for suffix in ("title", "attention", "created", "duration", "author"):
         keys.append(f"songs.sort_{suffix}")
     # 设置页的快捷键卡片按「程序 · 动作」拼标签，动作表在 app/keymap.py 里。
     for group, actions in keymap.DEFAULTS.items():

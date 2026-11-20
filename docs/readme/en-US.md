@@ -74,13 +74,13 @@ Rules:
 
 - "Title - Artist1, Artist2" in a filename is split automatically; unknown artists are created.
 - Deduplication is by content: importing the same audio twice skips it, and the failure list says "same file as «Title» (identical MD5)". Cleaning strips tag differences, so two files that look different can still land on the same MD5.
-- Audio is stored as `assets\music\{md5}.{ext}`; your original file is left alone.
+- Audio is stored as `music\{md5}.{ext}` inside the data folder; your original file is left alone.
 - Cleaning (on by default) re-muxes with FFmpeg and drops metadata, so different tagged copies of one song are recognized as the same song. Without FFmpeg the import fails with a message; turn cleaning off in Settings.
 - One failing file does not stop the batch; successes and failures are listed at the end.
 
 ## 5. Songs
 
-The list sorts by title; switch to import date, duration or artist. Search matches titles, aliases, artists and tags at once.
+The list sorts by title; switch to "Needs attention first", import date, duration or artist. "Needs attention first" puts missing files and tag violations at the top. Search matches titles, aliases, artists and tags at once.
 
 | Action            | How                                                                |
 |-------------------|--------------------------------------------------------------------|
@@ -88,6 +88,7 @@ The list sorts by title; switch to import date, duration or artist. Search match
 | Multi-select      | `Ctrl` click, `Shift` click, or the checkbox at the start of a row |
 | Add tags in bulk  | Select several, then Add tags                                      |
 | Add to a playlist | Select several, then Add to playlist (manual playlists only)       |
+| Export in bulk    | Select several, then Export and pick a folder                      |
 | Delete in bulk    | Select several, then Delete song                                   |
 
 Detail cards:
@@ -98,14 +99,17 @@ Detail cards:
 | File              | MD5, path, size, duration, import date                                                                                      |
 | Adaptive skipping | Total plays for this song, then its records, skip rate, full plays, auto skips and next probability in the default playlist |
 
-"More" in the top right holds four actions:
+"More" in the top right holds five actions:
 
 | Action              | What it does                                                                                |
 |---------------------|---------------------------------------------------------------------------------------------|
 | Preview             | Plays in the preview bar at the bottom; does not touch a running player                     |
+| Export              | Pick a folder; the original file is copied out as "title - artists"                         |
 | Manage aliases      | Aliases are searchable but never shown in lists                                             |
 | Replace source file | Swap the audio file while title, artists, tags, playlist membership and statistics stay put |
 | Delete song         | Confirms first; the audio file goes to the Recycle Bin                                      |
+
+Exported files look like `Good Time - Owl City, Carly Rae Jepsen.mp3`: the original format is kept (no transcoding) and characters Windows rejects are dropped. If the target folder already has that name, ` (2)` is appended instead of overwriting.
 
 A tag group can be Required or Single. Violations never block saving: the row gets an amber dot and the integrity check reports it.
 
@@ -246,9 +250,11 @@ After pressing Start:
 4. Hovering the top-right corner reveals a translucent panel: two volumes, pause, full screen, exit. `Ctrl+C` skips a track; `Esc` does nothing.
 5. After the last phase comes the completion card: the background stays, ambience keeps playing, music follows the break settings, and the round is written to the session history.
 
-"Keep going" in the exit dialog returns to the timer; "Exit" records the time already counted and leaves. A forced kill loses at most the last 10 seconds. Leaving early is not a completed round and is not recorded.
+The pointer hides itself after five idle seconds and comes back on any movement.
 
-**Importing assets**: backgrounds accept common image and video formats, chimes accept mp3/ogg, ambience accepts mp3/ogg/mp4/m4a. Everything is transcoded on import — images to PNG, videos to H.264 MP4 without an audio track; audio can be trimmed, given a "seamless crossfade" (cut at the midpoint, reordered as B+A and crossfaded, which shortens the result by one fade), or simply stripped of metadata. The import dialog cannot be dismissed by clicking outside or pressing Esc; only Cancel closes it.
+"Keep going" in the exit dialog returns to the timer; "Exit" records the time already counted and leaves. Closing the window with the X button or `Alt+F4` while a pomodoro runs asks first — only after you confirm does it exit and close. A forced kill loses at most the last 10 seconds. Leaving early is not a completed round and is not recorded.
+
+**Importing assets**: backgrounds accept common image and video formats, chimes accept mp3/ogg, ambience accepts mp3/ogg/mp4/m4a. Everything is transcoded on import — images to PNG, videos to H.264 MP4 without an audio track; audio can be trimmed, given a "seamless crossfade" (cut at the midpoint, reordered as B+A and crossfaded, which shortens the result by one fade), or simply stripped of metadata. The crossfade uses an equal-power curve, so the level does not dip at the seam. The import dialog cannot be dismissed by clicking outside or pressing Esc; only Cancel closes it.
 
 ## 11. Simple Player
 
@@ -337,7 +343,7 @@ Switching the language takes effect immediately: labels, the window title and th
 
 ## 15. Files and folders
 
-The program folder holds code and the sample audio shipped with it; runtime files live in system folders.
+The program folder holds code and documentation; runtime files live in system folders.
 
 ```
 Music Player\
@@ -350,7 +356,6 @@ Music Player\
 │  ├─ ui\manager\                            manager UI
 │  ├─ ui\player\                             player UI
 │  └─ locales\                               language packs
-├─ assets\                                   sample audio shipped with the program
 ├─ docs\                                     documentation
 └─ tests\                                    tests
 

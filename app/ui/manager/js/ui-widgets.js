@@ -120,8 +120,7 @@ function setupSortSelect() {
 function sortOptions() {
   return [
     { value: "title", label: T("songs.sort_title") },
-    // 「需处理优先」与导出一样，文案本轮不进语言包。
-    { value: "attention", label: "需处理优先" },
+    { value: "attention", label: T("songs.sort_attention") },
     { value: "created", label: T("songs.sort_created") },
     { value: "duration", label: T("songs.sort_duration") },
     { value: "author", label: T("songs.sort_author") },
@@ -254,7 +253,7 @@ function songMenuItems(music) {
       },
     },
     {
-      label: "导出",
+      label: T("action.export"),
       onClick: function () {
         exportSongs([music.md5]);
       },

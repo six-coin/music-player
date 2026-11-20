@@ -64,7 +64,6 @@ Music Player/
 │  ├─ ui/player/                            同上，多一个 player.json 的读写
 │  ├─ ui/media.py                           按目录复用本地媒体服务（番茄钟资源走这里）
 │  └─ locales/                              zh-CN.json / en-US.json
-├─ assets/                                  随程序分发的示例音频
 └─ tests/                                   test_*.py
 ```
 
@@ -89,7 +88,7 @@ Music Player/
 
 | 位置     | 内容                                           | 默认                                   |
 |----------|------------------------------------------------|----------------------------------------|
-| 程序目录 | 代码与示例音频                                 | 仓库根目录                             |
+| 程序目录 | 代码与文档                                     | 仓库根目录                             |
 | 数据目录 | 音乐库、歌单、统计、设置、播放器状态、`music/` | `%PROGRAMDATA%\six-coin\music-player`  |
 | 本地目录 | `logs/`、`locks/`、`data-dir.txt`              | `%LOCALAPPDATA%\six-coin\music-player` |
 | 临时目录 | 清洗音频、换源的中间文件                       | `%TEMP%\six-coin\music-player`         |
@@ -258,11 +257,24 @@ next / ended / failed
 - **计时在网页里跑。** Python 不存「还剩多少秒」，只接收 `pomodoro_report(uid, focus_ms, rest_ms, completed)`：网页每 10 秒上报一次，暂停、切段、退出各补一次，`pagehide` 再补一次。这样休眠、断点、窗口最小化都不会让两边各算一套。
 - **暂停不算时长。** 网页只在「没暂停」时累加 delta，Python 只做加法。
 - **时段音乐走独立的 `PlayerSession`。** 普通播放器的队列、模式、进度都不受影响；退出番茄钟后原来的界面还在原处。
-- **环境音用两个 `<audio>` 接力。** `<audio loop>` 在接缝处会空一拍（编码器延迟 + 元素重新起播），对雨声这类连续底噪特别明显；两个元素提前一个淡化时长交叉淡化，听感上没有断点。
+- **环境音用两个 `<audio>` 接力。** `<audio loop>` 在接缝处会空一拍（编码器延迟 + 元素重新起播），对雨声这类连续底噪特别明显；两个元素提前一个淡化时长交叉淡化，听感上没有断点。两段底噪互不相关，淡化用等功率曲线（淡入 `sin`、淡出 `1-cos`），线性曲线会在中点掉 3 dB，听起来就是「声音小了一下」。
 - **提示音前压低音乐。** 结束前 `duck_ms` 毫秒音乐渐弱到 `duck_ratio`，提示音播完再按 `fade_in_ms` 渐强；这段时间禁止切歌（`holdTrack`）。三个值都是全局偏好：`duck_ms` 为 0 表示不压低，`fade_in_ms` 为 0 表示立刻恢复。
+- **计时中鼠标 5 秒不动就隐藏。** 网页在 `pointermove / pointerdown / wheel / keydown` 上重置计时，到点给计时层加 `is-idle`（`cursor: none !important`），任何动作立刻恢复；确认框与完成页要点击，保持可见。
+- **关窗先过番茄钟这一关。** `PlayerApi.on_closing()` 在计时没走完时返回 `False` 取消关闭（X 与 Alt+F4 都会走到 `FormClosing`），再从工作线程调 `evaluate_js("window.pomoAskClose()")` 让页面弹确认框——`closing` 在 UI 线程同步执行，直接调 `evaluate_js` 会死锁。确认后 `pomodoro_finish` 记下时长再 `force_close()`；完成页（`_pomo_done`）不再拦。页面不可用时直接放行，避免窗口关不掉。
 - **每完整走完一轮记一条历史。** 网页在最后一段结束时把「开始时间 + 本轮专注 / 休息累计」交给 `pomodoro_record_session`，Python 追加到 `pomodoro-sessions.json`；中途退出、只走了一段都不记。记录只存番茄钟的 uid，名称在展示时按 uid 现查，查不到就显示 uid。
 - **资源导入是任务。** 图片转 PNG、视频转 H.264 MP4（去音轨）、音频取段 + B+A 中点交叉淡化、MP4 抽音轨转 MP3，全部在任务线程里跑，进度走 `poll_task`。
 - **写盘与 `settings.json` 同一套。** 读改写全程持 `msvcrt` 文件锁，落盘走原子替换；manager 改配置与 player 记时长不会互相覆盖。
+
+### 6.8 导出
+
+```
+选歌（详情「更多」或批量条） → 选目录 → 逐首 copyfile
+  文件名 = 「歌名 - 作者1, 作者2.后缀」，非法字符丢弃，重名加 (2)
+```
+
+- **只复制，不转码。** 源文件是 `<数据目录>/music/{md5}.{ext}`，导出保留原始字节与后缀，库里的记录一个都不动。
+- **文件名规则在 `core/naming.export_filename()`。** 不能出现在 Windows 文件名里的字符（`\ / : * ? " < > |` 与控制字符）直接丢掉而不是替换；首尾的点与空格去掉，长度截到 120，撞上 `CON` / `COM1` 这类保留设备名时前面补下划线。
+- **同名不覆盖。** 目标目录里已有同名文件时依次试 `名字 (2).后缀`；缺文件的歌跳过并在结果里计数，界面提示「导出 N 首，M 首没成功」。
 
 ## 7. 前后端契约
 
@@ -380,7 +392,7 @@ next / ended / failed
 
 ```
 tests/
-├─ conftest.py              固定语言、隔离 assets、歌曲工厂、simple 的假依赖
+├─ conftest.py              固定语言、隔离音频目录、歌曲工厂、simple 的假依赖
 ├─ test_paths.py            路径解析
 ├─ test_settings.py         夹取、默认值、未知键保留、分节损坏
 ├─ test_keymap.py           快捷键写法、默认值、控制台字节
@@ -400,6 +412,7 @@ tests/
 ├─ test_pomodoro.py         番茄钟模型、统计、资源引用、偏好
 ├─ test_pomodoro_sessions.py 播放记录的追加、上限与坏记录
 ├─ test_pomodoro_api.py     两个窗口的番茄钟接口与时段计划
+├─ test_export.py           导出的文件名规则、复制与不覆盖
 ├─ test_api*.py             管理器的快照与编辑接口
 ├─ test_console_keys.py     绑定表到动作的映射
 ├─ test_simple_loop.py / test_simple_render.py   播放循环与方框对齐
@@ -411,7 +424,7 @@ tests/
 
 约定：
 
-- 涉及文件系统一律用 `tmp_path`；`conftest.py` 的 `isolated_media` 把 `assets` 指到临时目录，测试绝不碰真实音频。
+- 涉及文件系统一律用 `tmp_path`；`conftest.py` 的 `isolated_media` 把音频目录指到临时目录，测试绝不碰真实音频。
 - 系统能力注入假实现（假播放器、假时钟、假按键、假屏幕），测试里不起真实进程、不 sleep。
 - 断言文案时用中文，`fixed_language` fixture 把语言钉在 `zh-CN`。
 - 界面不做自动化，按 `reference.md` 3.13 的清单手工过一遍。番茄钟的界面改动另用本机 Edge 跑一遍冒烟（分组、详情、导入弹窗、预备、完成页、退出确认），脚本不进仓库。

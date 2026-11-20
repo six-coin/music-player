@@ -753,8 +753,23 @@ function hidePomodoroLayer(selector, done) {
   }, 170);
 }
 
+/* 确认框有两种来由：面板上的「退出」和窗口的 X / Alt+F4。文案分开，
+   后者要说明「关窗会结束这一轮」。 */
+function setPomodoroConfirmCopy(closing) {
+  qs("#pomo-confirm-title").textContent = T(
+    closing ? "pomodoro.close_title" : "pomodoro.exit_title"
+  );
+  qs("#pomo-confirm-body").textContent = T(
+    closing ? "pomodoro.close_body" : "pomodoro.exit_body"
+  );
+  qs("#pomo-exit-confirm").textContent = T(
+    closing ? "pomodoro.close_confirm" : "pomodoro.exit_confirm"
+  );
+}
+
 function requestExitPomodoro() {
   if (!pomo.active) return;
+  setPomodoroConfirmCopy(false);
   showPomodoroLayer("#pomo-confirm");
 }
 
@@ -762,6 +777,7 @@ function requestExitPomodoro() {
 window.pomoAskClose = function () {
   if (!pomo.active) return false;
   pomo.closePending = true;
+  setPomodoroConfirmCopy(true);
   showPomodoroLayer("#pomo-confirm");
   pomoWake();
   return true;
