@@ -698,7 +698,8 @@ function pomodoroAuditionMarkup(asset) {
     esc(formatDuration(asset.duration_ms)) + "</span>" +
     '<input class="range pomo-audition-vol" type="range" min="0" max="100" step="1" value="' +
     Math.round(volume * 100) +
-    '" data-pomo-audition-volume="1" aria-label="试听音量">' +
+    '" data-pomo-audition-volume="1" aria-label="' +
+    esc(T("pomodoro.audition.volume")) + '">' +
     "</div>"
   );
 }

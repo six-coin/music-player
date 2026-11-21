@@ -363,12 +363,18 @@ function updatePomodoroHud(remaining) {
         time: formatDuration(next * 60000),
       })
     : T("pomodoro.last_phase");
-  // 专注看「第几段」，休息看「已完成几段」；分母是总段数。
-  const total = segments.length || 1;
+  // 段数按「专注段」算：25/5/25/5/25/5/25 是 4 段，最后一个休息也算走完第 4 段。
+  const focusCount = Math.max(1, Math.ceil(segments.length / 2));
   const count =
     pomo.phase === "focus"
-      ? "第" + (pomo.phaseIndex + 1) + "/" + total + "段"
-      : "已完成" + pomo.phaseIndex + "/" + total + "段";
+      ? T("pomodoro.segment_focus", {
+          index: Math.floor(pomo.phaseIndex / 2) + 1,
+          total: focusCount,
+        })
+      : T("pomodoro.segment_rest", {
+          done: Math.floor((pomo.phaseIndex + 1) / 2),
+          total: focusCount,
+        });
   qs("#pomo-panel-phase").textContent =
     T("pomodoro.phase." + pomo.phase) + " · " + count;
 }
@@ -713,7 +719,7 @@ function pomodoroMoreMarkup() {
     return (
       '<div class="pomo-more-group"><h3>' + esc(title) + "</h3>" +
       pomodoroMoreRow(
-        "歌单",
+        T("pomodoro.item.playlist"),
         pomoSelect(
           'data-more-phase="' + phase + '" data-more-field="playlist"',
           pomoPlaylistOptions(),
@@ -721,7 +727,7 @@ function pomodoroMoreMarkup() {
         )
       ) +
       pomodoroMoreRow(
-        "顺序",
+        T("pomodoro.item.order"),
         pomoSelect(
           'data-more-phase="' + phase + '" data-more-field="order"',
           pomoValueOptions("pomodoro.order", orders),
@@ -731,7 +737,10 @@ function pomodoroMoreMarkup() {
       "</div>"
     );
   };
-  return block("focus", "专注", plan.focus || {}) + block("rest", "休息", plan.rest || {});
+  return (
+    block("focus", T("pomodoro.phase.focus"), plan.focus || {}) +
+    block("rest", T("pomodoro.phase.rest"), plan.rest || {})
+  );
 }
 
 function openPomodoroMore() {

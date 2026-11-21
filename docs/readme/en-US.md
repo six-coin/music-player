@@ -49,7 +49,7 @@ The manager has three columns: navigation on the left, a list in the middle, det
 | Navigation  | Overview, Songs, Playlists, Tags, Artists, Pomodoro, with Settings at the bottom |
 | List        | Items of the current section, with title, count and the New button above        |
 | Detail      | Editor for the selected item; changes save as you type, there is no Save button |
-| Preview bar | Rises from the bottom after Preview; pause, seek and change volume there        |
+| Preview bar | Rises from the bottom after Preview; pause, seek and change volume (wheel: 1% per notch) |
 
 The overview has no list column, so its main area spans two columns: six number cards (songs, total time, size, playlists, artists, tag groups), then "Recently imported / Recently edited" next to "To review", then the quick actions.
 
@@ -236,9 +236,9 @@ The overview page also carries one more card:
 
 | Item            | Detail                                                                                                              |
 |-----------------|---------------------------------------------------------------------------------------------------------------------|
-| Session history | One row per completed round: which pomodoro, when it started and ended, focus time, break time. Rows survive the pomodoro being deleted — the id itself is shown then |
+| Session history | One row per finished round: which pomodoro, when it started and ended, focus time, break time. An early exit is recorded too once focus passes the threshold (20 minutes by default), with no complete/incomplete marker. Rows survive the pomodoro being deleted — the id itself is shown then |
 
-The rhythm of a round (prep time, fade down before the chime, music level during the chime, fade back after it) and the timer size live in Settings · General · Pomodoro. They apply to every pomodoro and are shared with the player.
+The rhythm of a round (prep time, fade down before the chime, music level during the chime, fade back after it), the early-exit threshold and the timer size live in Settings · General · Pomodoro. They apply to every pomodoro and are shared with the player.
 
 The player lists pomodoros under the playlists; click one to see its details. Changes made there apply to this run only and never touch the saved configuration; "Reset to defaults" clears them.
 
@@ -247,12 +247,16 @@ After pressing Start:
 1. A prep screen (120 seconds by default, skippable, centred countdown; 0 starts right away).
 2. Prep ends and the window goes full screen: background, ambience and the focus playlist start together, with the phase and countdown in the bottom-left corner.
 3. A chime marks every phase change; shortly before it the music fades down to the configured level and track changes are blocked, then it fades back up once the chime ends.
-4. Hovering the top-right corner reveals a translucent panel: two volumes, pause, full screen, exit. `Ctrl+C` skips a track; `Esc` does nothing.
+4. Hovering the top-right corner reveals a translucent panel: two volumes, pause, full screen, exit, plus the segment counter under the title — focus shows "1/4", break shows "1/4 done", counted in focus segments (25/5/25/5/25/5/25 is 4 segments). The volume sliders accept the mouse wheel, 1% per notch. `Ctrl+C` skips a track; `Esc` does nothing.
 5. After the last phase comes the completion card: the background stays, ambience keeps playing, music follows the break settings, and the round is written to the session history.
+
+"More" on the panel title row opens Phase settings: change the playlist and play order for the focus and break phases, then choose Done to apply immediately (if the current phase switched playlists, the music changes right away). "Skip phase" is there too; it advances exactly like a finished countdown and keeps the time already counted.
+
+Switching back to a phase resumes the track that was left unfinished, position included, instead of reshuffling. When both phases share one playlist, playback simply continues.
 
 The pointer hides itself after five idle seconds and comes back on any movement.
 
-"Keep going" in the exit dialog returns to the timer; "Exit" records the time already counted and leaves. Closing the window with the X button or `Alt+F4` while a pomodoro runs asks first — only after you confirm does it exit and close. A forced kill loses at most the last 10 seconds. Leaving early is not a completed round and is not recorded.
+"Keep going" in the exit dialog returns to the timer; "Exit" records the time already counted and leaves. Closing the window with the X button or `Alt+F4` while a pomodoro runs asks first — only after you confirm does it exit and close. A forced kill loses at most the last 10 seconds. Leaving early is not a completed round, but it is recorded once focus passes the "Record early exits" threshold (20 minutes by default).
 
 **Importing assets**: backgrounds accept common image and video formats, chimes accept mp3/ogg, ambience accepts mp3/ogg/mp4/m4a. Everything is transcoded on import — images to PNG, videos to H.264 MP4 without an audio track; audio can be trimmed, given a "seamless crossfade" (cut at the midpoint, reordered as B+A and crossfaded, which shortens the result by one fade), or simply stripped of metadata. The crossfade uses an equal-power curve, so the level does not dip at the seam. The import dialog cannot be dismissed by clicking outside or pressing Esc; only Cancel closes it.
 
