@@ -230,9 +230,13 @@ function openPomodoroStage() {
   qs("#pomo-done").classList.remove("is-closing");
   qs("#pomo-confirm").hidden = true;
   qs("#pomo-confirm").classList.remove("is-closing");
+  qs("#pomo-more").hidden = true;
+  qs("#pomo-more").classList.remove("is-closing");
   qs("#pomo-prep").hidden = false;
   qs(".pomo-hud").hidden = true;
   qs("#pomo-panel").classList.remove("is-visible");
+  qs("#pomo-panel-title").textContent = pomo.plan.name || "";
+  qs("#pomo-more-open").hidden = true; // 预备阶段没有「本段」可调
   qs("#pomo-prep-name").textContent = pomo.plan.name || "";
   qs("#pomo-prep-time").textContent = formatDuration(
     Math.max(0, pomo.prepDeadline - Date.now())
@@ -310,6 +314,7 @@ function pomodoroTick() {
 function beginFormalPomodoro() {
   if (!pomo.prep) return;
   pomo.prep = false;
+  qs("#pomo-more-open").hidden = false;
   qs("#pomo-prep").hidden = true;
   qs(".pomo-hud").hidden = false;
   setPomodoroFullscreen(true);
@@ -358,6 +363,14 @@ function updatePomodoroHud(remaining) {
         time: formatDuration(next * 60000),
       })
     : T("pomodoro.last_phase");
+  // 专注看「第几段」，休息看「已完成几段」；分母是总段数。
+  const total = segments.length || 1;
+  const count =
+    pomo.phase === "focus"
+      ? "第" + (pomo.phaseIndex + 1) + "/" + total + "段"
+      : "已完成" + pomo.phaseIndex + "/" + total + "段";
+  qs("#pomo-panel-phase").textContent =
+    T("pomodoro.phase." + pomo.phase) + " · " + count;
 }
 
 /* 提示音期间音乐压低到多少、压多久、响完用多久回来：都是全局偏好。 */
@@ -387,11 +400,18 @@ function updateDuckVolume(remaining, duckMs) {
 
 /* ---------- 阶段音乐 ---------- */
 
-async function applyPomodoroPhaseMusic(afterRing) {
-  if (!pomo.active) return;
-  const result = await call("pomodoro_phase", pomo.phaseIndex);
-  if (!result || !result.ok) return;
-  const fade = afterRing ? pomoFadeInMs() : 800;
+/* 刚离开的那一段停在哪：切回同一个时段时后端按它接着放。 */
+function pomodoroPlaybackPosition() {
+  const music = pomoAudio();
+  if (!pomo.trackMd5 || !music || !music.getAttribute("src")) return null;
+  const position = Number(music.currentTime);
+  return {
+    md5: pomo.trackMd5,
+    position_ms: Math.round((Number.isFinite(position) ? position : 0) * 1000),
+  };
+}
+
+function applyPhaseResult(result, fade) {
   pomo.musicActive = !!result.play;
   if (!result.play) {
     fadeOutAndPause(pomoAudio());
@@ -402,6 +422,18 @@ async function applyPomodoroPhaseMusic(afterRing) {
     return;
   }
   if (result.command) applyPomodoroCommand(result.command, fade);
+}
+
+async function applyPomodoroPhaseMusic(afterRing) {
+  if (!pomo.active) return;
+  const result = await call(
+    "pomodoro_phase",
+    pomo.phaseIndex,
+    null,
+    pomodoroPlaybackPosition()
+  );
+  if (!result || !result.ok) return;
+  applyPhaseResult(result, afterRing ? pomoFadeInMs() : 800);
 }
 
 function applyPomodoroCommand(command, fadeMs) {
@@ -418,6 +450,21 @@ function applyPomodoroCommand(command, fadeMs) {
   pomo.playedMs = 0;
   pomo.lastAudioTick = performance.now();
   pomo.pendingAutoplay = !!command.autoplay;
+  // 切回某个时段时后端会给回上次的播放位置：等元数据到了再跳，太早设会被丢掉。
+  const position = Number(command.position_ms) || 0;
+  if (position > 0) {
+    const seek = function () {
+      if (music.getAttribute("src") !== command.url) return;
+      const duration = Number(music.duration);
+      const limit =
+        Number.isFinite(duration) && duration > 0
+          ? Math.max(0, duration - 0.3)
+          : position / 1000;
+      music.currentTime = Math.min(position / 1000, limit);
+    };
+    if (music.readyState >= 1) seek();
+    else music.addEventListener("loadedmetadata", seek, { once: true });
+  }
   music.play().catch(function (error) {
     if (error && error.name === "NotAllowedError") {
       showNotice(T("player.notice.autoplay_blocked"));
@@ -599,6 +646,31 @@ function setPomodoroEnvironmentVolume(value) {
   setFill(qs("#pomo-environment-volume"), pomo.environmentVolume);
 }
 
+/* 滚轮调音量：每格 1%。range 自己不吃滚轮，这里补上并挡掉页面滚动；
+   松手 400ms 后补一次 change，复用已有的「写回配置」逻辑。 */
+function bindWheelSlider(input) {
+  if (!input) return;
+  let timer = null;
+  input.addEventListener(
+    "wheel",
+    function (event) {
+      event.preventDefault();
+      const step = event.deltaY < 0 ? 1 : -1;
+      const min = Number(input.min) || 0;
+      const max = Number(input.max) || 100;
+      const next = Math.min(max, Math.max(min, Number(input.value) + step));
+      if (next === Number(input.value)) return;
+      input.value = String(next);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      window.clearTimeout(timer);
+      timer = window.setTimeout(function () {
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }, 400);
+    },
+    { passive: false }
+  );
+}
+
 /* ---------- 全屏与面板 ---------- */
 
 async function setPomodoroFullscreen(on) {
@@ -624,6 +696,90 @@ function scheduleHidePomodoroPanel() {
   pomo.panelTimer = window.setTimeout(function () {
     qs("#pomo-panel").classList.remove("is-visible");
   }, 1500);
+}
+
+/* ---------- 本段设置 ---------- */
+
+/* 面板上的「更多」：热切换两个时段的歌单与顺序，也能直接跳过本段。 */
+function pomodoroMoreRow(label, control) {
+  // 不能用 <label>：它会把点击转发给菜单里的第一个 <button>，菜单刚开就被关掉。
+  return '<div class="pomo-more-row"><span>' + esc(label) + "</span>" + control + "</div>";
+}
+
+function pomodoroMoreMarkup() {
+  const plan = pomo.plan || {};
+  const orders = pomodoroOptions().orders || [];
+  const block = function (phase, title, config) {
+    return (
+      '<div class="pomo-more-group"><h3>' + esc(title) + "</h3>" +
+      pomodoroMoreRow(
+        "歌单",
+        pomoSelect(
+          'data-more-phase="' + phase + '" data-more-field="playlist"',
+          pomoPlaylistOptions(),
+          config.playlist || ""
+        )
+      ) +
+      pomodoroMoreRow(
+        "顺序",
+        pomoSelect(
+          'data-more-phase="' + phase + '" data-more-field="order"',
+          pomoValueOptions("pomodoro.order", orders),
+          config.order || "shuffle"
+        )
+      ) +
+      "</div>"
+    );
+  };
+  return block("focus", "专注", plan.focus || {}) + block("rest", "休息", plan.rest || {});
+}
+
+function openPomodoroMore() {
+  if (!pomo.active || pomo.completed || pomo.prep) return;
+  qs("#pomo-more-body").innerHTML = pomodoroMoreMarkup();
+  showPomodoroLayer("#pomo-more");
+}
+
+function closePomodoroMore() {
+  hidePomodoroLayer("#pomo-more");
+}
+
+function moreSelectValue(phase, field) {
+  const node = qs('[data-more-phase="' + phase + '"][data-more-field="' + field + '"]');
+  return node ? node.dataset.value : "";
+}
+
+function morePhasePayload(phase) {
+  return {
+    playlist: moreSelectValue(phase, "playlist"),
+    order: moreSelectValue(phase, "order") || "shuffle",
+  };
+}
+
+async function applyPomodoroMore() {
+  const focus = morePhasePayload("focus");
+  const rest = morePhasePayload("rest");
+  hidePomodoroLayer("#pomo-more");
+  const result = await call(
+    "pomodoro_set_phases",
+    focus,
+    rest,
+    pomodoroPlaybackPosition()
+  );
+  if (!result || !result.ok) return;
+  if (pomo.plan) {
+    pomo.plan.focus = focus;
+    pomo.plan.rest = rest;
+  }
+  applyPhaseResult(result, 600);
+}
+
+/* 跳过本段：和倒计时走完一样推进，已计的时间照常上报。 */
+function skipPomodoroPhase() {
+  if (!pomo.active || pomo.completed || pomo.prep) return;
+  hidePomodoroLayer("#pomo-more");
+  if (pomo.paused) resumePomodoro();
+  advancePomodoroPhase();
 }
 
 /* ---------- 鼠标闲置 ---------- */
@@ -670,7 +826,13 @@ function finishPomodoro(completed) {
   if (completed) recordPomodoroSession();
   if (!completed) {
     stopAllPomodoroAudio();
-    call("pomodoro_finish", pomo.uid).then(function (data) {
+    call(
+      "pomodoro_finish",
+      pomo.uid,
+      pomo.startedAt,
+      Math.round(pomo.runFocus),
+      Math.round(pomo.runRest)
+    ).then(function (data) {
       setPomodoroFullscreen(false);
       leavePomodoroStage(data);
     });
@@ -694,6 +856,7 @@ function finishPomodoro(completed) {
       playPomodoroRing(null);
     }
   });
+  qs("#pomo-more-open").hidden = true;
   renderPomodoroDone();
   showPomodoroLayer("#pomo-done");
 }
@@ -789,7 +952,13 @@ async function confirmExitPomodoro() {
   hidePomodoroLayer("#pomo-confirm");
   reportPomodoroStats(false);
   stopAllPomodoroAudio();
-  const data = await call("pomodoro_finish", pomo.uid);
+  const data = await call(
+    "pomodoro_finish",
+    pomo.uid,
+    pomo.startedAt,
+    Math.round(pomo.runFocus),
+    Math.round(pomo.runRest)
+  );
   await setPomodoroFullscreen(false);
   if (closing) {
     // 用户本来就是想关窗：退出番茄钟之后把窗口也关掉。
@@ -831,6 +1000,7 @@ function leavePomodoroStage(data) {
     stage.classList.remove("is-leaving");
     qs("#pomo-done").hidden = true;
     qs("#pomo-confirm").hidden = true;
+    qs("#pomo-more").hidden = true;
     document.body.classList.remove("pomo-mode");
     if (data) apply(data);
     else renderPomodoroView();
@@ -905,6 +1075,13 @@ function bindPomodoroStageEvents() {
   });
   qs("#pomo-exit-confirm").addEventListener("click", confirmExitPomodoro);
   qs("#pomo-done-close").addEventListener("click", closePomodoroDone);
+  qs("#pomo-more-open").addEventListener("click", openPomodoroMore);
+  qs("#pomo-more-cancel").addEventListener("click", closePomodoroMore);
+  qs("#pomo-more-done").addEventListener("click", applyPomodoroMore);
+  qs("#pomo-more-skip").addEventListener("click", skipPomodoroPhase);
+
+  bindWheelSlider(qs("#pomo-music-volume"));
+  bindWheelSlider(qs("#pomo-environment-volume"));
 
   // 闲置隐藏光标：动一下就回来。
   ["pointermove", "pointerdown", "wheel", "keydown"].forEach(function (name) {

@@ -143,7 +143,11 @@
 
     <div class="pomo-hotzone" id="pomo-hotzone"></div>
     <div class="pomo-panel" id="pomo-panel">
-      <div class="pomo-panel-title" id="pomo-panel-title"></div>
+      <div class="pomo-panel-head">
+        <div class="pomo-panel-title" id="pomo-panel-title"></div>
+        <button class="pomo-panel-more" id="pomo-more-open" type="button">更多</button>
+      </div>
+      <div class="pomo-panel-phase" id="pomo-panel-phase"></div>
       <label class="pomo-volume">
         <span data-i18n="pomodoro.music_volume">背景音乐</span>
         <input class="slider" id="pomo-music-volume" type="range" min="0" max="100" step="1" value="50">
@@ -186,6 +190,19 @@
         <div class="pomo-confirm-actions">
           <button class="btn ghost" id="pomo-exit-cancel" type="button" data-i18n="pomodoro.exit_cancel">继续计时</button>
           <button class="btn primary" id="pomo-exit-confirm" type="button" data-i18n="pomodoro.exit_confirm">退出</button>
+        </div>
+      </div>
+    </div>
+    <div class="pomo-confirm" id="pomo-more" hidden>
+      <div class="pomo-confirm-card pomo-more-card">
+        <h2>本段设置</h2>
+        <p class="pomo-more-hint">歌单和顺序改完点「完成」生效。</p>
+        <div class="pomo-more-body" id="pomo-more-body"></div>
+        <div class="pomo-confirm-actions pomo-more-actions">
+          <button class="btn ghost" id="pomo-more-skip" type="button">跳过本段</button>
+          <span class="pomo-more-gap"></span>
+          <button class="btn ghost" id="pomo-more-cancel" type="button">取消</button>
+          <button class="btn primary" id="pomo-more-done" type="button">完成</button>
         </div>
       </div>
     </div>

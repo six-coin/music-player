@@ -3264,6 +3264,12 @@ input[type="checkbox"]:disabled {
   flex: 1;
 }
 
+/* 试听音量：挤在最右边，短一点，别把进度条压没了。 */
+.pomo-audition-vol {
+  flex: none;
+  width: 72px;
+}
+
 /* 导入 */
 
 .pomo-import-grid {

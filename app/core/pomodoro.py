@@ -47,6 +47,9 @@ from app.core.pomodoro_models import (
     PREP_DEFAULT,
     PREP_MAX,
     PREP_MIN,
+    RECORD_MINUTES_DEFAULT,
+    RECORD_MINUTES_MAX,
+    RECORD_MINUTES_MIN,
     SEGMENT_MAX_MINUTES,
     SEGMENT_MIN_MINUTES,
     VOLUME_DEFAULT,
@@ -95,6 +98,8 @@ __all__ = [
     "POMODORO_VERSION",
     "PREP_DEFAULT",
     "PREP_MAX",
+    "RECORD_MINUTES_DEFAULT",
+    "RECORD_MINUTES_MAX",
     "SEGMENT_MAX_MINUTES",
     "SEGMENT_MIN_MINUTES",
     "VOLUME_DEFAULT",
@@ -132,6 +137,7 @@ class PomodoroStore:
         self.duck_ms = DUCK_MS_DEFAULT
         self.duck_ratio = DUCK_RATIO_DEFAULT
         self.fade_in_ms = FADE_IN_MS_DEFAULT
+        self.record_minutes = RECORD_MINUTES_DEFAULT
         self.warnings: list[str] = []
         self._signature: tuple[int, int] | None = None
 
@@ -166,6 +172,7 @@ class PomodoroStore:
         duck_ms = DUCK_MS_DEFAULT
         duck_ratio = DUCK_RATIO_DEFAULT
         fade_in_ms = FADE_IN_MS_DEFAULT
+        record_minutes = RECORD_MINUTES_DEFAULT
         changed = False
 
         def commit() -> list[str]:
@@ -183,6 +190,7 @@ class PomodoroStore:
             self.duck_ms = duck_ms
             self.duck_ratio = duck_ratio
             self.fade_in_ms = fade_in_ms
+            self.record_minutes = record_minutes
             return list(warnings)
 
         if not self.path.exists():
@@ -247,6 +255,12 @@ class PomodoroStore:
             )
             fade_in_ms = _bounded_int(
                 preferences.get("fade_in_ms"), FADE_IN_MS_MIN, FADE_IN_MS_MAX, FADE_IN_MS_DEFAULT
+            )
+            record_minutes = _bounded_int(
+                preferences.get("record_minutes"),
+                RECORD_MINUTES_MIN,
+                RECORD_MINUTES_MAX,
+                RECORD_MINUTES_DEFAULT,
             )
 
         commit()
@@ -337,6 +351,7 @@ class PomodoroStore:
                 "duck_ms": self.duck_ms,
                 "duck_ratio": self.duck_ratio,
                 "fade_in_ms": self.fade_in_ms,
+                "record_minutes": self.record_minutes,
             },
         }
 
@@ -355,6 +370,7 @@ class PomodoroStore:
         self.duck_ms = other.duck_ms
         self.duck_ratio = other.duck_ratio
         self.fade_in_ms = other.fade_in_ms
+        self.record_minutes = other.record_minutes
         self.warnings = other.warnings
         self._signature = other._signature
 
@@ -773,6 +789,13 @@ class PomodoroStore:
         if "fade_in_ms" in patch:
             self.fade_in_ms = _bounded_int(
                 patch.get("fade_in_ms"), FADE_IN_MS_MIN, FADE_IN_MS_MAX, FADE_IN_MS_DEFAULT
+            )
+        if "record_minutes" in patch:
+            self.record_minutes = _bounded_int(
+                patch.get("record_minutes"),
+                RECORD_MINUTES_MIN,
+                RECORD_MINUTES_MAX,
+                RECORD_MINUTES_DEFAULT,
             )
 
 

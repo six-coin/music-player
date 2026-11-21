@@ -209,8 +209,18 @@ class PlayerSession:
         self.empty = "no_selection"
         self._emit_stop()
 
-    def restore(self, playlist_uid: str | None, md5: str | None, position_ms: int) -> None:
-        """按上次记住的歌单、曲目、位置落位；永远不自动播。"""
+    def restore(
+        self,
+        playlist_uid: str | None,
+        md5: str | None,
+        position_ms: int,
+        *,
+        autoplay: bool = False,
+    ) -> None:
+        """按上次记住的歌单、曲目、位置落位；默认不自动播。
+
+        番茄钟切回某个时段时传 ``autoplay=True``：接着放上次没播完的那首。
+        """
         playlist = self._playlists.get(playlist_uid) if playlist_uid else None
         if playlist is None:
             self.playlist_uid = None
@@ -243,13 +253,13 @@ class PlayerSession:
         self._rebuild_around(target)
         self.current_md5 = target
         self.position_ms = position
-        self._emit(target, position, False)
+        self._emit(target, position, autoplay)
 
         verdict = self._verdict(target, judge=False)
         if verdict == "missing":
             self.note(MISSING, target, 1)
         if verdict != "take":
-            self._advance(judge=False, autoplay=False)
+            self._advance(judge=False, autoplay=autoplay)
 
     # ---------- 切歌 ----------
 

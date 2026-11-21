@@ -295,3 +295,19 @@ def test_stats_payload_shape(store):
     assert payload["stats"]["total"]["focus_ms"] == 10
     assert payload["stats"]["items"][item.uid]["rest_ms"] == 20
     assert payload["items"][0]["name"] == "晨间"
+
+
+def test_record_minutes_preference_roundtrip_and_clamp(tmp_path):
+    first = PomodoroStore(tmp_path / "pomodoro.json")
+    first.load()
+    assert first.record_minutes == 20
+
+    first.set_preferences({"record_minutes": 5})
+    second = PomodoroStore(tmp_path / "pomodoro.json")
+    assert second.load() == []
+    assert second.record_minutes == 5
+
+    second.set_preferences({"record_minutes": -3})
+    assert second.record_minutes == 0
+    second.set_preferences({"record_minutes": 999})
+    assert second.record_minutes == 180

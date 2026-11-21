@@ -472,3 +472,141 @@ def test_close_prompt_is_pushed_to_the_page(player):
 
     player.force_close()
     assert window.destroyed is True
+
+
+REST_UID = "e" * 32
+REST_MD5 = "b" * 32
+
+
+def add_rest_playlist(root: Path) -> None:
+    library = json.loads((root / "library.json").read_text(encoding="utf-8"))
+    library["musics"].append(
+        {
+            "md5": REST_MD5,
+            "names": ["Song b"],
+            "authors": [],
+            "tags": [],
+            "ext": "mp3",
+            "duration_ms": 1000,
+        }
+    )
+    (root / "library.json").write_text(json.dumps(library), encoding="utf-8")
+    playlists = json.loads((root / "playlists.json").read_text(encoding="utf-8"))
+    playlists["items"].append(
+        {
+            "uid": REST_UID,
+            "name": "休息",
+            "builtin": False,
+            "kind": "manual",
+            "entries": [REST_MD5],
+            "filters": [],
+            "adaptation": {"enabled": True},
+        }
+    )
+    (root / "playlists.json").write_text(json.dumps(playlists), encoding="utf-8")
+    music = paths.music_path(REST_MD5, "mp3")
+    music.parent.mkdir(parents=True, exist_ok=True)
+    music.write_bytes(b"fake")
+
+
+def test_phase_switch_resumes_the_unfinished_track(tmp_path):
+    write_config(tmp_path)
+    add_rest_playlist(tmp_path)
+    api = PlayerApi(config_dir=tmp_path)
+    try:
+        item = api.pomodoro.create_item("晨间")
+        api.pomodoro.update_item(
+            item.uid,
+            {
+                "focus": {"playlist": UID, "order": "list_loop"},
+                "rest": {"playlist": REST_UID, "order": "list_loop"},
+            },
+        )
+        assert api.pomodoro_start(item.uid, {})["ok"] is True
+
+        first = api.pomodoro_phase(0)
+        assert first["play"] is True
+        assert first["command"]["md5"] == MD5
+
+        # 专注结束：网页报回停在哪；休息放另一张歌单。
+        rest = api.pomodoro_phase(1, None, {"md5": MD5, "position_ms": 42_000})
+        assert rest["command"]["md5"] == REST_MD5
+
+        # 切回专注：接着放上次没播完的那首，位置也对上。
+        back = api.pomodoro_phase(2, None, {"md5": REST_MD5, "position_ms": 5_000})
+        assert back["command"]["md5"] == MD5
+        assert back["command"]["position_ms"] == 42_000
+        assert back["command"]["autoplay"] is True
+    finally:
+        api.close()
+
+
+def test_hot_switch_playlist_takes_effect_and_keeps_the_position(tmp_path):
+    write_config(tmp_path)
+    add_rest_playlist(tmp_path)
+    api = PlayerApi(config_dir=tmp_path)
+    try:
+        item = api.pomodoro.create_item("晨间")
+        api.pomodoro.update_item(
+            item.uid,
+            {
+                "focus": {"playlist": UID, "order": "list_loop"},
+                "rest": {"playlist": UID, "order": "list_loop"},
+            },
+        )
+        assert api.pomodoro_start(item.uid, {})["ok"] is True
+        assert api.pomodoro_phase(0)["command"]["md5"] == MD5
+
+        switched = api.pomodoro_set_phases(
+            {"playlist": REST_UID, "order": "list_loop"},
+            {"playlist": UID, "order": "list_loop"},
+            {"md5": MD5, "position_ms": 10_000},
+        )
+        assert switched["ok"] is True
+        assert switched["command"]["md5"] == REST_MD5
+
+        # 改回原歌单：按切换前记住的位置接着放。
+        back = api.pomodoro_set_phases(
+            {"playlist": UID, "order": "list_loop"},
+            {"playlist": UID, "order": "list_loop"},
+            {"md5": REST_MD5, "position_ms": 3_000},
+        )
+        assert back["command"]["md5"] == MD5
+        assert back["command"]["position_ms"] == 10_000
+    finally:
+        api.close()
+
+
+def test_partial_session_needs_enough_focus_time(player):
+    item = player.pomodoro.create_item("晨间")
+    player.pomodoro_start(item.uid, {})
+
+    # 门槛默认 20 分钟：10 分钟不记，25 分钟记一条。
+    player.pomodoro_finish(item.uid, 0, 10 * 60_000, 0)
+    assert player.pomo_sessions.entries() == []
+
+    player.pomodoro_start(item.uid, {})
+    player.pomodoro_finish(item.uid, 0, 25 * 60_000, 2 * 60_000)
+    records = player.pomo_sessions.entries()
+    assert len(records) == 1
+    assert (records[0].focus_ms, records[0].rest_ms) == (25 * 60_000, 2 * 60_000)
+
+
+def test_partial_record_threshold_is_configurable(player):
+    item = player.pomodoro.create_item("晨间")
+    player.pomodoro.set_preferences({"record_minutes": 5})
+
+    player.pomodoro_start(item.uid, {})
+    player.pomodoro_finish(item.uid, 0, 6 * 60_000, 0)
+
+    assert len(player.pomo_sessions.entries()) == 1
+
+
+def test_completed_run_is_not_recorded_twice(player):
+    item = player.pomodoro.create_item("晨间")
+    player.pomodoro_start(item.uid, {})
+
+    player.pomodoro_report(item.uid, 25 * 60_000, 0, True)
+    player.pomodoro_finish(item.uid, 0, 25 * 60_000, 0)
+
+    assert player.pomo_sessions.entries() == []

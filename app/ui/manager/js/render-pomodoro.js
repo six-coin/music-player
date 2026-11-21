@@ -252,6 +252,7 @@ function renderPomodoroDetail() {
     const ring = pomodoroRingByUid(uid);
     if (ring) {
       setPaneHTML(pane, pomodoroAudioMarkup(ring, "ring"));
+      bindWheelVolume(pane.querySelector("[data-pomo-audition-volume]"));
       return;
     }
   }
@@ -259,6 +260,7 @@ function renderPomodoroDetail() {
     const environment = pomodoroEnvironmentByUid(uid);
     if (environment) {
       setPaneHTML(pane, pomodoroAudioMarkup(environment, "environment"));
+      bindWheelVolume(pane.querySelector("[data-pomo-audition-volume]"));
       return;
     }
   }
@@ -679,6 +681,8 @@ function pomodoroBackgroundMarkup(background) {
 }
 
 function pomodoroAuditionMarkup(asset) {
+  const configured = Number(settingValue("audition.volume"));
+  const volume = Number.isFinite(configured) ? Math.min(1, Math.max(0, configured)) : 0.2;
   return (
     '<div class="pomo-audition" data-pomo-audition="1" data-audition-url="' + esc(asset.url) +
     '" data-audition-uid="' + esc(asset.uid) + '">' +
@@ -691,7 +695,11 @@ function pomodoroAuditionMarkup(asset) {
     '<input class="range pomo-audition-seek" type="range" min="0" max="1000" value="0" ' +
     'data-pomo-audition-seek="1" aria-label="' + esc(T("pomodoro.audition.seek")) + '">' +
     '<span class="pomo-audition-time" data-pomo-audition-total>' +
-    esc(formatDuration(asset.duration_ms)) + "</span></div>"
+    esc(formatDuration(asset.duration_ms)) + "</span>" +
+    '<input class="range pomo-audition-vol" type="range" min="0" max="100" step="1" value="' +
+    Math.round(volume * 100) +
+    '" data-pomo-audition-volume="1" aria-label="试听音量">' +
+    "</div>"
   );
 }
 

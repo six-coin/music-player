@@ -253,3 +253,15 @@ def test_jump_can_go_back_within_the_round(tmp_path):
     assert session.jump(md5("a")) is True
     assert session.current_md5 == md5("a")
     assert session.command.autoplay is True
+
+
+def test_restore_can_autoplay_the_saved_track(tmp_path):
+    session, _, _ = build(tmp_path)
+    session.load_playlist(UID, autoplay=True)
+
+    session.restore(UID, md5("b"), 42000, autoplay=True)
+
+    assert session.current_md5 == md5("b")
+    assert session.command.md5 == md5("b")
+    assert session.command.position_ms == 42000
+    assert session.command.autoplay is True

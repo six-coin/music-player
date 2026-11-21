@@ -27,6 +27,7 @@ from app.core.pomodoro import (
     HUD_SCALE_MIN,
     PLAY_ORDERS,
     PREP_MAX,
+    RECORD_MINUTES_MAX,
     PomodoroStore,
 )
 from app.core.pomodoro_sessions import SessionLog
@@ -141,6 +142,8 @@ class PomodoroApiMixin:
                 "duck_ratio_max": DUCK_RATIO_MAX,
                 "fade_in_ms": self.pomodoro.fade_in_ms,
                 "fade_in_ms_max": FADE_IN_MS_MAX,
+                "record_minutes": self.pomodoro.record_minutes,
+                "record_minutes_max": RECORD_MINUTES_MAX,
             },
         }
 

@@ -20,6 +20,7 @@ function bindPanelEvents() {
   qs("#audition-volume").addEventListener("change", function (event) {
     patchSetting("audition.volume", Number(event.target.value) / 100);
   });
+  bindWheelVolume(qs("#audition-volume"));
 
   qs("#audition-seek").addEventListener("input", function (event) {
     const audio = auditionAudio();

@@ -479,6 +479,8 @@ function togglePomodoroAudition() {
     audio.currentTime = 0;
   }
   state.pomoAuditionUid = host.dataset.auditionUid || null;
+  const configured = Number(settingValue("audition.volume"));
+  audio.volume = Number.isFinite(configured) ? Math.min(1, Math.max(0, configured)) : 0.2;
   if (audio.paused) {
     audio.play().catch(function () {
       toast(T("pomodoro.audition.failed"), false);
@@ -486,6 +488,17 @@ function togglePomodoroAudition() {
   } else {
     audio.pause();
   }
+}
+
+/* 番茄钟的试听与歌曲试听共用 audition.volume：两个入口调的是同一个音量。 */
+function applyPomodoroAuditionVolume(value, persist) {
+  const audio = pomoAuditionAudio();
+  const volume = Math.min(1, Math.max(0, Number(value) / 100));
+  if (audio) audio.volume = volume;
+  const host = qs(".pomo-audition");
+  const slider = host && host.querySelector("[data-pomo-audition-volume]");
+  if (slider) slider.value = String(Math.round(volume * 100));
+  if (persist) patchSetting("audition.volume", volume);
 }
 
 function syncPomodoroAudition() {

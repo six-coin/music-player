@@ -1547,13 +1547,46 @@ body.pomo-mode {
   pointer-events: auto;
 }
 
-.pomo-panel-title {
+.pomo-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 6px;
+}
+
+.pomo-panel-title {
+  flex: 1;
+  min-width: 0;
   color: rgba(255, 255, 255, 0.66);
   font-size: 12px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* 「更多」放在标题行：动作行留给暂停 / 全屏 / 退出三个常用按钮。 */
+.pomo-panel-more {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pomo-panel-more:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+/* 「专注 · 第 1/4 段」：第几段、还剩几段，一眼能看到。 */
+.pomo-panel-phase {
+  margin-bottom: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
 }
 
 .pomo-volume {
@@ -1812,6 +1845,57 @@ body.pomo-mode {
 
 .pomo-confirm-actions .btn.primary {
   margin-top: 0;
+}
+
+/* 「更多」：与退出确认共用遮罩和卡片，只是宽一点、内容是一组下拉框。 */
+.pomo-more-card {
+  width: 400px;
+}
+
+.pomo-more-card .pomo-more-hint {
+  margin: 6px 0 18px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.pomo-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pomo-more-group h3 {
+  margin: 0 0 8px;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.pomo-more-group + .pomo-more-group {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.pomo-more-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.pomo-more-row:last-child {
+  margin-bottom: 0;
+}
+
+.pomo-more-actions {
+  justify-content: flex-start;
+}
+
+.pomo-more-gap {
+  flex: 1;
 }
 
 @media (max-width: 840px) {

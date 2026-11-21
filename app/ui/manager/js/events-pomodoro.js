@@ -113,6 +113,10 @@ function bindPomodoroEvents() {
       savePomodoroDescription(event.target);
       return;
     }
+    if (event.target.matches("[data-pomo-audition-volume]")) {
+      applyPomodoroAuditionVolume(event.target.value, true);
+      return;
+    }
     if (event.target.matches("[data-pomo-audition-seek]")) {
       seekPomodoroAudition(event.target.value);
     }
@@ -129,6 +133,10 @@ function bindPomodoroEvents() {
     }
     if (isPomodoroDescription(event.target)) {
       schedulePomodoroDescriptionSave(event.target);
+      return;
+    }
+    if (event.target.matches("[data-pomo-audition-volume]")) {
+      applyPomodoroAuditionVolume(event.target.value, false);
       return;
     }
     if (event.target.matches("[data-pomo-audition-seek]")) {

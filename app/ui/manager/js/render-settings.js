@@ -357,6 +357,15 @@ function settingsPomodoro() {
         true
       ) +
       settingsRow(
+        "中途退出也记一条",
+        "专注时间超过这个分钟数才记播放记录，0 表示只要学了就记 · " +
+          rangeHint(prefs.record_minutes_max || 180),
+        '<input class="input" type="number" min="0" max="' + (prefs.record_minutes_max || 180) +
+          '" step="1" value="' + (prefs.record_minutes || 0) +
+          '" data-pomo-pref="record_minutes" style="width:110px">' +
+          '<span class="adapt-unit">分钟</span>'
+      ) +
+      settingsRow(
         T("pomodoro.item.hud_scale"),
         T("pomodoro.item.hud_scale_hint"),
         '<div class="volume-line"><input class="range" type="range" min="20" max="500" ' +

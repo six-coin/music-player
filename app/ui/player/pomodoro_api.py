@@ -59,6 +59,7 @@ class PomodoroApiMixin:
         self._pomo_plan: dict[str, Any] | None = None
         self._pomo_phase = 0
         self._pomo_playlist_uid: str | None = None
+        self._pomo_resume: dict[str, dict[str, dict[str, Any]]] = {}
         self._fullscreen = False
 
     def _new_pomo_session(self) -> PlayerSession:
@@ -238,6 +239,7 @@ class PomodoroApiMixin:
             self._pomo_plan = plan
             self._pomo_phase = 0
             self._pomo_playlist_uid = None
+            self._pomo_resume = {}
             self._pomo_session = self._new_pomo_session()
             try:
                 self.pomodoro.touch_used(uid)
@@ -246,14 +248,21 @@ class PomodoroApiMixin:
             self.session.set_playing(False)
             return {"ok": True, "plan": plan}
 
-    def pomodoro_phase(self, index: object, overrides: object = None) -> dict[str, Any]:
-        """切到第 ``index`` 段：返回这一段要不要放、放哪张歌单、第一条命令。"""
+    def pomodoro_phase(
+        self, index: object, overrides: object = None, previous: object = None
+    ) -> dict[str, Any]:
+        """切到第 ``index`` 段：返回这一段要不要放、放哪张歌单、第一条命令。
+
+        ``previous`` 是网页报来的「刚离开那一段停在哪儿」（md5 + 毫秒）。切回
+        同一个时段时按它接着放上次没播完的那首，而不是重新洗牌。
+        """
         with self._lock:
             if self._pomo_active is None or self._pomo_plan is None:
                 return {"ok": False}
             phase_index = index if isinstance(index, int) and not isinstance(index, bool) else 0
             phase_index = max(0, phase_index)
             phase = "focus" if phase_index % 2 == 0 else "rest"
+            self._remember_playback(previous)
             config = self._phase_config(phase, overrides if isinstance(overrides, dict) else {})
             self._pomo_phase = phase_index
             if not config["playlist"]:
@@ -263,6 +272,21 @@ class PomodoroApiMixin:
                 self._pomo_session.set_mode(config["order"])
             if playlist_uid == self._pomo_playlist_uid and self._pomo_session.current_md5:
                 return {"ok": True, "phase": phase, "play": True, "resume": True}
+            saved = self._pomo_resume.get(phase, {}).get(playlist_uid)
+            if saved:
+                self._pomo_session.restore(
+                    playlist_uid,
+                    saved.get("md5"),
+                    _milliseconds(saved.get("position_ms")),
+                    autoplay=True,
+                )
+                self._pomo_playlist_uid = playlist_uid
+                return {
+                    "ok": True,
+                    "phase": phase,
+                    "play": True,
+                    "command": self._command_payload(self._pomo_session.command),
+                }
             if not self._pomo_session.load_playlist(playlist_uid, autoplay=True):
                 return {"ok": True, "phase": phase, "play": False, "reason": "missing"}
             self._pomo_playlist_uid = playlist_uid
@@ -272,6 +296,50 @@ class PomodoroApiMixin:
                 "play": True,
                 "command": self._command_payload(self._pomo_session.command),
             }
+
+    def pomodoro_set_phases(
+        self, focus: object = None, rest: object = None, previous: object = None
+    ) -> dict[str, Any]:
+        """热切换两个时段的歌单与顺序；当前段被改到别的歌单时立刻换歌。"""
+        with self._lock:
+            if self._pomo_active is None or self._pomo_plan is None:
+                return {"ok": False}
+            self._remember_playback(previous)
+            plan = self._pomo_plan
+            plan["focus"] = self._clean_phase(focus, plan.get("focus"))
+            plan["rest"] = self._clean_phase(rest, plan.get("rest"))
+            return self.pomodoro_phase(self._pomo_phase)
+
+    def _clean_phase(self, raw: object, base: object) -> dict[str, Any]:
+        current = dict(base) if isinstance(base, dict) else {"playlist": None, "order": "shuffle"}
+        if not isinstance(raw, dict):
+            return current
+        if "playlist" in raw:
+            value = raw.get("playlist")
+            current["playlist"] = (
+                value if isinstance(value, str) and value in self.playlists.items else None
+            )
+        order = raw.get("order")
+        if order in PLAY_ORDERS:
+            current["order"] = order
+        return current
+
+    def _remember_playback(self, previous: object) -> None:
+        """记住「刚离开那一段停在哪儿」，按时段类型存，切回来时接着放。"""
+        if not isinstance(previous, dict):
+            return
+        md5 = previous.get("md5")
+        if not isinstance(md5, str) or not md5 or md5 != self._pomo_session.current_md5:
+            return
+        playlist = self._pomo_session.playlist_uid
+        if not playlist:
+            return
+        phase = "focus" if self._pomo_phase % 2 == 0 else "rest"
+        # 按时段 + 歌单存：同一时段换过歌单再换回来，也能接着上次那首。
+        self._pomo_resume.setdefault(phase, {})[playlist] = {
+            "md5": md5,
+            "position_ms": _milliseconds(previous.get("position_ms")),
+        }
 
     def _phase_config(self, phase: str, overrides: dict[str, Any]) -> dict[str, Any]:
         plan = self._pomo_plan or {}
@@ -396,8 +464,13 @@ class PomodoroApiMixin:
         """完整走完一轮时追加一条播放记录。网页给开始时间与两个累计时长。"""
         if not isinstance(uid, str) or not uid:
             return {"ok": False}
-        focus = _milliseconds(focus_ms)
-        rest = _milliseconds(rest_ms)
+        if not self._append_session(
+            uid, started_at, _milliseconds(focus_ms), _milliseconds(rest_ms)
+        ):
+            return {"ok": False}
+        return {"ok": True}
+
+    def _append_session(self, uid: str, started_at: object, focus: int, rest: int) -> bool:
         ended_at = int(time.time())
         started = _seconds(started_at) or max(0, ended_at - (focus + rest) // 1000)
         record = SessionRecord(
@@ -411,18 +484,48 @@ class PomodoroApiMixin:
             self.pomo_sessions.append(record)
         except Exception:  # 记录是附加物，写不进去不该把完成页卡住
             logger.exception("记录番茄钟播放失败：{}", uid)
-            return {"ok": False}
-        return {"ok": True}
+            return False
+        return True
 
-    def pomodoro_finish(self, uid: object = "") -> dict[str, Any]:
+    def pomodoro_finish(
+        self,
+        uid: object = "",
+        started_at: object = 0,
+        focus_ms: object = 0,
+        rest_ms: object = 0,
+    ) -> dict[str, Any]:
+        """结束本次番茄钟。
+
+        没走完但专注时间超过偏好里的门槛（默认 20 分钟）时，也记一条播放记录，
+        只写学习 / 休息时长——记录里没有「完整」这个字段。
+        """
+        focus = _milliseconds(focus_ms)
+        rest = _milliseconds(rest_ms)
         with self._lock:
+            completed = self._pomo_done
+            target = uid if isinstance(uid, str) and uid else (self._pomo_active or "")
             self._pomo_active = None
             self._pomo_done = False
             self._pomo_plan = None
             self._pomo_phase = 0
             self._pomo_playlist_uid = None
+            self._pomo_resume = {}
             self._pomo_session = self._new_pomo_session()
+        if not completed and target:
+            self._record_partial(target, started_at, focus, rest)
+        with self._lock:
             return self._snapshot()
+
+    def _record_partial(self, uid: str, started_at: object, focus: int, rest: int) -> None:
+        """中途退出：专注超过门槛才留记录，阈值来自全局偏好。"""
+        try:
+            self.pomodoro.reload_if_changed()
+            limit = max(0, int(self.pomodoro.record_minutes)) * 60_000
+        except Exception:  # 读不到偏好就按默认 20 分钟
+            limit = 20 * 60_000
+        if focus <= limit:
+            return
+        self._append_session(uid, started_at, focus, rest)
 
     def set_fullscreen(self, on: object = False) -> dict[str, Any]:
         want = bool(on)

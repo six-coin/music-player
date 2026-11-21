@@ -56,6 +56,12 @@ FADE_IN_MS_DEFAULT = 2_000
 FADE_IN_MS_MIN = 0
 FADE_IN_MS_MAX = 10_000
 
+#: 中途退出也算一条播放记录的门槛：专注时长超过这个分钟数才记。
+#: 0 表示只要有专注时间就记；调大就等于只记「差不多走完」的那些。
+RECORD_MINUTES_DEFAULT = 20
+RECORD_MINUTES_MIN = 0
+RECORD_MINUTES_MAX = 180
+
 
 def _now() -> int:
     return int(time.time())
