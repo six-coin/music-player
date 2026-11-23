@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import subprocess
 
 import webview
 from loguru import logger
@@ -39,10 +40,6 @@ def _window_box() -> tuple[int, int, tuple[int, int]]:
     return min(width, screen_width), min(height, screen_height), (min_width, min_height)
 
 
-def _alert(message: str) -> None:
-    bootstrap.info(message, i18n.t("manager.title"))
-
-
 def main() -> None:
     warnings = bootstrap.prepare()
     log_file = logging_setup.setup("manager")
@@ -54,14 +51,43 @@ def main() -> None:
     if not instance.acquire():
         bootstrap.sync_language()
         logger.info("已有实例在运行，退出本次启动")
-        if not activate_window(i18n.t("manager.title")):
-            _alert(i18n.t("manager.already_running"))
+        _activate_existing()
         return
 
+    api: ManagerApi | None = None
     try:
-        _run()
+        api = _run()
     finally:
         instance.release()
+    if api is not None and api.restart_requested:
+        _relaunch()
+
+
+def _activate_existing() -> None:
+    """把已开着的管理器提到前面；提不上来只记一条日志。
+
+    多开的意思就是「让我看到那个窗口」，窗到前台就够了。弹一个「已经打开」的
+    信息框只会让人以为双击失败了。
+    """
+    if not activate_window(i18n.t("manager.title")):
+        logger.info("已有管理器在运行，但没能把窗口提到前面")
+
+
+def _relaunch() -> None:
+    """释放单实例锁之后拉起一个新进程。
+
+    数据目录的搬迁只在启动早期、所有业务模块打开文件之前发生，所以「改完目录
+    重启」必须是真重启。锁在调用本函数之前已经放掉，新进程不会撞上「已经在运行」。
+    """
+    try:
+        subprocess.Popen(
+            [str(bootstrap.pythonw()), str(paths.MANAGER_ENTRY)],
+            cwd=str(paths.PROGRAM_DIR),
+            close_fds=True,
+        )
+    except OSError as error:
+        logger.error("重启失败：{}", error)
+        bootstrap.info(i18n.t("about.restart_failed", error=error), i18n.t("manager.title"))
 
 
 def _run() -> ManagerApi | None:

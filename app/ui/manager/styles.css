@@ -36,6 +36,7 @@
   --backdrop: rgba(15, 23, 42, 0.32);
   --focus-ring: rgba(59, 130, 246, 0.16);
   --toast-bg: #111827;
+  --toast-error: #b91c1c;
   --scrollbar: #d3d8e0;
   --scrollbar-hover: #b8bfca;
 
@@ -82,6 +83,7 @@
   --backdrop: rgba(0, 0, 0, 0.55);
   --focus-ring: rgba(76, 141, 246, 0.3);
   --toast-bg: #33383f;
+  --toast-error: #b91c1c;
   --scrollbar: #3a4048;
   --scrollbar-hover: #4b525c;
 }
@@ -930,16 +932,27 @@ input[type="checkbox"]:disabled {
   height: 10px;
 }
 
+/* 小型下拉的菜单和控件左对齐，宽度至少和控件一致，选项长了再自然撑开。 */
 .select.small .select-menu {
-  right: 0;
-  left: auto;
-  min-width: 132px;
+  right: auto;
+  left: 0;
+  min-width: 100%;
   padding: 4px;
 }
 
 .select.small .select-option {
   padding: 6px 8px;
   font-size: 12.5px;
+}
+
+/* 语言下拉：选项长短不一，给个下限，切换时宽度不跳。 */
+.select.select-language {
+  min-width: 200px;
+}
+
+/* 首次运行只有一个控件，让它撑满卡片，和上面的说明段落对齐。 */
+.select.firstrun-select {
+  width: 100%;
 }
 
 .song-list {
@@ -2013,36 +2026,67 @@ input[type="checkbox"]:disabled {
   gap: 8px;
 }
 
-/* ---------- 轻提示 ---------- */
+/* ---------- 状态栏 ----------
+   底部居中的圆角黑条，界面上唯一的临时提示出口。容器底边固定、条目往上堆，
+   所以新的一条从下面出来时，已有的会自己上移一格；最多同时三条。 */
 
-.toast {
+.toast-root {
   position: fixed;
   left: 50%;
-  bottom: 26px;
-  z-index: 60;
+  bottom: 28px;
+  /* 高于弹窗（50）与浮层：提示不能被正在做的事盖住。 */
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   max-width: 70vw;
-  padding: 9px 16px;
+  padding: 10px 18px;
   border-radius: 999px;
   background: var(--toast-bg);
   color: #fff;
-  font-size: 12.5px;
-  box-shadow: 0 10px 30px var(--shadow);
-  transform: translateX(-50%);
+  font-size: 13px;
+  line-height: 1.6;
+  box-shadow: 0 10px 30px var(--shadow-strong);
+}
+
+.toast.error {
+  background: var(--toast-error);
+}
+
+/* 进场：从下方淡入并轻微放大 */
+.toast.is-entering {
   animation: toast-in 0.2s var(--ease);
 }
 
-.toast.is-error {
-  background: var(--red-text);
+/* 退场：往上飘一点同时淡出 */
+.toast.is-leaving {
+  animation: toast-out 0.2s ease forwards;
 }
 
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translate(-50%, 8px);
+    transform: translateY(10px) scale(0.96);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
   }
 }
 
@@ -2578,9 +2622,9 @@ input[type="checkbox"]:disabled {
   margin-bottom: 2px;
 }
 
-/* 路径类输入框比普通数字框宽一档：路径长，190px 只看得见盘符。 */
+/* 数据目录和「导入 · 默认导入目录」用同一个宽度：右边还要放更改/重置/立即重启。 */
 .settings-row-control .input.path-input {
-  width: 300px;
+  width: 190px;
   font-family: "Cascadia Mono", "Consolas", monospace;
   font-size: 12.5px;
 }

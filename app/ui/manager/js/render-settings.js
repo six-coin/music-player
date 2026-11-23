@@ -4,13 +4,12 @@
    三端共享的外观与自适应默认值。 */
 /* ---------- 设置 ---------- */
 
-function settingsRow(title, hint, control, hintClass) {
+function settingsRow(title, hint, control) {
   return (
     '<div class="settings-row"><div class="settings-row-main">' +
     '<div class="settings-row-title">' + esc(title) + "</div>" +
     (hint
-      ? '<p class="settings-row-hint' + (hintClass ? " " + hintClass : "") + '">' +
-        esc(hint) + "</p>"
+      ? '<p class="settings-row-hint">' + esc(hint) + "</p>"
       : "") +
     '</div><div class="settings-row-control">' + control + "</div></div>"
   );
@@ -185,20 +184,19 @@ function settingsGeneral() {
   };
 
   // 语言名用各自的语言书写，所以中文界面里也会看到 English (United States)。
+  // 语言一多，排成一排按钮会把一行撑得很长，所以换成自绘下拉框。
   const languages = (state.data && state.data.languages) || [];
   const currentLanguage = (state.data && state.data.language) || "";
-  const languageSeg = languages.length
-    ? '<div class="seg" id="language-seg">' +
-      languages
-        .map(function (item) {
-          return (
-            '<button class="seg-item' + (item.code === currentLanguage ? " is-active" : "") +
-            '" type="button" data-language="' + esc(item.code) + '">' +
-            esc(item.name) + "</button>"
-          );
-        })
-        .join("") +
-      "</div>"
+  const languageSelect = languages.length
+    ? selectMarkup(
+        "data-language-select",
+        languages.map(function (item) {
+          return { value: item.code, label: item.name };
+        }),
+        currentLanguage,
+        "",
+        "select-language"
+      )
     : '<span class="path-text">' + esc(currentLanguage) + "</span>";
 
   // 级别用与语言同一套分段控件：四个值，点一下就切，不用展开菜单。
@@ -225,7 +223,7 @@ function settingsGeneral() {
     settingsCard(
       T("settings.appearance"),
       settingsRow(T("settings.theme"), T("settings.theme_hint"), themeSeg) +
-        settingsRow(T("settings.language"), T("settings.language_hint"), languageSeg)
+        settingsRow(T("settings.language"), T("settings.language_hint"), languageSelect)
     ) +
     settingsCard(
       T("settings.adaptation_defaults"),
@@ -552,15 +550,20 @@ function settingsAbout() {
 
   return settingsCard(
     T("about.title"),
+    // 和「导入 · 默认导入目录」同一种处理：说明放左边，输入框和按钮并排在右边。
     settingsRow(
       T("about.data_dir"),
-      next ? T("about.data_dir_pending", { path: next }) : T("about.data_dir_hint"),
+      dataDirHint(data),
       '<input class="input path-input" id="data-dir" spellcheck="false" value="' +
         esc(shown) + '">' +
         '<button class="btn ghost small" data-action="about_data_dir">' +
         esc(T("about.data_dir_change")) + "</button>" +
         '<button class="btn ghost small" data-action="about_data_dir_reset">' +
-        esc(T("about.data_dir_reset")) + "</button>"
+        esc(T("about.data_dir_reset")) + "</button>" +
+        (next
+          ? '<button class="btn ghost small" data-action="about_data_dir_restart">' +
+            esc(T("about.data_dir_restart")) + "</button>"
+          : "")
     ) +
       settingsRow(
         T("about.readme"),
@@ -768,7 +771,6 @@ async function applyDataDir(raw) {
   if (!data) return;
   apply(data);
   renderSettings();
-  if (data.message) toast(data.message);
 }
 
 async function changeDataDir() {
@@ -790,5 +792,25 @@ async function resetDataDir() {
   if (!data) return;
   apply(data);
   renderSettings();
-  if (data.message) toast(data.message);
+}
+
+/** 立即重启：数据目录的搬迁只发生在启动早期，改完目录必须真重启一次。 */
+async function restartApp() {
+  const data = await call("restart_app");
+  if (data && data.message) toast(data.message, data.ok === false);
+  // 成功时后端会直接关掉窗口，这一页不会再有下文。
+}
+
+/** 数据目录下面那一行：待生效的落点、上次迁移的结果，或者一句默认说明。 */
+function dataDirHint(data) {
+  const status = data.data_dir_status || {};
+  if (data.data_dir_next) {
+    return status.status === "failed"
+      ? T("about.data_dir_pending_failed", { path: data.data_dir_next })
+      : T("about.data_dir_pending", { path: data.data_dir_next });
+  }
+  if (status.status === "done" && status.moved > 0) {
+    return T("about.data_dir_migrated", { count: status.moved, path: data.data_dir });
+  }
+  return T("about.data_dir_hint");
 }

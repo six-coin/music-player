@@ -38,10 +38,6 @@ def _fit(width: int, height: int) -> tuple[int, int]:
     )
 
 
-def _alert(message: str) -> None:
-    bootstrap.info(message, i18n.t("player.title"))
-
-
 def main() -> None:
     warnings = bootstrap.prepare()
     if bootstrap.is_first_run():
@@ -58,8 +54,9 @@ def main() -> None:
     if not instance.acquire():
         bootstrap.sync_language()
         logger.info("已有实例在运行，退出本次启动")
+        # 多开的意思就是「让我看到那个窗口」：窗到前台就够了，不弹框。
         if not activate_window(i18n.t("player.title")):
-            _alert(i18n.t("player.already_running"))
+            logger.info("已有播放器在运行，但没能把窗口提到前面")
         return
 
     try:

@@ -201,16 +201,6 @@ function renderNotice() {
   const notice = state.data.notice;
   if (!notice || notice.seq === state.noticeSeq) return;
   state.noticeSeq = notice.seq;
-  showNotice(notice.text);
+  toast(notice.text);
 }
 
-function showNotice(text) {
-  if (!text) return;
-  const box = qs("#notice");
-  box.textContent = text;
-  box.classList.add("is-visible");
-  window.clearTimeout(state.noticeTimer);
-  state.noticeTimer = window.setTimeout(function () {
-    box.classList.remove("is-visible");
-  }, 4000);
-}

@@ -26,9 +26,9 @@ _MB_SETFOREGROUND = 0x00010000
 
 def prepare() -> list[str]:
     """建目录，返回需要写进日志的警告。"""
-    warnings: list[str] = list(paths.MIGRATION_WARNINGS)
-    if paths.MIGRATED_ITEMS:
-        warnings.append(f"数据目录已迁移 {paths.MIGRATED_ITEMS} 项到 {paths.DATA_DIR}")
+    warnings: list[str] = list(paths.MIGRATION["warnings"])
+    if paths.MIGRATION["moved"]:
+        warnings.append(f"数据目录已迁移 {paths.MIGRATION['moved']} 项到 {paths.DATA_DIR}")
     for folder in (paths.DATA_DIR, paths.LOCAL_DIR, paths.LOG_DIR, paths.LOCK_DIR):
         try:
             folder.mkdir(parents=True, exist_ok=True)

@@ -7,29 +7,25 @@ function bindEvents() {
   bindPomodoroEvents();
 }
 
-/* 首次运行的语言选择器：和设置页「通用 · 语言」用的是同一个分段控件，
-   不再用原生 select——它的弹出层由系统绘制，深色模式下根本没法看。 */
+/* 首次运行的语言选择器：和设置页「通用 · 语言」用的是同一个自绘下拉框，
+   不用原生 select——它的弹出层由系统绘制，深色模式下根本没法看。 */
 function firstRunLanguages(active) {
   const languages = (state.data && state.data.languages) || [];
   if (!languages.length) return "";
-  return (
-    '<div class="seg seg--block" id="firstrun-language">' +
-    languages
-      .map(function (item) {
-        return (
-          '<button class="seg-item' + (item.code === active ? " is-active" : "") +
-          '" type="button" data-language="' + esc(item.code) + '">' +
-          esc(item.name) + "</button>"
-        );
-      })
-      .join("") +
-    "</div>"
+  return selectMarkup(
+    'id="firstrun-language"',
+    languages.map(function (item) {
+      return { value: item.code, label: item.name };
+    }),
+    active,
+    "",
+    "firstrun-select"
   );
 }
 
 function firstRunLanguage() {
-  const active = qs("#firstrun-language .seg-item.is-active");
-  return active ? active.dataset.language : state.data.language;
+  const select = qs("#firstrun-language");
+  return select ? select.dataset.value : state.data.language;
 }
 
 async function runFirstRun() {
@@ -62,14 +58,9 @@ async function runFirstRun() {
     onMount: function () {
       const host = qs("#firstrun-language");
       if (!host) return;
-      host.addEventListener("click", function (event) {
-        const button = event.target.closest("[data-language]");
-        if (!button) return;
+      host.addEventListener("selectchange", function (event) {
         // 选一下就立刻切成那种语言：用户不必先点「开始使用」才能看懂界面。
-        qsa("#firstrun-language .seg-item").forEach(function (node) {
-          node.classList.toggle("is-active", node === button);
-        });
-        previewLanguage(button.dataset.language);
+        previewLanguage(event.detail.value);
       });
     },
   });
@@ -83,7 +74,11 @@ async function previewLanguage(code) {
   if (!result) return;
   await loadStrings();
   applyStrings();
-  if (state.data) state.data.language = result.language;
+  if (state.data) {
+    state.data.language = result.language;
+    // 摘要不是 data-i18n 节点，applyStrings() 管不到它；换语言时顺手重画一次。
+    renderSummary(state.data);
+  }
   document.documentElement.lang = result.language;
   const title = qs("#modal-title");
   if (title) title.textContent = T("firstrun.title");

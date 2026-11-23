@@ -14,7 +14,7 @@ function runCommand(command) {
 function loadTrack(command) {
   if (!command.url) {
     stopAudio();
-    if (command.reason === "media") showNotice(T("player.notice.media_server"));
+    if (command.reason === "media") toast(T("player.notice.media_server"));
     return;
   }
   window.clearTimeout(state.startTimer);
@@ -49,7 +49,7 @@ function playAudio() {
   if (result && typeof result.catch === "function") {
     result.catch(function (error) {
       if (error && error.name === "NotAllowedError") {
-        showNotice(T("player.notice.autoplay_blocked"));
+        toast(T("player.notice.autoplay_blocked"));
         setPlayingUI(false);
       } else {
         reportFailed("play");

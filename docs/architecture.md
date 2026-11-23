@@ -93,12 +93,15 @@ Music Player/
 | 本地目录 | `logs/`、`locks/`、`data-dir.txt`              | `%LOCALAPPDATA%\six-coin\music-player` |
 | 临时目录 | 清洗音频、换源的中间文件                       | `%TEMP%\six-coin\music-player`         |
 
-- 数据目录可改：设置页写 `data-dir.pending`，**下次启动**把旧目录的内容搬过去再改 `data-dir.txt`；落点恒以项目代号结尾，`paths.normalize_data_dir()` 负责补齐。`paths.resolve_user_path()` 的相对路径以数据目录为基准。
+- 数据目录可改：设置页当场校验落点（建目录 + 写一次探针文件），通过后写 `data-dir.pending`，**下次启动**把旧目录的内容搬过去再改 `data-dir.txt`；落点恒以项目代号结尾，`paths.normalize_data_dir()` 负责补齐。`paths.resolve_user_path()` 的相对路径以数据目录为基准。
+- 搬迁对**只读文件**同样有效：跨盘搬运时 `shutil.move` 是「复制 + 删源」，删只读文件会得到「拒绝访问」，所以 `paths._move_item()` 失败时先清掉只读位再搬一次（`_clear_read_only()` 递归处理整棵目录树）。用户的音乐库里这类文件很常见——从光盘、别人机器上拷来的音频与封面。
+- 搬迁结果写进 `paths.MIGRATION`（`none` / `same` / `nested` / `done` / `failed`，附搬了多少项、哪些没搬成），快照里的 `data_dir_status` 把它交给设置页；输入框下面那一行据此显示「重启后生效」「已迁移 N 项」或默认说明。
 - 启动时 `paths._reconcile_data_dir()` 只做一件事：有 `data-dir.pending` 就把旧目录的内容搬到那里并改指针；没有标记就什么都不做。
 - 统计与设置的锁文件放本地目录（`paths.lock_for()`），不跟数据混在一起。
 - 版本号只有 `pyproject.toml` 一处，`app/version.py` 读它。
 - 首次运行：`bootstrap.is_first_run()` 看数据目录里有没有 `settings.json`；player / simple 首次启动会拉起管理器（带 `--redirected-from`），管理器依次弹语言、使用说明，最后解释「你打开的不是这个程序」。
-- 三个入口各持一个 `Local\MusicPlayer*` 互斥量；重启按钮走「释放锁 → 拉新进程」。
+- 三个入口各持一个 `Local\MusicPlayer*` 互斥量。管理器与播放器重复启动时**只**把已有窗口提到前面（提不到也不弹框）；`simple.py` 没有窗口，重复启动打印一行说明后退出。
+- 管理器设置页的「立即重启」走「关窗 → 释放锁 → 拉新进程」：数据目录的搬迁只发生在启动早期，重开窗口搬不动。
 
 ## 3. 分层与依赖方向
 
@@ -462,6 +465,7 @@ uv run ruff format --check .
 18. 番茄钟的时段音乐与普通播放器共用一套 `PlayerSession` 接口但互不干扰：退出番茄钟不能改变普通播放器的队列、模式与当前曲。
 19. 番茄钟的「放不放」由引用决定：`focus.playlist` / `rest.playlist` / `environment` 为 `null` 就是不放，不再单独存开关。
 20. 番茄钟的播放记录只追加：走完一轮写一条，中途退出但专注超过 `record_minutes` 也写一条；记录里只存番茄钟 uid，不存名称快照，也没有「完整」标记。
+21. 临时提示只走底部那条状态栏（`.toast-root` 里的 `.toast`）：管理器与播放器用的是同一套颜色、尺寸与堆叠规则——最多三条、新的从下面进来、旧的往上挪一格、满了先让最老的一边飘走一边渐隐。播放器原来那条顶部琥珀色 `notice` 已经并入这里，别再单独造一种提示。
 21. 番茄钟换段先结算最后一首：后面还有放同一张歌单的段就一首都不记（下一段接着放，计时器续上）；是最后一段才按歌单的 `skip_seconds` 判一次，不够阈值什么都不记。
 
 ## 13. 偏离标准

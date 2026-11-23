@@ -68,16 +68,6 @@ function bindPanelEvents() {
       if (data) apply(data);
       return;
     }
-    const language = event.target.closest("[data-language]");
-    if (language) {
-      const data = await call("set_language", language.dataset.language);
-      if (!data) return;
-      // 文案表要重新拉一次：静态标记上的中文是 HTML 里的兜底，不换就还是旧语言。
-      await loadStrings();
-      applyStrings();
-      apply(data);
-      return;
-    }
     const toggle = event.target.closest("[data-setting-switch]");
     if (toggle) {
       const next = toggle.getAttribute("aria-checked") !== "true";
@@ -172,6 +162,16 @@ function bindPanelEvents() {
   });
 
   settingsBody.addEventListener("selectchange", async function (event) {
+    const language = event.target.closest("[data-language-select]");
+    if (language) {
+      const data = await call("set_language", language.dataset.value);
+      if (!data) return;
+      // 文案表要重新拉一次：静态标记上的中文是 HTML 里的兜底，不换就还是旧语言。
+      await loadStrings();
+      applyStrings();
+      apply(data);
+      return;
+    }
     const select = event.target.closest("[data-setting-select]");
     if (!select) return;
     await patchSetting(select.dataset.settingSelect, select.dataset.value);

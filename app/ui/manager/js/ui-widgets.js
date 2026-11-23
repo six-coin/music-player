@@ -49,11 +49,34 @@ function closeSelects(except) {
   });
 }
 
+/* 菜单按视口定位：首次运行那种矮弹窗里，绝对定位的菜单会被卡片裁掉。
+   改成 fixed 之后菜单能盖在卡片外面，语言再多也展得开。 */
+function placeSelectMenu(select) {
+  const menu = select.querySelector(".select-menu");
+  if (!menu) return;
+  const rect = select.getBoundingClientRect();
+  menu.style.position = "fixed";
+  menu.style.right = "auto";
+  menu.style.left = rect.left + "px";
+  menu.style.minWidth = rect.width + "px";
+  menu.style.width = "auto";
+  // 菜单比控件宽时可能顶到窗口右边，量完宽度再往里收。
+  const width = menu.offsetWidth;
+  menu.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)) + "px";
+  const height = menu.offsetHeight;
+  let top = rect.bottom + 6;
+  if (top + height > window.innerHeight - 8 && rect.top - height - 6 > 8) {
+    top = rect.top - height - 6;
+  }
+  menu.style.top = Math.max(8, top) + "px";
+}
+
 function toggleSelect(select) {
   const open = select.classList.contains("open");
   closeSelects(select);
   select.classList.toggle("open", !open);
   select.setAttribute("aria-expanded", String(!open));
+  if (!open) placeSelectMenu(select);
 }
 
 function stepSelect(select, delta) {
@@ -68,6 +91,19 @@ function stepSelect(select, delta) {
 }
 
 function initSelects() {
+  // 滚动或改窗口大小时菜单会飘走，直接收起。
+  window.addEventListener("resize", function () {
+    closeSelects();
+  });
+  window.addEventListener(
+    "scroll",
+    function (event) {
+      if (event.target && event.target.closest && event.target.closest(".select-menu")) return;
+      closeSelects();
+    },
+    true
+  );
+
   document.addEventListener("click", function (event) {
     const option = event.target.closest(".select-option");
     if (option) {
@@ -85,24 +121,29 @@ function initSelects() {
     closeSelects();
   });
 
-  document.addEventListener("keydown", function (event) {
-    const select = event.target.closest(".select");
-    if (!select) return;
-    if (select.classList.contains("is-disabled")) return;
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      event.stopPropagation();
-      toggleSelect(select);
-    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      event.stopPropagation();
-      stepSelect(select, event.key === "ArrowDown" ? 1 : -1);
-    } else if (event.key === "Escape") {
-      event.stopPropagation();
-      closeSelects();
-      select.blur();
-    }
-  });
+  // 捕获阶段：全局 Esc 也会关弹窗，下拉框开着时应该只收起菜单。
+  document.addEventListener(
+    "keydown",
+    function (event) {
+      const select = event.target.closest(".select");
+      if (!select) return;
+      if (select.classList.contains("is-disabled")) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleSelect(select);
+      } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        event.stopPropagation();
+        stepSelect(select, event.key === "ArrowDown" ? 1 : -1);
+      } else if (event.key === "Escape") {
+        event.stopPropagation();
+        closeSelects();
+        select.blur();
+      }
+    },
+    true
+  );
 }
 
 function setupSortSelect() {

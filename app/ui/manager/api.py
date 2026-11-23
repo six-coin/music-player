@@ -126,6 +126,8 @@ class ManagerApi(PomodoroApiMixin):
         self._lock = threading.RLock()
         self._window = None
         self._tasks: dict[str, dict[str, Any]] = {}
+        #: 用户点过「立即重启」：关窗后由 ``app.ui.manager.app`` 拉起新进程。
+        self.restart_requested = False
         self._load()
 
     # ---------- 启动 ----------
@@ -254,6 +256,7 @@ class ManagerApi(PomodoroApiMixin):
             "data_dir": str(paths.DATA_DIR),
             "data_dir_next": str(paths.pending_data_dir() or ""),
             "data_dir_default": str(paths.DATA_DIR_DEFAULT),
+            "data_dir_status": dict(paths.MIGRATION),
             "library": self._library_payload(missing, tag_issues),
             "playlists": self._playlist_payload(),
             "settings": self.settings.data,
@@ -1742,6 +1745,26 @@ class ManagerApi(PomodoroApiMixin):
     def reset_data_dir(self) -> dict[str, Any]:
         """把数据目录恢复成默认位置。"""
         return self.set_data_dir(str(paths.DATA_DIR_DEFAULT))
+
+    def restart_app(self) -> dict[str, Any]:
+        """立即重启：记下意图，先把回包送回去，再关窗。
+
+        数据目录的搬迁只发生在启动早期，所以改完目录必须真重启一次；关窗不能
+        直接在这里做，否则网页拿不到返回值，「重启」看起来像卡住了。
+        """
+        self.restart_requested = True
+        timer = threading.Timer(0.2, self._close_window)
+        timer.daemon = True
+        timer.start()
+        return {"ok": True, "message": ""}
+
+    def _close_window(self) -> None:
+        if self._window is None:
+            return
+        try:
+            self._window.destroy()
+        except Exception as error:  # 窗口已经没了就当关掉了
+            logger.debug("关闭窗口失败：{}", error)
 
     def browse_folder(self) -> dict[str, Any]:
         if self._window is None:

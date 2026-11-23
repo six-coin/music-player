@@ -56,8 +56,6 @@
         </button>
       </div>
 
-      <div class="notice" id="notice" role="status" aria-live="polite"></div>
-
       <div class="now-body" id="now-body">
         <section class="playing" id="playing">
           <div class="playing-head" id="track-head" hidden>
@@ -231,6 +229,8 @@
   <audio id="pomo-ambient" preload="metadata"></audio>
   <audio id="pomo-ambient-b" preload="metadata"></audio>
   <audio id="pomo-ring" preload="auto"></audio>
+
+  <div class="toast-root" id="toastRoot" role="status" aria-live="polite"></div>
   <!-- 没有构建步骤：按职责拆成多个普通脚本，共享全局作用域，顺序见 docs/architecture.md -->
   <script src="js/core.js"></script>
   <script src="js/render.js"></script>

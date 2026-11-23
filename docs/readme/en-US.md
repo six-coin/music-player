@@ -2,8 +2,6 @@
 
 A local music library manager plus two players: the manager imports, organizes and configures; the players only play. Windows desktop app, double-click to run.
 
-[简体中文](zh-CN.md)
-
 ---
 
 ## 1. Installation
@@ -338,7 +336,7 @@ Five pages; changes apply immediately and there is no Save button.
 | Library manager | Preview volume, import (default folder, clean audio on import, FFmpeg and ffprobe status), maintenance (integrity check, clean orphan files, clear adaptation stats, open data and log folders, debug mode), shortcuts                                     |
 | Simple player   | Play mode, default playlist (read-only, with a link), shortcuts                                                                                                                                                                                            |
 | Player          | Default volume, play mode, remember position, shortcuts                                                                                                                                                                                                    |
-| About           | Data folder (an input box with "Change" and "Reset"), user manual, reset all settings, version                                                                                                                                                             |
+| About           | Data folder (an input box with "Change" and "Reset", plus a status line underneath), user manual, reset all settings, version                                                                                                                             |
 
 The skip base is a percentage from 1 to 99: the real probability is base × the song's recent skip rate.
 
@@ -346,7 +344,11 @@ To rebind: click a key cap, it turns into "Press keys…", then press the new co
 
 Switching the language takes effect immediately: labels, the window title and the sort dropdown change together. The Music Player and Simple Player read the language, the shortcuts and the log settings at startup, so restart them to follow a change.
 
-"Reset all settings" also restores language and appearance; the library, playlists and statistics are untouched. A data folder change appends `music-player` automatically and applies after a restart, moving the old contents (audio included); existing files in the target are never overwritten.
+"Reset all settings" also restores language and appearance; the library, playlists and statistics are untouched.
+
+A data folder change appends `music-player` automatically and applies **after a restart**, moving the old contents (audio included); existing files in the target are never overwritten and read-only files move just fine. Once changed, the line under the input reads "Takes effect after restart: <destination>" and a "Restart now" button appears next to it — pressing it closes the window, releases the single-instance lock and starts a fresh process. Change the folder back to the current one (or press "Reset") and the line disappears while the status bar says "The data folder is unchanged"; if the last move failed the line adds "it will be retried".
+
+Double-clicking `manager.bat` / `player.bat` again does not open a second window — it brings the existing one to the front. The lightweight player (`simple.bat`) has no window, so a second start prints one line and exits.
 
 ## 15. Files and folders
 

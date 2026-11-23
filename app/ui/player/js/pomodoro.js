@@ -181,7 +181,7 @@ async function startPomodoro() {
   if (!uid || pomo.active) return;
   const result = await call("pomodoro_start", uid, pomoOverridesPayload());
   if (!result || !result.ok) {
-    showNotice(T("pomodoro.start_failed"));
+    toast(T("pomodoro.start_failed"));
     return;
   }
   const plan = result.plan;
@@ -493,7 +493,7 @@ function applyPomodoroCommand(command, fadeMs) {
   }
   music.play().catch(function (error) {
     if (error && error.name === "NotAllowedError") {
-      showNotice(T("player.notice.autoplay_blocked"));
+      toast(T("player.notice.autoplay_blocked"));
     } else {
       reportPomodoroAudioFailed("play");
     }
