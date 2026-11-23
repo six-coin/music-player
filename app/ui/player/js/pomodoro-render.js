@@ -141,6 +141,9 @@ function pomoInitSelects() {
       if (select) {
         pomoSetSelectValue(select, option.dataset.value, true);
         pomoCloseSelects();
+        // 鼠标点完把焦点还给弹窗：接着按 Enter / Esc 应该是「完成 / 取消」，
+        // 而不是又把刚收起的菜单打开。
+        option.blur();
       }
       return;
     }

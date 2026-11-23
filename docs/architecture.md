@@ -264,6 +264,7 @@ next / ended / failed
 - **环境音用两个 `<audio>` 接力。** `<audio loop>` 在接缝处会空一拍（编码器延迟 + 元素重新起播），对雨声这类连续底噪特别明显；两个元素提前一个淡化时长交叉淡化，听感上没有断点。两段底噪互不相关，淡化用等功率曲线（淡入 `sin`、淡出 `1-cos`），线性曲线会在中点掉 3 dB，听起来就是「声音小了一下」。
 - **提示音前压低音乐。** 结束前 `duck_ms` 毫秒音乐渐弱到 `duck_ratio`，提示音播完再按 `fade_in_ms` 渐强；这段时间禁止切歌（`holdTrack`）。三个值都是全局偏好：`duck_ms` 为 0 表示不压低，`fade_in_ms` 为 0 表示立刻恢复。
 - **计时中鼠标 5 秒不动就隐藏。** 网页在 `pointermove / pointerdown / wheel / keydown` 上重置计时，到点给计时层加 `is-idle`（`cursor: none !important`），任何动作立刻恢复；确认框、完成页与「本次番茄钟设置」要点击，保持可见。
+- **三个提示框共用一套键盘与动画。** 退出确认、关窗确认与「本次番茄钟设置」都认 `Esc`（取消 / 继续计时）与 `Enter`（完成 / 退出）；下拉框与弹窗里的按钮自己吃这两个键，不抢。退出确认与关窗确认是同一个层，换文案时先播淡出、收完再换字淡入（`showPomodoroConfirm`），所以按 `Alt+F4` 不会原地跳字。
 - **关窗先过番茄钟这一关。** `PlayerApi.on_closing()` 在计时没走完时返回 `False` 取消关闭（X 与 Alt+F4 都会走到 `FormClosing`），再从工作线程调 `evaluate_js("window.pomoAskClose()")` 让页面弹确认框——`closing` 在 UI 线程同步执行，直接调 `evaluate_js` 会死锁。确认后 `pomodoro_finish` 记下时长再 `force_close()`；完成页（`_pomo_done`）不再拦。页面不可用时直接放行，避免窗口关不掉。
 - **每走完一轮记一条历史；中途退出但学够了也记一条。** 完整走完时网页把「开始时间 + 本轮专注 / 休息累计」交给 `pomodoro_record_session`；中途退出时 `pomodoro_finish` 带上同样的累计值，专注超过偏好里的 `record_minutes`（默认 20 分钟）才追加。记录里没有「完整」字段，只存时长；只走了一小段的不记。记录只存番茄钟的 uid，名称在展示时按 uid 现查，查不到就显示 uid。
 - **资源导入是任务。** 图片转 PNG、视频转 H.264 MP4（去音轨）、音频取段 + B+A 中点交叉淡化、MP4 抽音轨转 MP3，全部在任务线程里跑，进度走 `poll_task`。

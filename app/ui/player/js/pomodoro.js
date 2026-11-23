@@ -38,7 +38,9 @@ const pomo = {
   finishSnapshot: null,
   leaving: false,
   advancing: false,
+  exiting: false,
   closePending: false,
+  confirmClosing: false,
   idleTimer: null,
 };
 
@@ -204,6 +206,9 @@ async function startPomodoro() {
   pomo.ducking = false;
   pomo.holdTrack = false;
   pomo.advancing = false;
+  pomo.exiting = false;
+  pomo.closePending = false;
+  pomo.confirmClosing = false;
   pomo.musicActive = false;
   pomo.trackMd5 = null;
   pomo.playedMs = 0;
@@ -898,10 +903,12 @@ function recordPomodoroSession() {
 function showPomodoroLayer(selector) {
   const node = qs(selector);
   if (!node) return;
+  window.clearTimeout(node.hideTimer);
   node.classList.remove("is-closing");
   node.hidden = false;
 }
 
+/* 收起带淡出：同一个层连收两次只算一次，后一次把前一次的定时器顶掉。 */
 function hidePomodoroLayer(selector, done) {
   const node = qs(selector);
   if (!node || node.hidden) {
@@ -909,15 +916,23 @@ function hidePomodoroLayer(selector, done) {
     return;
   }
   node.classList.add("is-closing");
-  window.setTimeout(function () {
+  window.clearTimeout(node.hideTimer);
+  node.hideTimer = window.setTimeout(function () {
     node.hidden = true;
     node.classList.remove("is-closing");
     if (done) done();
   }, 170);
 }
 
+/* 这一层开着吗：正在淡出的不算，免得连按两下同一件事做两次。 */
+function pomoLayerOpen(selector) {
+  const node = qs(selector);
+  return !!node && !node.hidden && !node.classList.contains("is-closing");
+}
+
 /* 确认框有两种来由：面板上的「退出」和窗口的 X / Alt+F4。文案分开，
-   后者要说明「关窗会结束这一轮」。 */
+   后者要说明「关窗会结束这一轮」。两种来由之间切换时先收掉旧的、再放新的：
+   原地换字看起来就是「没动画直接跳过去」。 */
 function setPomodoroConfirmCopy(closing) {
   qs("#pomo-confirm-title").textContent = T(
     closing ? "pomodoro.close_title" : "pomodoro.exit_title"
@@ -930,23 +945,46 @@ function setPomodoroConfirmCopy(closing) {
   );
 }
 
+function showPomodoroConfirm(closing) {
+  const node = qs("#pomo-confirm");
+  if (!node) return;
+  if (pomoLayerOpen("#pomo-confirm") && pomo.confirmClosing === closing) return; // 同一份文案，不重播
+  pomo.confirmClosing = closing;
+  const open = function () {
+    setPomodoroConfirmCopy(closing);
+    showPomodoroLayer("#pomo-confirm");
+  };
+  if (node.hidden) {
+    open();
+    return;
+  }
+  hidePomodoroLayer("#pomo-confirm", open);
+}
+
+function cancelPomodoroConfirm() {
+  pomo.closePending = false;
+  hidePomodoroLayer("#pomo-confirm");
+  pomoWake();
+}
+
 function requestExitPomodoro() {
   if (!pomo.active) return;
-  setPomodoroConfirmCopy(false);
-  showPomodoroLayer("#pomo-confirm");
+  showPomodoroConfirm(false);
 }
 
 /* 窗口的 X / Alt+F4 被 Python 拦下后会调这里；返回 true 表示页面接管了提示。 */
 window.pomoAskClose = function () {
-  if (!pomo.active) return false;
+  if (!pomo.active || pomo.exiting) return false; // 已经在退出了，别再弹一个
+  if (pomo.closePending) return true; // 已经在问关窗了，别把动画重播一遍
   pomo.closePending = true;
-  setPomodoroConfirmCopy(true);
-  showPomodoroLayer("#pomo-confirm");
+  showPomodoroConfirm(true);
   pomoWake();
   return true;
 };
 
 async function confirmExitPomodoro() {
+  if (pomo.exiting) return; // 键盘与按钮可能同时来一下
+  pomo.exiting = true;
   const closing = pomo.closePending;
   pomo.closePending = false;
   hidePomodoroLayer("#pomo-confirm");
@@ -983,7 +1021,9 @@ function leavePomodoroStage(data) {
   pomo.leaving = true;
   pomoStopIdle();
   pomo.closePending = false;
+  pomo.confirmClosing = false;
   pomo.advancing = false;
+  pomo.exiting = false;
   stopPomodoroTicker();
   stopAllPomodoroAudio();
   pomo.active = false;
@@ -1066,16 +1106,51 @@ function playAndFade(element, target, ms) {
 
 /* ---------- 事件 ---------- */
 
+/* 三个提示框共用一套键盘约定：Esc 取消 / 继续计时，Enter 完成 / 退出。
+   确认框盖在「更多」上面，所以先认它。下拉框开着时 Esc 先收菜单、Enter 自己
+   开关菜单；菜单收着时 Esc 仍然算取消。焦点落在弹窗里的按钮上时 Enter 交给
+   那个按钮，别抢它的默认动作。 */
+function pomoDialogKeydown(event) {
+  if (!pomo.active || pomo.leaving) return false;
+  if (event.ctrlKey || event.altKey || event.metaKey) return false;
+  const target = event.target;
+  if (!target || !target.closest) return false;
+  const select = target.closest(".pomo-select");
+  if (select && (event.key !== "Escape" || select.classList.contains("open"))) return false;
+  const confirmOpen = pomoLayerOpen("#pomo-confirm");
+  const moreOpen = pomoLayerOpen("#pomo-more");
+  if (event.key === "Escape") {
+    if (confirmOpen) {
+      cancelPomodoroConfirm();
+      return true;
+    }
+    if (moreOpen) {
+      closePomodoroMore();
+      return true;
+    }
+    return false;
+  }
+  if (event.key === "Enter") {
+    if (confirmOpen) {
+      if (target.closest("#pomo-confirm button")) return false;
+      confirmExitPomodoro();
+      return true;
+    }
+    if (moreOpen) {
+      if (target.closest("#pomo-more button")) return false;
+      applyPomodoroMore();
+      return true;
+    }
+  }
+  return false;
+}
+
 function bindPomodoroStageEvents() {
   qs("#pomo-prep-skip").addEventListener("click", beginFormalPomodoro);
   qs("#pomo-pause").addEventListener("click", togglePomodoroPause);
   qs("#pomo-fullscreen").addEventListener("click", togglePomodoroFullscreen);
   qs("#pomo-exit").addEventListener("click", requestExitPomodoro);
-  qs("#pomo-exit-cancel").addEventListener("click", function () {
-    pomo.closePending = false;
-    hidePomodoroLayer("#pomo-confirm");
-    pomoWake();
-  });
+  qs("#pomo-exit-cancel").addEventListener("click", cancelPomodoroConfirm);
   qs("#pomo-exit-confirm").addEventListener("click", confirmExitPomodoro);
   qs("#pomo-done-close").addEventListener("click", closePomodoroDone);
   qs("#pomo-more-open").addEventListener("click", openPomodoroMore);
@@ -1085,6 +1160,11 @@ function bindPomodoroStageEvents() {
 
   bindWheelVolume(qs("#pomo-music-volume"));
   bindWheelVolume(qs("#pomo-environment-volume"));
+
+  // 提示框的 Esc / Enter：先于全局快捷键注册，拦下来就不再往下走。
+  document.addEventListener("keydown", function (event) {
+    if (pomoDialogKeydown(event)) event.preventDefault();
+  });
 
   // 闲置隐藏光标：动一下就回来。
   ["pointermove", "pointerdown", "wheel", "keydown"].forEach(function (name) {
