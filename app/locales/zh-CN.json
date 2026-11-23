@@ -687,7 +687,7 @@
     "pomodoro.close_title": "番茄钟进行中",
     "pomodoro.close_body": "关闭窗口会结束这次番茄钟，已经计时的时间会保留。",
     "pomodoro.close_confirm": "退出并关闭",
-    "pomodoro.more": "本段设置",
+    "pomodoro.more": "本次番茄钟设置",
     "pomodoro.more_hint": "歌单和顺序改完点「完成」生效。",
     "pomodoro.skip": "跳过本段",
     "pomodoro.prep": "预备",

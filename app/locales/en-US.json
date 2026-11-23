@@ -687,7 +687,7 @@
     "pomodoro.close_title": "Pomodoro in progress",
     "pomodoro.close_body": "Closing the window ends this pomodoro. Time already counted is kept.",
     "pomodoro.close_confirm": "Exit and close",
-    "pomodoro.more": "Phase settings",
+    "pomodoro.more": "This pomodoro's settings",
     "pomodoro.more_hint": "Pick the playlists and order, then choose Done.",
     "pomodoro.skip": "Skip phase",
     "pomodoro.prep": "Get ready",

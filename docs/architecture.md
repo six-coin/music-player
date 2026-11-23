@@ -249,7 +249,7 @@ next / ended / failed
       → 网页进入预备（plan.prep_seconds 秒，0 就是跳过，可手动跳过）
       → 预备结束：全屏 + 背景 + 环境音 + 第 1 段
         → pomodoro_phase(0) 决定这一段放不放、放哪张歌单、第一条命令
-      → 每段结束：先上报时长，再 pomodoro_phase(i+1)
+      → 每段结束：先上报时长，再 pomodoro_leave_phase 结算最后一首，最后 pomodoro_phase(i+1)
       → 最后一段结束：完成页，环境音继续，音乐按休息时段的设置
         → 追加一条播放记录
 ```
@@ -257,11 +257,13 @@ next / ended / failed
 - **计时在网页里跑。** Python 不存「还剩多少秒」，只接收 `pomodoro_report(uid, focus_ms, rest_ms, completed)`：网页每 10 秒上报一次，暂停、切段、退出各补一次，`pagehide` 再补一次。这样休眠、断点、窗口最小化都不会让两边各算一套。
 - **暂停不算时长。** 网页只在「没暂停」时累加 delta，Python 只做加法。
 - **时段音乐走独立的 `PlayerSession`。** 普通播放器的队列、模式、进度都不受影响；退出番茄钟后原来的界面还在原处。
-- **切回同一个时段接着放。** 离开一段时网页把当前曲目与播放位置报给 Python，按「时段 + 歌单」记住；切回来时 `PlayerSession.restore(..., autoplay=True)` 落回原曲并跳到原位置。同一时段换过歌单再换回来也接得上。
-- **本段可以热改、也能跳过。** 面板「更多」里改两个时段的歌单与顺序，`pomodoro_set_phases` 更新内存里的 plan 后立刻按当前段重算（换了歌单就换歌，没换就继续放）；「跳过本段」与倒计时走完是同一条路径（`advancePomodoroPhase`），已计时间照常上报。段位按**专注段**数：25/5/25/5/25/5/25 是 4 段，专注显示「第1/4段」，休息显示「已完成1/4段」。
+- **切回同一个时段接着放。** 离开一段时网页把当前曲目、播放位置与「这一首已经放了多少」报给 Python，按**歌单**记住；切回来时 `PlayerSession.restore(..., autoplay=True)` 落回原曲并跳到原位置，计时器从已放的时长继续。两个时段共用一张歌单、同一时段换过歌单再换回来都接得上。
+- **段末的最后一首按「这张歌单还有没有下一段」结算。** 换段时网页先调 `pomodoro_leave_phase`：后面还有放同一张歌单的段就一首都不记，只把停在哪、已放多少留给下一段；是这张歌单的最后一段（或者整轮到此为止）就被结束截断，按歌单的 `skip_seconds` 判一次——够阈值算一遍（记 `0`、完整播放 +1、总播放 +1），不够就什么都不记。「跳过本段」与倒计时走完走同一条路，中途退出按「最后一段」处理。
+- **本段可以热改、也能跳过。** 面板「更多」打开的是「本次番茄钟设置」，可以改两个时段的歌单与顺序；`pomodoro_set_phases` 更新内存里的 plan 后立刻按当前段重算（换了歌单就换歌，没换就继续放）；「跳过本段」与倒计时走完是同一条路径（`advancePomodoroPhase`），已计时间照常上报。段位按**专注段**数：25/5/25/5/25/5/25 是 4 段，专注显示「第1/4段」，休息显示「已完成1/4段」。
+- **「本次番茄钟设置」比退出确认低一层。** 它打开时按 `Alt+F4`，退出确认框要盖在它上面（`.pomo-more` 的 `z-index` 小于 `.pomo-confirm`）；点「继续计时」回去，设置框还在原处。
 - **环境音用两个 `<audio>` 接力。** `<audio loop>` 在接缝处会空一拍（编码器延迟 + 元素重新起播），对雨声这类连续底噪特别明显；两个元素提前一个淡化时长交叉淡化，听感上没有断点。两段底噪互不相关，淡化用等功率曲线（淡入 `sin`、淡出 `1-cos`），线性曲线会在中点掉 3 dB，听起来就是「声音小了一下」。
 - **提示音前压低音乐。** 结束前 `duck_ms` 毫秒音乐渐弱到 `duck_ratio`，提示音播完再按 `fade_in_ms` 渐强；这段时间禁止切歌（`holdTrack`）。三个值都是全局偏好：`duck_ms` 为 0 表示不压低，`fade_in_ms` 为 0 表示立刻恢复。
-- **计时中鼠标 5 秒不动就隐藏。** 网页在 `pointermove / pointerdown / wheel / keydown` 上重置计时，到点给计时层加 `is-idle`（`cursor: none !important`），任何动作立刻恢复；确认框与完成页要点击，保持可见。
+- **计时中鼠标 5 秒不动就隐藏。** 网页在 `pointermove / pointerdown / wheel / keydown` 上重置计时，到点给计时层加 `is-idle`（`cursor: none !important`），任何动作立刻恢复；确认框、完成页与「本次番茄钟设置」要点击，保持可见。
 - **关窗先过番茄钟这一关。** `PlayerApi.on_closing()` 在计时没走完时返回 `False` 取消关闭（X 与 Alt+F4 都会走到 `FormClosing`），再从工作线程调 `evaluate_js("window.pomoAskClose()")` 让页面弹确认框——`closing` 在 UI 线程同步执行，直接调 `evaluate_js` 会死锁。确认后 `pomodoro_finish` 记下时长再 `force_close()`；完成页（`_pomo_done`）不再拦。页面不可用时直接放行，避免窗口关不掉。
 - **每走完一轮记一条历史；中途退出但学够了也记一条。** 完整走完时网页把「开始时间 + 本轮专注 / 休息累计」交给 `pomodoro_record_session`；中途退出时 `pomodoro_finish` 带上同样的累计值，专注超过偏好里的 `record_minutes`（默认 20 分钟）才追加。记录里没有「完整」字段，只存时长；只走了一小段的不记。记录只存番茄钟的 uid，名称在展示时按 uid 现查，查不到就显示 uid。
 - **资源导入是任务。** 图片转 PNG、视频转 H.264 MP4（去音轨）、音频取段 + B+A 中点交叉淡化、MP4 抽音轨转 MP3，全部在任务线程里跑，进度走 `poll_task`。
@@ -332,7 +334,7 @@ next / ended / failed
 | 试听     | `audition_url`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `{ok, url, title, duration_ms}`                               |
 | 任务     | `start_import` / `start_replace_source` / `poll_task` / `cancel_task`                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `{task_id}` / `{state, done, total, current, errors, result}` |
 | 番茄钟   | manager：`create_pomodoro` / `update_pomodoro` / `rename_pomodoro` / `delete_pomodoro` / `reorder_pomodoros` / `create_duration_mode` / `update_duration_mode` / `delete_duration_mode` / `reorder_duration_modes` / `rename_duration_mode` / `update_pomodoro_asset` / `delete_background` / `delete_ring` / `delete_environment` / `reorder_backgrounds` / `reorder_rings` / `reorder_environments` / `browse_pomodoro_asset` / `probe_pomodoro_source` / `start_pomodoro_import` / `set_pomodoro_preferences` / `select_pomodoro_overview` | 快照或 `{task_id}`                                            |
-|          | player：`select_pomodoro` / `clear_pomodoro` / `pomodoro_start` / `pomodoro_phase` / `pomodoro_set_phases` / `pomodoro_music_next` / `pomodoro_music_ended` / `pomodoro_music_failed` / `pomodoro_music_playing` / `pomodoro_report` / `pomodoro_record_session` / `pomodoro_finish` / `pomodoro_set_volumes` / `pomodoro_set_hud_scale` / `set_fullscreen`                                                                                                                                                                                   | `{ok, plan}` / `{ok, command}` / 快照                         |
+|          | player：`select_pomodoro` / `clear_pomodoro` / `pomodoro_start` / `pomodoro_phase` / `pomodoro_leave_phase` / `pomodoro_set_phases` / `pomodoro_music_next` / `pomodoro_music_ended` / `pomodoro_music_failed` / `pomodoro_music_playing` / `pomodoro_report` / `pomodoro_record_session` / `pomodoro_finish` / `pomodoro_set_volumes` / `pomodoro_set_hud_scale` / `set_fullscreen`                                                                                                                                                          | `{ok, plan}` / `{ok, command}` / `{ok, recorded}` / 快照      |
 | player   | `select_playlist` / `next_track` / `prev_track` / `jump_to` / `track_ended` / `track_failed` / `set_mode` / `pick_loop_song` / `set_playing` / `report_position` / `set_volume` / `set_queue_visible` / `list_songs` / `open_manager`                                                                                                                                                                                                                                                                                                         | 快照或 `{"ok"}`                                               |
 
 规则：
@@ -459,6 +461,7 @@ uv run ruff format --check .
 18. 番茄钟的时段音乐与普通播放器共用一套 `PlayerSession` 接口但互不干扰：退出番茄钟不能改变普通播放器的队列、模式与当前曲。
 19. 番茄钟的「放不放」由引用决定：`focus.playlist` / `rest.playlist` / `environment` 为 `null` 就是不放，不再单独存开关。
 20. 番茄钟的播放记录只追加：走完一轮写一条，中途退出但专注超过 `record_minutes` 也写一条；记录里只存番茄钟 uid，不存名称快照，也没有「完整」标记。
+21. 番茄钟换段先结算最后一首：后面还有放同一张歌单的段就一首都不记（下一段接着放，计时器续上）；是最后一段才按歌单的 `skip_seconds` 判一次，不够阈值什么都不记。
 
 ## 13. 偏离标准
 

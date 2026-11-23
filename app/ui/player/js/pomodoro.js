@@ -37,6 +37,7 @@ const pomo = {
   pendingAutoplay: false,
   finishSnapshot: null,
   leaving: false,
+  advancing: false,
   closePending: false,
   idleTimer: null,
 };
@@ -202,6 +203,7 @@ async function startPomodoro() {
   pomo.pendingAfterRing = null;
   pomo.ducking = false;
   pomo.holdTrack = false;
+  pomo.advancing = false;
   pomo.musicActive = false;
   pomo.trackMd5 = null;
   pomo.playedMs = 0;
@@ -274,7 +276,8 @@ function pomodoroTick() {
     if (remaining <= 0) beginFormalPomodoro();
     return;
   }
-  if (!pomo.running || pomo.paused) {
+  // 换段要等一次结算回来：这段时间不再往上一段累加，免得算到下一段头上。
+  if (!pomo.running || pomo.paused || pomo.advancing) {
     pomo.lastTick = now;
     return;
   }
@@ -334,22 +337,32 @@ function beginFormalPomodoro() {
   });
 }
 
-function advancePomodoroPhase() {
-  reportPomodoroStats();
-  const segments = (pomo.plan && pomo.plan.segments) || [];
-  if (pomo.phaseIndex >= segments.length - 1) {
-    finishPomodoro(true);
-    return;
+/* 换段：先让 Python 结算这一段的最后一首，再推进段位。
+   不是这张歌单的最后一段时一首都不记，下一段接着放它；是最后一段就按阈值算一遍。
+   结算要走一个来回，这里挡住重入——计时器每 250ms 还会再叫一次。 */
+async function advancePomodoroPhase() {
+  if (pomo.advancing) return;
+  pomo.advancing = true;
+  try {
+    reportPomodoroStats();
+    await call("pomodoro_leave_phase", pomodoroPlaybackPosition(), false);
+    const segments = (pomo.plan && pomo.plan.segments) || [];
+    if (pomo.phaseIndex >= segments.length - 1) {
+      finishPomodoro(true);
+      return;
+    }
+    pomo.phaseIndex += 1;
+    pomo.phase = pomo.phaseIndex % 2 === 0 ? "focus" : "rest";
+    pomo.deadline = Date.now() + segments[pomo.phaseIndex] * 60000;
+    pomo.ducking = false;
+    pomo.holdTrack = false;
+    updatePomodoroHud(pomo.deadline - Date.now());
+    playPomodoroRing(function () {
+      applyPomodoroPhaseMusic(true);
+    });
+  } finally {
+    pomo.advancing = false;
   }
-  pomo.phaseIndex += 1;
-  pomo.phase = pomo.phaseIndex % 2 === 0 ? "focus" : "rest";
-  pomo.deadline = Date.now() + segments[pomo.phaseIndex] * 60000;
-  pomo.ducking = false;
-  pomo.holdTrack = false;
-  updatePomodoroHud(pomo.deadline - Date.now());
-  playPomodoroRing(function () {
-    applyPomodoroPhaseMusic(true);
-  });
 }
 
 function updatePomodoroHud(remaining) {
@@ -406,14 +419,17 @@ function updateDuckVolume(remaining, duckMs) {
 
 /* ---------- 阶段音乐 ---------- */
 
-/* 刚离开的那一段停在哪：切回同一个时段时后端按它接着放。 */
+/* 刚离开的那一段停在哪：切回同一个时段时后端按它接着放。
+   ``played_ms`` 是这一首到此刻已经放了多少——换段接着放时计时器从这里走，
+   不重新数；没有音乐在放的段（休息不选歌单）没有可报的位置。 */
 function pomodoroPlaybackPosition() {
   const music = pomoAudio();
-  if (!pomo.trackMd5 || !music || !music.getAttribute("src")) return null;
+  if (!pomo.musicActive || !pomo.trackMd5 || !music || !music.getAttribute("src")) return null;
   const position = Number(music.currentTime);
   return {
     md5: pomo.trackMd5,
     position_ms: Math.round((Number.isFinite(position) ? position : 0) * 1000),
+    played_ms: Math.round(pomo.playedMs),
   };
 }
 
@@ -430,14 +446,12 @@ function applyPhaseResult(result, fade) {
   if (result.command) applyPomodoroCommand(result.command, fade);
 }
 
+/* 进入当前段：放不放、放哪张歌单由 Python 决定。
+   「刚离开那一段停在哪儿」已经由 advancePomodoroPhase 里的 pomodoro_leave_phase
+   报过了，这里不用再报一次——再报一次会把刚结算掉的续播点又写回去。 */
 async function applyPomodoroPhaseMusic(afterRing) {
   if (!pomo.active) return;
-  const result = await call(
-    "pomodoro_phase",
-    pomo.phaseIndex,
-    null,
-    pomodoroPlaybackPosition()
-  );
+  const result = await call("pomodoro_phase", pomo.phaseIndex);
   if (!result || !result.ok) return;
   applyPhaseResult(result, afterRing ? pomoFadeInMs() : 800);
 }
@@ -453,7 +467,8 @@ function applyPomodoroCommand(command, fadeMs) {
   music.volume = 0;
   music.load();
   pomo.trackMd5 = command.md5 || null;
-  pomo.playedMs = 0;
+  // 接着放上一段没放完的那首时，计时器从已经放过的时长继续。
+  pomo.playedMs = Math.max(0, Number(command.played_ms) || 0);
   pomo.lastAudioTick = performance.now();
   pomo.pendingAutoplay = !!command.autoplay;
   // 切回某个时段时后端会给回上次的播放位置：等元数据到了再跳，太早设会被丢掉。
@@ -652,31 +667,6 @@ function setPomodoroEnvironmentVolume(value) {
   setFill(qs("#pomo-environment-volume"), pomo.environmentVolume);
 }
 
-/* 滚轮调音量：每格 1%。range 自己不吃滚轮，这里补上并挡掉页面滚动；
-   松手 400ms 后补一次 change，复用已有的「写回配置」逻辑。 */
-function bindWheelSlider(input) {
-  if (!input) return;
-  let timer = null;
-  input.addEventListener(
-    "wheel",
-    function (event) {
-      event.preventDefault();
-      const step = event.deltaY < 0 ? 1 : -1;
-      const min = Number(input.min) || 0;
-      const max = Number(input.max) || 100;
-      const next = Math.min(max, Math.max(min, Number(input.value) + step));
-      if (next === Number(input.value)) return;
-      input.value = String(next);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      window.clearTimeout(timer);
-      timer = window.setTimeout(function () {
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      }, 400);
-    },
-    { passive: false }
-  );
-}
-
 /* ---------- 全屏与面板 ---------- */
 
 async function setPomodoroFullscreen(on) {
@@ -704,7 +694,7 @@ function scheduleHidePomodoroPanel() {
   }, 1500);
 }
 
-/* ---------- 本段设置 ---------- */
+/* ---------- 本次番茄钟设置 ---------- */
 
 /* 面板上的「更多」：热切换两个时段的歌单与顺序，也能直接跳过本段。 */
 function pomodoroMoreRow(label, control) {
@@ -809,8 +799,9 @@ function pomoWake() {
     const node = qs("#pomo-stage");
     const confirm = qs("#pomo-confirm");
     const done = qs("#pomo-done");
+    const more = qs("#pomo-more");
     if (!node || node.hidden) return;
-    if ((confirm && !confirm.hidden) || (done && !done.hidden)) return;
+    if ((confirm && !confirm.hidden) || (done && !done.hidden) || (more && !more.hidden)) return;
     node.classList.add("is-idle");
     qs("#pomo-panel").classList.remove("is-visible");
   }, POMO_IDLE_MS);
@@ -960,6 +951,8 @@ async function confirmExitPomodoro() {
   pomo.closePending = false;
   hidePomodoroLayer("#pomo-confirm");
   reportPomodoroStats(false);
+  // 整轮到此为止：这一段的最后一首不会再有人接着放，按「最后一段」结算。
+  await call("pomodoro_leave_phase", pomodoroPlaybackPosition(), true);
   stopAllPomodoroAudio();
   const data = await call(
     "pomodoro_finish",
@@ -990,6 +983,7 @@ function leavePomodoroStage(data) {
   pomo.leaving = true;
   pomoStopIdle();
   pomo.closePending = false;
+  pomo.advancing = false;
   stopPomodoroTicker();
   stopAllPomodoroAudio();
   pomo.active = false;
@@ -1089,8 +1083,8 @@ function bindPomodoroStageEvents() {
   qs("#pomo-more-done").addEventListener("click", applyPomodoroMore);
   qs("#pomo-more-skip").addEventListener("click", skipPomodoroPhase);
 
-  bindWheelSlider(qs("#pomo-music-volume"));
-  bindWheelSlider(qs("#pomo-environment-volume"));
+  bindWheelVolume(qs("#pomo-music-volume"));
+  bindWheelVolume(qs("#pomo-environment-volume"));
 
   // 闲置隐藏光标：动一下就回来。
   ["pointermove", "pointerdown", "wheel", "keydown"].forEach(function (name) {

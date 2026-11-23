@@ -211,6 +211,7 @@ The middle column is a song card. Its top line shows the current playlist plus a
 | Previous / Next                  | Wraps according to the mode; playback never stops                                                                                                       |
 | Three modes                      | Shuffle, list loop, repeat one — all endless                                                                                                            |
 | Repeat one, other song           | "Pick one to loop" beside the title picks from the whole library; `Ctrl+L` opens the same dialog in any mode and switches to repeat one once you choose |
+| Volume                           | Drag the slider, or rest the pointer on it and use the wheel — 1% per notch                                                                             |
 
 The queue always shows the **whole playlist**: played rows dimmed, the current one highlighted, upcoming ones normal. The next round is only generated after the last song ends, and Previous is disabled in a fresh round.
 
@@ -250,9 +251,11 @@ After pressing Start:
 4. Hovering the top-right corner reveals a translucent panel: two volumes, pause, full screen, exit, plus the segment counter under the title — focus shows "1/4", break shows "1/4 done", counted in focus segments (25/5/25/5/25/5/25 is 4 segments). The volume sliders accept the mouse wheel, 1% per notch. `Ctrl+C` skips a track; `Esc` does nothing.
 5. After the last phase comes the completion card: the background stays, ambience keeps playing, music follows the break settings, and the round is written to the session history.
 
-"More" on the panel title row opens Phase settings: change the playlist and play order for the focus and break phases, then choose Done to apply immediately (if the current phase switched playlists, the music changes right away). "Skip phase" is there too; it advances exactly like a finished countdown and keeps the time already counted.
+"More" on the panel title row opens This pomodoro's settings: change the playlist and play order for the focus and break phases, then choose Done to apply immediately (if the current phase switched playlists, the music changes right away). "Skip phase" is there too; it advances exactly like a finished countdown and keeps the time already counted. It sits one layer below the exit dialog: press `Alt+F4` while it is open and the exit confirmation covers it; "Keep going" returns you to it unchanged.
 
 Switching back to a phase resumes the track that was left unfinished, position included, instead of reshuffling. When both phases share one playlist, playback simply continues.
+
+Music statistics inside a pomodoro are settled **per phase**: the last track of a phase gets cut off. If that playlist still has a later phase (the next focus phase, say), nothing is recorded at all — the next phase picks the same track up and its timer continues from what was already played instead of restarting. If this is the last phase for that playlist, the track is judged once against that playlist's skip threshold: at or above it the play counts (a non-skip record, full plays +1, total plays +1), below it nothing is recorded. Leaving early is treated as the last phase; Next and a natural end are recorded as usual.
 
 The pointer hides itself after five idle seconds and comes back on any movement.
 

@@ -541,6 +541,171 @@ def test_phase_switch_resumes_the_unfinished_track(tmp_path):
         api.close()
 
 
+def test_phase_end_leaves_the_last_track_unrecorded(tmp_path):
+    """后面还有同一张歌单的段：最后一首一首都不记，下一段接着放。"""
+    write_config(tmp_path)
+    add_rest_playlist(tmp_path)
+    api = PlayerApi(config_dir=tmp_path)
+    try:
+        item = api.pomodoro.create_item("晨间")
+        api.pomodoro.update_item(
+            item.uid,
+            {
+                "focus": {"playlist": UID, "order": "list_loop"},
+                "rest": {"playlist": REST_UID, "order": "list_loop"},
+            },
+        )
+        assert api.pomodoro_start(item.uid, {})["ok"] is True
+        assert api.pomodoro_phase(0)["command"]["md5"] == MD5
+
+        left = api.pomodoro_leave_phase({"md5": MD5, "position_ms": 42_000, "played_ms": 42_000})
+
+        assert left == {"ok": True, "recorded": False}
+        assert api.stats.load(UID) == {}
+        assert api.totals.get(MD5) == 0
+
+        # 休息放另一张歌单，切回专注时还是那首，位置与计时器都接着上一段。
+        rest = api.pomodoro_phase(1, None, {"md5": MD5, "position_ms": 42_000, "played_ms": 42_000})
+        assert rest["command"]["md5"] == REST_MD5
+
+        back = api.pomodoro_phase(
+            2, None, {"md5": REST_MD5, "position_ms": 5_000, "played_ms": 5_000}
+        )
+        assert back["command"]["md5"] == MD5
+        assert back["command"]["position_ms"] == 42_000
+        assert back["command"]["played_ms"] == 42_000
+    finally:
+        api.close()
+
+
+def test_resumed_track_is_counted_once_at_the_end(tmp_path):
+    """三段：专注放一半换段，最后一段接着放完，整首只算一遍。"""
+    write_config(tmp_path)
+    add_rest_playlist(tmp_path)
+    api = PlayerApi(config_dir=tmp_path)
+    try:
+        mode = api.pomodoro.create_mode("三段", [25, 5, 25])
+        item = api.pomodoro.create_item("晨间")
+        api.pomodoro.update_item(
+            item.uid,
+            {
+                "duration_mode": mode.uid,
+                "focus": {"playlist": UID, "order": "list_loop"},
+                "rest": {"playlist": REST_UID, "order": "list_loop"},
+            },
+        )
+        assert api.pomodoro_start(item.uid, {})["ok"] is True
+        assert api.pomodoro_phase(0)["command"]["md5"] == MD5
+
+        # 第一段专注：20 秒就换段，后面还有专注段，先不记。
+        first = api.pomodoro_leave_phase({"md5": MD5, "position_ms": 20_000, "played_ms": 20_000})
+        assert first == {"ok": True, "recorded": False}
+
+        api.pomodoro_phase(1, None, {"md5": MD5, "position_ms": 20_000, "played_ms": 20_000})
+        back = api.pomodoro_phase(
+            2, None, {"md5": REST_MD5, "position_ms": 3_000, "played_ms": 3_000}
+        )
+        assert back["command"]["played_ms"] == 20_000
+
+        # 最后一段专注：20 秒 + 15 秒够阈值，整首算一遍。
+        last = api.pomodoro_leave_phase({"md5": MD5, "position_ms": 35_000, "played_ms": 35_000})
+
+        assert last == {"ok": True, "recorded": True}
+        assert api.stats.load(UID)[MD5].full_plays == 1
+        assert api.totals.get(MD5) == 1
+    finally:
+        api.close()
+
+
+def one_segment_player(root: Path, *, skip_seconds: int | None = None) -> PlayerApi:
+    """建一个只有一段的番茄钟：第 0 段就是这张歌单的最后一段。"""
+    write_config(root)
+    if skip_seconds is not None:
+        playlists = json.loads((root / "playlists.json").read_text(encoding="utf-8"))
+        playlists["items"][0]["adaptation"] = {"enabled": True, "skip_seconds": skip_seconds}
+        (root / "playlists.json").write_text(json.dumps(playlists), encoding="utf-8")
+    api = PlayerApi(config_dir=root)
+    mode = api.pomodoro.create_mode("单段", [25])
+    item = api.pomodoro.create_item("晨间")
+    api.pomodoro.update_item(
+        item.uid,
+        {"duration_mode": mode.uid, "focus": {"playlist": UID, "order": "list_loop"}},
+    )
+    assert api.pomodoro_start(item.uid, {})["ok"] is True
+    assert api.pomodoro_phase(0)["command"]["md5"] == MD5
+    return api
+
+
+def test_last_phase_counts_the_truncated_track_once(tmp_path):
+    """最后一段：最后一首被结束截断，放够阈值就算一遍。"""
+    api = one_segment_player(tmp_path)
+    try:
+        left = api.pomodoro_leave_phase({"md5": MD5, "position_ms": 31_000, "played_ms": 31_000})
+
+        assert left == {"ok": True, "recorded": True}
+        stats = api.stats.load(UID)[MD5]
+        assert stats.records == "0"
+        assert stats.full_plays == 1
+        assert api.totals.get(MD5) == 1
+    finally:
+        api.close()
+
+
+def test_last_phase_ignores_a_short_truncated_track(tmp_path):
+    api = one_segment_player(tmp_path)
+    try:
+        left = api.pomodoro_leave_phase({"md5": MD5, "position_ms": 12_000, "played_ms": 12_000})
+
+        assert left == {"ok": True, "recorded": False}
+        assert api.stats.load(UID) == {}
+        assert api.totals.get(MD5) == 0
+    finally:
+        api.close()
+
+
+def test_truncated_track_uses_the_playlist_threshold(tmp_path):
+    """阈值跟着歌单走：这张歌单设成 60 秒，45 秒就不算一遍。"""
+    api = one_segment_player(tmp_path, skip_seconds=60)
+    try:
+        left = api.pomodoro_leave_phase({"md5": MD5, "position_ms": 45_000, "played_ms": 45_000})
+
+        assert left == {"ok": True, "recorded": False}
+        assert api.stats.load(UID) == {}
+    finally:
+        api.close()
+
+
+def test_leaving_for_good_settles_the_current_track(tmp_path):
+    """中途退出不会再有人接着放：按最后一段处理，够阈值就记一遍。"""
+    write_config(tmp_path)
+    api = PlayerApi(config_dir=tmp_path)
+    try:
+        item = api.pomodoro.create_item("晨间")
+        api.pomodoro.update_item(item.uid, {"focus": {"playlist": UID, "order": "list_loop"}})
+        assert api.pomodoro_start(item.uid, {})["ok"] is True
+        assert api.pomodoro_phase(0)["command"]["md5"] == MD5
+
+        left = api.pomodoro_leave_phase(
+            {"md5": MD5, "position_ms": 40_000, "played_ms": 40_000}, True
+        )
+
+        assert left == {"ok": True, "recorded": True}
+        assert api.stats.load(UID)[MD5].full_plays == 1
+    finally:
+        api.close()
+
+
+def test_leave_phase_ignores_a_stale_track(tmp_path):
+    api = one_segment_player(tmp_path)
+    try:
+        left = api.pomodoro_leave_phase({"md5": REST_MD5, "played_ms": 60_000})
+
+        assert left == {"ok": True, "recorded": False}
+        assert api.stats.load(UID) == {}
+    finally:
+        api.close()
+
+
 def test_hot_switch_playlist_takes_effect_and_keeps_the_position(tmp_path):
     write_config(tmp_path)
     add_rest_playlist(tmp_path)

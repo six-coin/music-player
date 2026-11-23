@@ -16,6 +16,7 @@ from typing import Any
 from loguru import logger
 
 from app import paths
+from app.core import adaptation
 from app.core.player_session import Hooks, PlayerSession
 from app.core.pomodoro import (
     BACKGROUND_MODES,
@@ -59,7 +60,7 @@ class PomodoroApiMixin:
         self._pomo_plan: dict[str, Any] | None = None
         self._pomo_phase = 0
         self._pomo_playlist_uid: str | None = None
-        self._pomo_resume: dict[str, dict[str, dict[str, Any]]] = {}
+        self._pomo_resume: dict[str, dict[str, Any]] = {}
         self._fullscreen = False
 
     def _new_pomo_session(self) -> PlayerSession:
@@ -253,8 +254,9 @@ class PomodoroApiMixin:
     ) -> dict[str, Any]:
         """切到第 ``index`` 段：返回这一段要不要放、放哪张歌单、第一条命令。
 
-        ``previous`` 是网页报来的「刚离开那一段停在哪儿」（md5 + 毫秒）。切回
-        同一个时段时按它接着放上次没播完的那首，而不是重新洗牌。
+        ``previous`` 是网页报来的「刚离开那一段停在哪儿」（md5 + 位置 + 已放
+        毫秒）。换段时网页先走 ``pomodoro_leave_phase``，续播点与结算都在那里
+        做完；这里再收到同一份数据只是覆盖成一样的值。
         """
         with self._lock:
             if self._pomo_active is None or self._pomo_plan is None:
@@ -272,7 +274,7 @@ class PomodoroApiMixin:
                 self._pomo_session.set_mode(config["order"])
             if playlist_uid == self._pomo_playlist_uid and self._pomo_session.current_md5:
                 return {"ok": True, "phase": phase, "play": True, "resume": True}
-            saved = self._pomo_resume.get(phase, {}).get(playlist_uid)
+            saved = self._pomo_resume.get(playlist_uid)
             if saved:
                 self._pomo_session.restore(
                     playlist_uid,
@@ -281,11 +283,15 @@ class PomodoroApiMixin:
                     autoplay=True,
                 )
                 self._pomo_playlist_uid = playlist_uid
+                command = self._command_payload(self._pomo_session.command)
+                if command is not None and self._pomo_session.current_md5 == saved.get("md5"):
+                    # 上一段放了一半就换段：这一首的计时器从已放的时长接着走。
+                    command["played_ms"] = _milliseconds(saved.get("played_ms"))
                 return {
                     "ok": True,
                     "phase": phase,
                     "play": True,
-                    "command": self._command_payload(self._pomo_session.command),
+                    "command": command,
                 }
             if not self._pomo_session.load_playlist(playlist_uid, autoplay=True):
                 return {"ok": True, "phase": phase, "play": False, "reason": "missing"}
@@ -296,6 +302,57 @@ class PomodoroApiMixin:
                 "play": True,
                 "command": self._command_payload(self._pomo_session.command),
             }
+
+    def pomodoro_leave_phase(
+        self, previous: object = None, final: object = False
+    ) -> dict[str, Any]:
+        """一段结束：结算这一段的最后一首。
+
+        不是这张歌单的最后一段时一首都不记——下一段接着放它，计时器从这一段已放
+        的时长继续；是最后一段（``final`` 或后面没有同一张歌单的段）时它被结束
+        截断，播放达到歌单的时长阈值才算一遍，不够就什么都不记。
+        """
+        with self._lock:
+            if self._pomo_active is None or self._pomo_plan is None:
+                return {"ok": False}
+            md5 = previous.get("md5") if isinstance(previous, dict) else None
+            if not isinstance(md5, str) or not md5 or md5 != self._pomo_session.current_md5:
+                return {"ok": True, "recorded": False}
+            playlist_uid = self._pomo_session.playlist_uid
+            if not playlist_uid:
+                return {"ok": True, "recorded": False}
+            played = _milliseconds(previous.get("played_ms"))
+            if not final and self._later_segment_plays(playlist_uid):
+                self._pomo_resume[playlist_uid] = {
+                    "md5": md5,
+                    "position_ms": _milliseconds(previous.get("position_ms")),
+                    "played_ms": played,
+                }
+                return {"ok": True, "recorded": False}
+            self._pomo_resume.pop(playlist_uid, None)
+            if not self._reaches_threshold(playlist_uid, played):
+                return {"ok": True, "recorded": False}
+            self._record_pomodoro(md5, played, natural=True)
+            return {"ok": True, "recorded": True}
+
+    def _later_segment_plays(self, playlist_uid: str) -> bool:
+        """这一段之后还有没有段放同一张歌单。"""
+        plan = self._pomo_plan or {}
+        segments = plan.get("segments") or []
+        for index in range(self._pomo_phase + 1, len(segments)):
+            phase = "focus" if index % 2 == 0 else "rest"
+            config = plan.get(phase) or {}
+            if config.get("playlist") == playlist_uid:
+                return True
+        return False
+
+    def _reaches_threshold(self, playlist_uid: str, played_ms: int) -> bool:
+        playlist = self.playlists.get(playlist_uid)
+        if playlist is None:
+            return False
+        return adaptation.is_full_play(
+            played_ms, self._params(playlist).skip_seconds, natural=False
+        )
 
     def pomodoro_set_phases(
         self, focus: object = None, rest: object = None, previous: object = None
@@ -325,7 +382,12 @@ class PomodoroApiMixin:
         return current
 
     def _remember_playback(self, previous: object) -> None:
-        """记住「刚离开那一段停在哪儿」，按时段类型存，切回来时接着放。"""
+        """记住「刚离开那一段停在哪儿」，切回来时接着放。
+
+        按**歌单**存：两个时段共用一张歌单时，换段也接得上；同一时段换过歌单
+        再换回来同样接得上。``played_ms`` 是这一首到此刻已经放了多少，下一段
+        接着放时计时器从这里开始，不重新数。
+        """
         if not isinstance(previous, dict):
             return
         md5 = previous.get("md5")
@@ -334,11 +396,10 @@ class PomodoroApiMixin:
         playlist = self._pomo_session.playlist_uid
         if not playlist:
             return
-        phase = "focus" if self._pomo_phase % 2 == 0 else "rest"
-        # 按时段 + 歌单存：同一时段换过歌单再换回来，也能接着上次那首。
-        self._pomo_resume.setdefault(phase, {})[playlist] = {
+        self._pomo_resume[playlist] = {
             "md5": md5,
             "position_ms": _milliseconds(previous.get("position_ms")),
+            "played_ms": _milliseconds(previous.get("played_ms")),
         }
 
     def _phase_config(self, phase: str, overrides: dict[str, Any]) -> dict[str, Any]:

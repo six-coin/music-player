@@ -141,6 +141,7 @@ function bindEvents() {
   });
 
   const volume = qs("#volume");
+  bindWheelVolume(volume);
   volume.addEventListener("input", function () {
     const value = Number(volume.value);
     audio.volume = value / 100;

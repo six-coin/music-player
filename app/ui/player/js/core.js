@@ -160,6 +160,32 @@ function prettyKey(spec) {
 function matchKey(event, spec) {
   return !!spec && keySpec(event) === spec;
 }
+/* ---------- 交互 ---------- */
+
+/* 滚轮调音量：每格 1%。range 自己不吃滚轮，这里补上并挡掉页面滚动；
+   停手 400ms 后补一次 change，复用控件原有的「写回配置」逻辑。 */
+function bindWheelVolume(input) {
+  if (!input) return;
+  let timer = null;
+  input.addEventListener(
+    "wheel",
+    function (event) {
+      event.preventDefault();
+      const step = event.deltaY < 0 ? 1 : -1;
+      const min = Number(input.min) || 0;
+      const max = Number(input.max) || 100;
+      const next = Math.min(max, Math.max(min, Number(input.value) + step));
+      if (next === Number(input.value)) return;
+      input.value = String(next);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      window.clearTimeout(timer);
+      timer = window.setTimeout(function () {
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }, 400);
+    },
+    { passive: false }
+  );
+}
 /* ---------- 主题 ---------- */
 
 function applyTheme(theme) {
