@@ -125,16 +125,16 @@ manager.pyw   player.pyw   simple.py          入口
 
 七份数据（库、歌单、统计、总播放次数、播放器状态、番茄钟配置、番茄钟播放记录）+ 一份设置，字段级说明见 [configuration.md](configuration.md)。
 
-| 文件                          | 内容                       | 谁写                                    |
-|-------------------------------|----------------------------|-----------------------------------------|
-| `<数据目录>/library.json`     | 作者、标签组、歌曲（实体） | manager                                 |
-| `<数据目录>/playlists.json`   | 歌单（引用）与默认歌单     | manager                                 |
-| `<数据目录>/stats/<uid>.json` | 每个歌单的自适应记录       | manager、player、simple                 |
-| `<数据目录>/totals.json`      | 歌曲级总播放次数           | manager、player、simple                 |
-| `<数据目录>/settings.json`    | 设置，六个分节             | manager 写全部，player 只写 `player` 节 |
-| `<数据目录>/player.json`      | 窗口尺寸、队列开合         | player                                  |
-| `<数据目录>/pomodoro.json`    | 番茄钟、时长模式、资源登记、统计、偏好 | manager、player（后者只写时长与偏好） |
-| `<数据目录>/pomodoro-sessions.json` | 每一轮完整番茄钟的播放记录 | player（只追加），manager 只读    |
+| 文件                                | 内容                                   | 谁写                                    |
+|-------------------------------------|----------------------------------------|-----------------------------------------|
+| `<数据目录>/library.json`           | 作者、标签组、歌曲（实体）             | manager                                 |
+| `<数据目录>/playlists.json`         | 歌单（引用）与默认歌单                 | manager                                 |
+| `<数据目录>/stats/<uid>.json`       | 每个歌单的自适应记录                   | manager、player、simple                 |
+| `<数据目录>/totals.json`            | 歌曲级总播放次数                       | manager、player、simple                 |
+| `<数据目录>/settings.json`          | 设置，六个分节                         | manager 写全部，player 只写 `player` 节 |
+| `<数据目录>/player.json`            | 窗口尺寸、队列开合                     | player                                  |
+| `<数据目录>/pomodoro.json`          | 番茄钟、时长模式、资源登记、统计、偏好 | manager、player（后者只写时长与偏好）   |
+| `<数据目录>/pomodoro-sessions.json` | 每一轮完整番茄钟的播放记录             | player（只追加），manager 只读          |
 
 **为什么必须分开存：**
 
@@ -152,31 +152,31 @@ manager.pyw   player.pyw   simple.py          入口
 
 ## 5. 模块职责
 
-| 模块             | 只做                                                      | 不做                         |
-|------------------|-----------------------------------------------------------|------------------------------|
-| `paths`          | 由 `__file__` 推导绝对路径、解析配置里的相对路径          | 不判断文件是否存在、不建目录 |
-| `settings`       | 读盘、夹取、合并、原子写                                  | 不缓存界面状态               |
-| `keymap`         | 认快捷键写法、给默认值、控制台字节映射                    | 不读设置、不响应按键         |
-| `models`         | 结构、归一化、校验、`to_dict` 只输出约定键                | 不读写文件                   |
-| `i18n`           | 扫目录、查表、填占位符                                    | 不关心调用者是谁             |
-| `library`        | 实体读写与查询、引用统计                                  | 不解析歌单、不判约束是否阻断 |
-| `playlists`      | 歌单读写、条件求值、环检测                                | 不写统计、不碰界面           |
-| `adaptation`     | 概率公式、记录串的追加与截断                              | 不读文件                     |
-| `stats`          | 一歌单一文件，锁内读改写                                  | 不算概率                     |
-| `totals`         | 全库一份的总播放次数，锁内读改写                          | 不算概率、不按歌单分         |
-| `importer`       | 准备（清洗、MD5、时长）与提交（落盘、写库）两段           | 不弹窗、不报进度             |
-| `source`         | 换源与删除的多文件事务，失败回滚                          | 不判断该不该做               |
-| `integrity`      | 检查与按类别修复；深检额外重算 MD5、用 ffprobe 查码率虚标 | 不做二次确认                 |
-| `queue`          | 一轮怎么排（洗牌、接缝、按名排序）                        | 不知道「播到哪」             |
-| `player_session` | 当前歌单、轮次、索引、模式、pin、命令                     | 不读文件、不碰文案与界面     |
-| `pomodoro_models`| 番茄钟的 dataclass、常量、归一化与校验                     | 不读写文件                   |
-| `pomodoro`       | 番茄钟配置与统计的锁内读改写、资源引用与排序               | 不转码、不碰界面             |
+| 模块                | 只做                                                      | 不做                         |
+|---------------------|-----------------------------------------------------------|------------------------------|
+| `paths`             | 由 `__file__` 推导绝对路径、解析配置里的相对路径          | 不判断文件是否存在、不建目录 |
+| `settings`          | 读盘、夹取、合并、原子写                                  | 不缓存界面状态               |
+| `keymap`            | 认快捷键写法、给默认值、控制台字节映射                    | 不读设置、不响应按键         |
+| `models`            | 结构、归一化、校验、`to_dict` 只输出约定键                | 不读写文件                   |
+| `i18n`              | 扫目录、查表、填占位符                                    | 不关心调用者是谁             |
+| `library`           | 实体读写与查询、引用统计                                  | 不解析歌单、不判约束是否阻断 |
+| `playlists`         | 歌单读写、条件求值、环检测                                | 不写统计、不碰界面           |
+| `adaptation`        | 概率公式、记录串的追加与截断                              | 不读文件                     |
+| `stats`             | 一歌单一文件，锁内读改写                                  | 不算概率                     |
+| `totals`            | 全库一份的总播放次数，锁内读改写                          | 不算概率、不按歌单分         |
+| `importer`          | 准备（清洗、MD5、时长）与提交（落盘、写库）两段           | 不弹窗、不报进度             |
+| `source`            | 换源与删除的多文件事务，失败回滚                          | 不判断该不该做               |
+| `integrity`         | 检查与按类别修复；深检额外重算 MD5、用 ffprobe 查码率虚标 | 不做二次确认                 |
+| `queue`             | 一轮怎么排（洗牌、接缝、按名排序）                        | 不知道「播到哪」             |
+| `player_session`    | 当前歌单、轮次、索引、模式、pin、命令                     | 不读文件、不碰文案与界面     |
+| `pomodoro_models`   | 番茄钟的 dataclass、常量、归一化与校验                    | 不读写文件                   |
+| `pomodoro`          | 番茄钟配置与统计的锁内读改写、资源引用与排序              | 不转码、不碰界面             |
 | `pomodoro_sessions` | 播放记录的追加与读取，一份文件、一把锁                    | 不判断该不该记、不解析名称   |
-| `pomodoro_media` | 背景 / 提示音 / 环境音的转码、取段、交叉淡化               | 不登记、不写 JSON            |
-| `ui/*/api.py`    | 快照组装、调用翻译、写盘                                  | 不实现队列规则、不做业务校验 |
-| `ui/*/app.py`    | 建窗口、算尺寸、主题落地、关闭保存                        | 不碰业务                     |
-| `js/render-*`    | 把快照画成 DOM                                            | 不决定播哪首、不改业务数据   |
-| `js/playback`    | 执行 `command`、统计真实播放秒数                          | 不决定播哪首                 |
+| `pomodoro_media`    | 背景 / 提示音 / 环境音的转码、取段、交叉淡化              | 不登记、不写 JSON            |
+| `ui/*/api.py`       | 快照组装、调用翻译、写盘                                  | 不实现队列规则、不做业务校验 |
+| `ui/*/app.py`       | 建窗口、算尺寸、主题落地、关闭保存                        | 不碰业务                     |
+| `js/render-*`       | 把快照画成 DOM                                            | 不决定播哪首、不改业务数据   |
+| `js/playback`       | 执行 `command`、统计真实播放秒数                          | 不决定播哪首                 |
 
 ## 6. 关键流程
 
@@ -318,22 +318,22 @@ next / ended / failed
 }
 ```
 
-| 类别     | 方法                                                                                                                                                                                                                                  | 返回                                                          |
-|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------|
-| 读取     | `get_strings` / `get_state` / `get_playlist_songs` / `get_playlist_stats` / `get_music_stats`                                                                                                                                         | 数据                                                          |
-| 导航     | `select_section` / `select_item` / `clear_selection`                                                                                                                                                                                  | 快照                                                          |
-| 歌曲     | `update_music_name` / `set_music_authors` / `toggle_music_tag` / `add_alias` / `remove_alias` / `move_alias`                                                                                                                          | `{"ok"}` 或快照                                               |
-| 批量     | `batch_add_tags` / `batch_add_to_playlist` / `delete_musics`                                                                                                                                                                          | 快照                                                          |
-| 歌单     | `create_playlist` / `update_playlist_name` / `set_playlist_entries` / `add_playlist_songs` / `remove_playlist_song` / `add_filter` / `update_filter` / `reorder_filters` / `remove_filter` / `delete_playlist` / `reorder_playlists`  | 快照                                                          |
-| 自适应   | `update_adaptation` / `reset_stats`                                                                                                                                                                                                   | 快照                                                          |
-| 标签作者 | `create_tag_group` / `update_tag_group` / `add_tag` / `rename_tag` / `remove_tag` / `reorder_tags` / `reorder_tag_groups` / `delete_tag_group` / `create_author` / `update_author` / `delete_author` / `delete_empty_authors`         | 快照                                                          |
-| 设置     | `update_settings` / `set_shortcut` / `set_theme` / `set_language` / `clear_all_stats` / `refresh_status` / `browse_folder`                                                                                                            | 快照 / 值                                                     |
-| 系统     | `browse_import` / `browse_audio` / `open_data_dir` / `open_log_dir` / `run_integrity` / `start_integrity` / `fix_issues` / `launch_player` / `launch_simple`                                                                          | 值或快照                                                      |
-| 试听     | `audition_url`                                                                                                                                                                                                                        | `{ok, url, title, duration_ms}`                               |
-| 任务     | `start_import` / `start_replace_source` / `poll_task` / `cancel_task`                                                                                                                                                                 | `{task_id}` / `{state, done, total, current, errors, result}` |
-| 番茄钟   | manager：`create_pomodoro` / `update_pomodoro` / `rename_pomodoro` / `delete_pomodoro` / `reorder_pomodoros` / `create_duration_mode` / `update_duration_mode` / `delete_duration_mode` / `reorder_duration_modes` / `rename_duration_mode` / `update_pomodoro_asset` / `delete_background` / `delete_ring` / `delete_environment` / `reorder_backgrounds` / `reorder_rings` / `reorder_environments` / `browse_pomodoro_asset` / `probe_pomodoro_source` / `start_pomodoro_import` / `set_pomodoro_preferences` / `select_pomodoro_overview` | 快照或 `{task_id}`                                           |
-|          | player：`select_pomodoro` / `clear_pomodoro` / `pomodoro_start` / `pomodoro_phase` / `pomodoro_set_phases` / `pomodoro_music_next` / `pomodoro_music_ended` / `pomodoro_music_failed` / `pomodoro_music_playing` / `pomodoro_report` / `pomodoro_record_session` / `pomodoro_finish` / `pomodoro_set_volumes` / `pomodoro_set_hud_scale` / `set_fullscreen` | `{ok, plan}` / `{ok, command}` / 快照                          |
-| player   | `select_playlist` / `next_track` / `prev_track` / `jump_to` / `track_ended` / `track_failed` / `set_mode` / `pick_loop_song` / `set_playing` / `report_position` / `set_volume` / `set_queue_visible` / `list_songs` / `open_manager` | 快照或 `{"ok"}`                                               |
+| 类别     | 方法                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | 返回                                                          |
+|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------|
+| 读取     | `get_strings` / `get_state` / `get_playlist_songs` / `get_playlist_stats` / `get_music_stats`                                                                                                                                                                                                                                                                                                                                                                                                                                                 | 数据                                                          |
+| 导航     | `select_section` / `select_item` / `clear_selection`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | 快照                                                          |
+| 歌曲     | `update_music_name` / `set_music_authors` / `toggle_music_tag` / `add_alias` / `remove_alias` / `move_alias`                                                                                                                                                                                                                                                                                                                                                                                                                                  | `{"ok"}` 或快照                                               |
+| 批量     | `batch_add_tags` / `batch_add_to_playlist` / `delete_musics`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | 快照                                                          |
+| 歌单     | `create_playlist` / `update_playlist_name` / `set_playlist_entries` / `add_playlist_songs` / `remove_playlist_song` / `add_filter` / `update_filter` / `reorder_filters` / `remove_filter` / `delete_playlist` / `reorder_playlists`                                                                                                                                                                                                                                                                                                          | 快照                                                          |
+| 自适应   | `update_adaptation` / `reset_stats`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | 快照                                                          |
+| 标签作者 | `create_tag_group` / `update_tag_group` / `add_tag` / `rename_tag` / `remove_tag` / `reorder_tags` / `reorder_tag_groups` / `delete_tag_group` / `create_author` / `update_author` / `delete_author` / `delete_empty_authors`                                                                                                                                                                                                                                                                                                                 | 快照                                                          |
+| 设置     | `update_settings` / `set_shortcut` / `set_theme` / `set_language` / `clear_all_stats` / `refresh_status` / `browse_folder`                                                                                                                                                                                                                                                                                                                                                                                                                    | 快照 / 值                                                     |
+| 系统     | `browse_import` / `browse_audio` / `open_data_dir` / `open_log_dir` / `run_integrity` / `start_integrity` / `fix_issues` / `launch_player` / `launch_simple`                                                                                                                                                                                                                                                                                                                                                                                  | 值或快照                                                      |
+| 试听     | `audition_url`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `{ok, url, title, duration_ms}`                               |
+| 任务     | `start_import` / `start_replace_source` / `poll_task` / `cancel_task`                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `{task_id}` / `{state, done, total, current, errors, result}` |
+| 番茄钟   | manager：`create_pomodoro` / `update_pomodoro` / `rename_pomodoro` / `delete_pomodoro` / `reorder_pomodoros` / `create_duration_mode` / `update_duration_mode` / `delete_duration_mode` / `reorder_duration_modes` / `rename_duration_mode` / `update_pomodoro_asset` / `delete_background` / `delete_ring` / `delete_environment` / `reorder_backgrounds` / `reorder_rings` / `reorder_environments` / `browse_pomodoro_asset` / `probe_pomodoro_source` / `start_pomodoro_import` / `set_pomodoro_preferences` / `select_pomodoro_overview` | 快照或 `{task_id}`                                            |
+|          | player：`select_pomodoro` / `clear_pomodoro` / `pomodoro_start` / `pomodoro_phase` / `pomodoro_set_phases` / `pomodoro_music_next` / `pomodoro_music_ended` / `pomodoro_music_failed` / `pomodoro_music_playing` / `pomodoro_report` / `pomodoro_record_session` / `pomodoro_finish` / `pomodoro_set_volumes` / `pomodoro_set_hud_scale` / `set_fullscreen`                                                                                                                                                                                   | `{ok, plan}` / `{ok, command}` / 快照                         |
+| player   | `select_playlist` / `next_track` / `prev_track` / `jump_to` / `track_ended` / `track_failed` / `set_mode` / `pick_loop_song` / `set_playing` / `report_position` / `set_volume` / `set_queue_visible` / `list_songs` / `open_manager`                                                                                                                                                                                                                                                                                                         | 快照或 `{"ok"}`                                               |
 
 规则：
 

@@ -6,7 +6,7 @@
 
 | 项         | 规定                                                                                                                                                                              |
 |------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 文件数     | 8 类：`settings.json`、`library.json`、`playlists.json`、`stats/<uid>.json`、`totals.json`、`player.json`、`pomodoro.json`、`pomodoro-sessions.json`                                              |
+| 文件数     | 8 类：`settings.json`、`library.json`、`playlists.json`、`stats/<uid>.json`、`totals.json`、`player.json`、`pomodoro.json`、`pomodoro-sessions.json`                              |
 | 编码       | UTF-8，无 BOM，缩进 4 空格，末尾一个换行                                                                                                                                          |
 | 写入       | 临时文件 + `os.replace` 原子替换；中途崩溃不会留下半个文件                                                                                                                        |
 | 读取       | 一律先夹取再使用；**不信任文件内容**                                                                                                                                              |
@@ -18,16 +18,16 @@
 
 三个程序对同一份文件的权限：
 
-| 文件             | manager  | player                   | simple |
-|------------------|----------|--------------------------|--------|
-| `settings.json`  | 读写全部 | 读全部，只写 `player` 节 | 只读   |
-| `library.json`   | 读写     | 只读                     | 只读   |
-| `playlists.json` | 读写     | 只读                     | 只读   |
-| `stats/*.json`   | 读写     | 读写                     | 读写   |
-| `totals.json`    | 读写     | 读写                     | 读写   |
-| `player.json`    | 不碰     | 读写                     | 不碰   |
-| `pomodoro.json`  | 读写     | 读全部，写时长与偏好     | 不碰   |
-| `pomodoro-sessions.json` | 只读 | 只追加                  | 不碰   |
+| 文件                     | manager  | player                   | simple |
+|--------------------------|----------|--------------------------|--------|
+| `settings.json`          | 读写全部 | 读全部，只写 `player` 节 | 只读   |
+| `library.json`           | 读写     | 只读                     | 只读   |
+| `playlists.json`         | 读写     | 只读                     | 只读   |
+| `stats/*.json`           | 读写     | 读写                     | 读写   |
+| `totals.json`            | 读写     | 读写                     | 读写   |
+| `player.json`            | 不碰     | 读写                     | 不碰   |
+| `pomodoro.json`          | 读写     | 读全部，写时长与偏好     | 不碰   |
+| `pomodoro-sessions.json` | 只读     | 只追加                   | 不碰   |
 
 跨进程写入一律「取锁 → 重新读盘 → 改 → 原子替换」，不信任内存里的旧值。
 
@@ -450,7 +450,15 @@ simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的
             "uid": "6f1c…",
             "name": "经典番茄",
             "description": "",
-            "segments": [25, 5, 25, 5, 25, 5, 25],
+            "segments": [
+                25,
+                5,
+                25,
+                5,
+                25,
+                5,
+                25
+            ],
             "created_at": 1730000000,
             "updated_at": 1730000000
         }
@@ -492,8 +500,14 @@ simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的
             "duration_mode": "6f1c…",
             "background": "8a2d…",
             "background_mode": "cover",
-            "focus": { "playlist": "d1a9…", "order": "shuffle" },
-            "rest": { "playlist": null, "order": "list_loop" },
+            "focus": {
+                "playlist": "d1a9…",
+                "order": "shuffle"
+            },
+            "rest": {
+                "playlist": null,
+                "order": "list_loop"
+            },
             "ring": "9b3e…",
             "environment": null,
             "font": "system",
@@ -502,7 +516,12 @@ simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的
         }
     ],
     "stats": {
-        "total": { "focus_ms": 0, "rest_ms": 0, "sessions": 0, "last_used_at": 0 },
+        "total": {
+            "focus_ms": 0,
+            "rest_ms": 0,
+            "sessions": 0,
+            "last_used_at": 0
+        },
         "items": {}
     },
     "preferences": {
@@ -520,28 +539,28 @@ simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的
 
 一份文件装下番茄钟的全部配置：时长模式、三类资源（背景 / 提示音 / 环境音）的登记、番茄钟定义、累计统计与全部全局偏好。完整播放的历史不在这里，见第 7 节。
 
-| 字段                   | 类型   | 默认   | 取值与行为                                                                 |
-|------------------------|--------|--------|----------------------------------------------------------------------------|
-| `duration_modes[].segments` | int[] | `[]` | 1–99 段，单段 1–180 分钟；偶数下标是专注、奇数下标是休息。至少保留一个模式 |
-| `duration_modes[].description` | str | `""` | 去首尾空白；只有管理器展示，运行时不读                                    |
-| `backgrounds[].description` | str | `""` | 同上                                                                      |
-| `rings[].description`  | str    | `""`   | 同上                                                                       |
-| `environments[].description` | str | `""` | 同上                                                                      |
-| `backgrounds[].kind`   | str    | `image`| `image`（`.png`）或 `video`（`.mp4`），后缀与类型必须对得上                |
-| `backgrounds[].file`   | str    | —      | 必须是 `pomodoro/background/` 下的相对路径，绝对路径与 `..` 一律拒绝       |
-| `rings[].ext`          | str    | `mp3`  | `mp3` / `ogg`，必须与文件后缀一致                                          |
-| `items[].background_mode` | str | `cover`| `stretch` / `fit_width` / `fit_height` / `contain` / `cover`               |
-| `items[].font`         | str    | `system`| `system` / `hei` / `song` / `kai` / `round` / `mono` / `serif`            |
-| `items[].focus` / `rest` | obj  | `{}`   | 只存 `playlist` 与 `order`；`playlist` 为 `null` 就是这一时段不放音乐      |
-| `items[].environment`  | str?   | `null` | `null` 就是不启用环境音——没有单独的开关                                    |
-| `preferences.music_volume` | float | `0.5` | 0–1，夹取                                                              |
-| `preferences.environment_volume` | float | `0.35` | 0–1，夹取                                                          |
-| `preferences.hud_scale`| float  | `1.0`  | 0.2–5.0，左下角计时器的整体比例；`1.0` 就是 100%                          |
-| `preferences.prep_seconds` | int | `120`  | 0–300，开始前的预备秒数；`0` 表示跳过预备                                 |
-| `preferences.duck_ms`  | int    | `10000`| 0–30000，提示音前多久开始压低音乐；`0` 表示不压低                          |
-| `preferences.duck_ratio` | float | `0.12` | 0–0.5，提示音期间音乐降到原音量的这个比例                                 |
-| `preferences.fade_in_ms` | int  | `2000` | 0–10000，提示音结束后回到原音量所用的毫秒数；`0` 表示立刻恢复              |
-| `preferences.record_minutes` | int | `20` | 0–180，中途退出也记一条播放记录的门槛（专注分钟数）；`0` 表示只要有专注时间就记 |
+| 字段                             | 类型  | 默认     | 取值与行为                                                                      |
+|----------------------------------|-------|----------|---------------------------------------------------------------------------------|
+| `duration_modes[].segments`      | int[] | `[]`     | 1–99 段，单段 1–180 分钟；偶数下标是专注、奇数下标是休息。至少保留一个模式      |
+| `duration_modes[].description`   | str   | `""`     | 去首尾空白；只有管理器展示，运行时不读                                          |
+| `backgrounds[].description`      | str   | `""`     | 同上                                                                            |
+| `rings[].description`            | str   | `""`     | 同上                                                                            |
+| `environments[].description`     | str   | `""`     | 同上                                                                            |
+| `backgrounds[].kind`             | str   | `image`  | `image`（`.png`）或 `video`（`.mp4`），后缀与类型必须对得上                     |
+| `backgrounds[].file`             | str   | —        | 必须是 `pomodoro/background/` 下的相对路径，绝对路径与 `..` 一律拒绝            |
+| `rings[].ext`                    | str   | `mp3`    | `mp3` / `ogg`，必须与文件后缀一致                                               |
+| `items[].background_mode`        | str   | `cover`  | `stretch` / `fit_width` / `fit_height` / `contain` / `cover`                    |
+| `items[].font`                   | str   | `system` | `system` / `hei` / `song` / `kai` / `round` / `mono` / `serif`                  |
+| `items[].focus` / `rest`         | obj   | `{}`     | 只存 `playlist` 与 `order`；`playlist` 为 `null` 就是这一时段不放音乐           |
+| `items[].environment`            | str?  | `null`   | `null` 就是不启用环境音——没有单独的开关                                         |
+| `preferences.music_volume`       | float | `0.5`    | 0–1，夹取                                                                       |
+| `preferences.environment_volume` | float | `0.35`   | 0–1，夹取                                                                       |
+| `preferences.hud_scale`          | float | `1.0`    | 0.2–5.0，左下角计时器的整体比例；`1.0` 就是 100%                                |
+| `preferences.prep_seconds`       | int   | `120`    | 0–300，开始前的预备秒数；`0` 表示跳过预备                                       |
+| `preferences.duck_ms`            | int   | `10000`  | 0–30000，提示音前多久开始压低音乐；`0` 表示不压低                               |
+| `preferences.duck_ratio`         | float | `0.12`   | 0–0.5，提示音期间音乐降到原音量的这个比例                                       |
+| `preferences.fade_in_ms`         | int   | `2000`   | 0–10000，提示音结束后回到原音量所用的毫秒数；`0` 表示立刻恢复                   |
+| `preferences.record_minutes`     | int   | `20`     | 0–180，中途退出也记一条播放记录的门槛（专注分钟数）；`0` 表示只要有专注时间就记 |
 
 四个节奏参数（`prep_seconds` / `duck_ms` / `duck_ratio` / `fade_in_ms`）、中途退出记录门槛（`record_minutes`）与两个音量、计时器比例一样是**全局偏好**：改一次，所有番茄钟都跟着变。它们在管理器「设置 · 通用 · 番茄钟」里改（数据仍写这一份文件，不写 `settings.json`——只有播放器读它们）。播放器启动一轮时把它们抄进 plan，网页按 plan 执行，所以改配置不影响正在跑的那一轮。
 
@@ -570,14 +589,14 @@ simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的
 }
 ```
 
-| 字段         | 类型   | 默认 | 取值与行为                                                       |
-|--------------|--------|------|------------------------------------------------------------------|
+| 字段         | 类型     | 默认 | 取值与行为                                                       |
+|--------------|----------|------|------------------------------------------------------------------|
 | `sessions`   | object[] | `[]` | 按时间先后排列，新的在末尾；`uid` 不是 32 位十六进制的记录被跳过 |
-| `uid`        | str    | —    | **番茄钟**的标识，不是这条记录的标识；番茄钟删掉后记录照留       |
-| `started_at` | int    | `0`  | 第一段开始的秒数（预备结束时）                                   |
-| `ended_at`   | int    | `0`  | 最后一段结束的秒数；小于 `started_at` 时按 `started_at` 处理      |
-| `focus_ms`   | int    | `0`  | 这一轮的专注累计毫秒；负数夹到 0                                 |
-| `rest_ms`    | int    | `0`  | 这一轮的休息累计毫秒；负数夹到 0                                 |
+| `uid`        | str      | —    | **番茄钟**的标识，不是这条记录的标识；番茄钟删掉后记录照留       |
+| `started_at` | int      | `0`  | 第一段开始的秒数（预备结束时）                                   |
+| `ended_at`   | int      | `0`  | 最后一段结束的秒数；小于 `started_at` 时按 `started_at` 处理     |
+| `focus_ms`   | int      | `0`  | 这一轮的专注累计毫秒；负数夹到 0                                 |
+| `rest_ms`    | int      | `0`  | 这一轮的休息累计毫秒；负数夹到 0                                 |
 
 - **走完一轮记一条；中途退出但学够了也记一条**：中途退出时，专注累计超过 `preferences.record_minutes`（默认 20 分钟）才追加，记录里不区分完整与不完整，只有开始 / 结束时间与学习、休息时长。只走了一小段的不记。记的是这一轮真正流逝的时长（暂停不计），与 `stats` 的累加互不影响。
 - 文件只在 player 结束一轮时追加（走完，或中途退出但学够了）；manager 只读，用来在「番茄 · 总览」里逐条展示。写入走「取锁 → 重新读盘 → 追加 → 原子替换」，两个 player 同时写不会互相覆盖。
@@ -608,17 +627,17 @@ simple 没有音量设置：程序不替用户设音量，VLC 用自己记住的
 
 ## 9. 校验时机
 
-| 时机          | 检查什么                                  | 失败怎么办                                                           |
-|---------------|-------------------------------------------|----------------------------------------------------------------------|
-| 启动读设置    | JSON 结构、分节类型、数值范围             | 夹取或整节回退，记 warning，继续运行                                 |
-| 启动读库      | 顶层必须是对象；逐条归一化 + 校验         | 顶层不是对象 → `ConfigError` 退出；单条不合法 → 跳过该条并记 warning |
-| 启动读歌单    | 同上，另外校验 `default_uid` 指向内置歌单 | 同上；没有可用默认歌单就新建一条并落盘                               |
-| 保存库 / 歌单 | 写入前 `normalize()` + `validate()`       | 抛 `DataError`，调用方转成界面提示，不写盘                           |
-| 导入 / 换源   | 后缀白名单、MD5、冲突                     | 单条失败记入错误清单，继续下一条                                     |
-| 读统计        | 文件是对象、`songs` 是对象                | 结构错 → `ConfigError`，该歌单按「无记录」处理                       |
-| 读番茄钟      | 顶层是对象；逐条归一化 + 校验             | 单条跳过并记 warning；整份读不出来就备份成 `.bad*` 后从空白开始      |
-| 番茄钟资源引用 | 引用的 uid 必须还在登记表里               | 悬空引用清成 `null`，时长模式退回第一个可用模式，并立刻落盘          |
-| 读播放记录    | `sessions` 是数组；逐条校验 uid 与四个整数 | 单条跳过并记 warning；整份读不出来按「没有记录」处理，不备份不退出   |
+| 时机           | 检查什么                                   | 失败怎么办                                                           |
+|----------------|--------------------------------------------|----------------------------------------------------------------------|
+| 启动读设置     | JSON 结构、分节类型、数值范围              | 夹取或整节回退，记 warning，继续运行                                 |
+| 启动读库       | 顶层必须是对象；逐条归一化 + 校验          | 顶层不是对象 → `ConfigError` 退出；单条不合法 → 跳过该条并记 warning |
+| 启动读歌单     | 同上，另外校验 `default_uid` 指向内置歌单  | 同上；没有可用默认歌单就新建一条并落盘                               |
+| 保存库 / 歌单  | 写入前 `normalize()` + `validate()`        | 抛 `DataError`，调用方转成界面提示，不写盘                           |
+| 导入 / 换源    | 后缀白名单、MD5、冲突                      | 单条失败记入错误清单，继续下一条                                     |
+| 读统计         | 文件是对象、`songs` 是对象                 | 结构错 → `ConfigError`，该歌单按「无记录」处理                       |
+| 读番茄钟       | 顶层是对象；逐条归一化 + 校验              | 单条跳过并记 warning；整份读不出来就备份成 `.bad*` 后从空白开始      |
+| 番茄钟资源引用 | 引用的 uid 必须还在登记表里                | 悬空引用清成 `null`，时长模式退回第一个可用模式，并立刻落盘          |
+| 读播放记录     | `sessions` 是数组；逐条校验 uid 与四个整数 | 单条跳过并记 warning；整份读不出来按「没有记录」处理，不备份不退出   |
 
 ## 10. 语言包
 

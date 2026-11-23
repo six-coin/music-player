@@ -44,11 +44,11 @@ Closing the window quits. Next time the manager opens on the overview, and the p
 
 The manager has three columns: navigation on the left, a list in the middle, details on the right.
 
-| Area        | Contents                                                                        |
-|-------------|---------------------------------------------------------------------------------|
-| Navigation  | Overview, Songs, Playlists, Tags, Artists, Pomodoro, with Settings at the bottom |
-| List        | Items of the current section, with title, count and the New button above        |
-| Detail      | Editor for the selected item; changes save as you type, there is no Save button |
+| Area        | Contents                                                                                 |
+|-------------|------------------------------------------------------------------------------------------|
+| Navigation  | Overview, Songs, Playlists, Tags, Artists, Pomodoro, with Settings at the bottom         |
+| List        | Items of the current section, with title, count and the New button above                 |
+| Detail      | Editor for the selected item; changes save as you type, there is no Save button          |
 | Preview bar | Rises from the bottom after Preview; pause, seek and change volume (wheel: 1% per notch) |
 
 The overview has no list column, so its main area spans two columns: six number cards (songs, total time, size, playlists, artists, tag groups), then "Recently imported / Recently edited" next to "To review", then the quick actions.
@@ -222,20 +222,20 @@ Pomodoros are configured in the manager and run in the player: not as a separate
 
 The "Pomodoro" section of the manager has an overview plus five groups (pomodoros, duration modes, backgrounds, chimes, ambience). Groups collapse, reorder by dragging within a group, and the context menu is the same one as "More" in the detail header. On the right:
 
-| Item                | Detail                                                                             |
-|---------------------|------------------------------------------------------------------------------------|
-| Description         | A note for yourself. Pomodoros, duration modes, backgrounds, chimes and ambience all have one |
-| Duration mode       | A run of minutes: odd phases focus, even phases break; 1–99 phases, 1–180 min each |
-| Background          | Image or video; scaling can stretch, fit width, fit height, contain or cover       |
-| Focus / Break       | One playlist each. "None" means no music for that phase — there is no extra switch |
-| Chime               | Plays at the end of prep, at every phase change and at the end of the round        |
-| Ambience            | "None" means off; otherwise it runs for the whole round, independent of phases     |
-| Font                | Font used by the timer layer                                                       |
+| Item          | Detail                                                                                        |
+|---------------|-----------------------------------------------------------------------------------------------|
+| Description   | A note for yourself. Pomodoros, duration modes, backgrounds, chimes and ambience all have one |
+| Duration mode | A run of minutes: odd phases focus, even phases break; 1–99 phases, 1–180 min each            |
+| Background    | Image or video; scaling can stretch, fit width, fit height, contain or cover                  |
+| Focus / Break | One playlist each. "None" means no music for that phase — there is no extra switch            |
+| Chime         | Plays at the end of prep, at every phase change and at the end of the round                   |
+| Ambience      | "None" means off; otherwise it runs for the whole round, independent of phases                |
+| Font          | Font used by the timer layer                                                                  |
 
 The overview page also carries one more card:
 
-| Item            | Detail                                                                                                              |
-|-----------------|---------------------------------------------------------------------------------------------------------------------|
+| Item            | Detail                                                                                                                                                                                                                                                                                          |
+|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Session history | One row per finished round: which pomodoro, when it started and ended, focus time, break time. An early exit is recorded too once focus passes the threshold (20 minutes by default), with no complete/incomplete marker. Rows survive the pomodoro being deleted — the id itself is shown then |
 
 The rhythm of a round (prep time, fade down before the chime, music level during the chime, fade back after it), the early-exit threshold and the timer size live in Settings · General · Pomodoro. They apply to every pomodoro and are shared with the player.
